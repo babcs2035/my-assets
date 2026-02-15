@@ -1,0 +1,40 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: my-assets-app
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${APP_PORT:-3000}:3000"
+    environment:
+      DATABASE_URL: postgresql://my-assets_user:my-assets_password@db:5432/my-assets
+      TZ: Asia/Tokyo
+      APP_PORT: ${APP_PORT:-3000}
+    depends_on:
+      db:
+        condition: service_healthy
+
+
+  db:
+    image: postgres:16-alpine
+    container_name: my-assets-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-my-assets_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-my-assets_password}
+      POSTGRES_DB: ${POSTGRES_DB:-my-assets}
+      DB_PORT: ${DB_PORT:-5432}
+      TZ: Asia/Tokyo
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:${DB_PORT:-5432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-my-assets_user} -d ${POSTGRES_DB:-my-assets}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:
