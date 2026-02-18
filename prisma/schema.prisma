@@ -1,0 +1,153 @@
+// 1. Data Source & Generator
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// 2. Enums
+// 資産の 4 つの区分を定義
+enum AssetType {
+  CASH // 預金・現金
+  INVESTMENT // 投資信託・証券
+  CRYPTO // 暗号資産
+  POINT // ポイント
+}
+
+// 3. Provider & Accounts
+model Provider {
+  id           String        @id @default(cuid())
+  name         String        @unique // 1Password のアイテム名 (例: "MF_Main")
+  type         String // "mf", "direct_crypto", "manual"
+  scraperScript String?
+  isActive     Boolean       @default(true)
+  mainAccounts MainAccount[]
+}
+
+model MainAccount {
+  id          String       @id @default(cuid())
+  label       String // ユーザー設定の金融機関名
+  providerId  String
+  provider    Provider     @relation(fields: [providerId], references: [id])
+  mfUrlId     String?      @unique // URL から抽出した MF 内部の親口座 ID
+  subAccounts SubAccount[]
+}
+
+model SubAccount {
+  id            String           @id @default(cuid())
+  mainAccountId String
+  mainAccount   MainAccount      @relation(fields: [mainAccountId], references: [id])
+
+  // MF 上で子口座 ID がないため、親 ID と名称の組み合わせで同定を試みる
+  currentName String
+  assetType   AssetType @default(CASH)
+  balance     Int // 最新の日本円換算残高
+
+  transactions Transaction[]
+  histories    BalanceHistory[]
+  holdings     Holding[] // 投資信託銘柄
+  cryptos      CryptoAsset[] // 暗号資産銘柄
+  pointDetail  PointDetail? // ポイント詳細
+
+  // 親口座内での子口座名の重複を避けるための制約
+  @@unique([mainAccountId, currentName])
+}
+
+// 4. Data Snapshots (08:00 定期保存用)
+model BalanceHistory {
+  id           String     @id @default(cuid())
+  subAccountId String
+  subAccount   SubAccount @relation(fields: [subAccountId], references: [id])
+  date         DateTime // 08:00 同期完了直後の日付
+  balance      Int
+
+  @@unique([subAccountId, date]) // 1 日 1 回のスナップショットを保証
+}
+
+// 5. Assets (Details)
+model Holding {
+  id             String     @id @default(cuid())
+  subAccountId   String
+  subAccount     SubAccount @relation(fields: [subAccountId], references: [id])
+  name           String // 銘柄名
+  quantity       Float // 保有数
+  avgCostBasis   Int // 平均取得単価
+  unitPrice      Int // 基準価額
+  valuation      Int // 評価額
+  dayBeforeRatio Int // 前日比（額）
+  gainLoss       Int // 評価損益
+  gainLossRate   Float // 評価損益率
+  updatedAt      DateTime   @updatedAt
+}
+
+model CryptoAsset {
+  id             String     @id @default(cuid())
+  subAccountId   String
+  subAccount     SubAccount @relation(fields: [subAccountId], references: [id])
+  symbol         String // 通貨記号 (XMR, BTC 等)
+  name           String // 通貨名
+  quantity       Float // 枚数
+  price          Float // 現在レート（円）
+  valuation      Int // 日本円換算額
+  dayBeforeRatio Int? // 前日比（額）
+  updatedAt      DateTime   @updatedAt
+}
+
+model PointDetail {
+  id             String     @id @default(cuid())
+  subAccountId   String     @unique
+  subAccount     SubAccount @relation(fields: [subAccountId], references: [id])
+  points         Float // ポイント数
+  rate           Float      @default(1.0) // 換算レート
+  expirationDate DateTime? // 有効期限
+}
+
+// 6. Transactions & Categorization
+model MainCategory {
+  id            String            @id @default(cuid())
+  name          String            @unique
+  subCategories SubCategoryItem[]
+}
+
+model SubCategoryItem {
+  id             String         @id @default(cuid())
+  name           String
+  mainCategoryId String
+  mainCategory   MainCategory   @relation(fields: [mainCategoryId], references: [id])
+  transactions   Transaction[]
+  rules          CategoryRule[]
+
+  @@unique([mainCategoryId, name])
+}
+
+model Transaction {
+  // ID は決定論的ハッシュ: sha256(subAccountId + date + amount + desc)
+  id            String           @id
+  subAccountId  String
+  subAccount    SubAccount       @relation(fields: [subAccountId], references: [id])
+  date          DateTime         @db.Date
+  amount        Int
+  desc          String
+  subCategoryId String?
+  subCategory   SubCategoryItem? @relation(fields: [subCategoryId], references: [id])
+
+  // 振替・資金移動管理
+  isTransfer    Boolean @default(false)
+  transferId    String? // 振替ペア共有 ID
+  linkedTransId String? // 相手方明細 ID
+
+  @@index([date])
+  @@index([subCategoryId])
+}
+
+model CategoryRule {
+  id            String          @id @default(cuid())
+  keyword       String // desc に含まれる文字列
+  subCategoryId String
+  subCategory   SubCategoryItem @relation(fields: [subCategoryId], references: [id])
+  priority      Int             @default(0)
+
+  @@unique([keyword, subCategoryId])
+}

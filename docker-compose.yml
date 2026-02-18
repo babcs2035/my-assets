@@ -11,6 +11,9 @@ services:
       DATABASE_URL: postgresql://my-assets_user:my-assets_password@db:5432/my-assets
       TZ: Asia/Tokyo
       APP_PORT: ${APP_PORT:-3000}
+      BASIC_AUTH_USER: ${BASIC_AUTH_USER:-admin}
+      BASIC_AUTH_PASSWORD: ${BASIC_AUTH_PASSWORD:-changeme}
+      OP_SERVICE_ACCOUNT_TOKEN: ${OP_SERVICE_ACCOUNT_TOKEN:-}
     depends_on:
       db:
         condition: service_healthy

@@ -1,3 +1,77 @@
 [tools]
 node = "25.6.1"
 pnpm = "10.29.3"
+
+[tasks.install]
+description = "Install dependencies"
+run = "pnpm install"
+
+[tasks.setup]
+description = "Setup development environment (Create .env, Install deps, Start DB, Migrate & Seed)"
+depends = []
+run = [
+  "cp -n .env.example .env || true",
+  "rm -rf node_modules",
+  "pnpm install",
+  "docker compose down --remove-orphans",
+  "docker compose up -d db --wait",
+  "pnpm prisma migrate dev --name init",
+  "pnpm prisma generate",
+  "pnpm prisma db seed"
+]
+
+[tasks.dev]
+description = "Start development server"
+depends = ["install"]
+run = "pnpm dev"
+
+[tasks.build]
+description = "Build application"
+depends = ["install"]
+run = "pnpm build"
+
+[tasks.start]
+description = "Start production server"
+depends = ["build"]
+run = "pnpm start"
+
+[tasks.check]
+description = "Run type check and linter"
+depends = ["install"]
+run = "pnpm check"
+
+[tasks.format]
+description = "Format code with Biome"
+depends = ["install"]
+run = "pnpm biome format --write src"
+
+[tasks."lint:fix"]
+description = "Lint and fix code with Biome"
+depends = ["install"]
+run = "pnpm biome check --write --unsafe src"
+
+[tasks."db:up"]
+description = "Start database container"
+run = "docker compose up -d"
+
+[tasks."db:down"]
+description = "Stop database container"
+run = "docker compose down"
+
+[tasks."db:reset"]
+description = "Reset database (wipe data and re-seed)"
+depends = ["install"]
+run = [
+  "pnpm prisma migrate reset --force",
+  "pnpm prisma db seed"
+]
+
+[tasks."db:studio"]
+description = "Open Prisma Studio"
+depends = ["install"]
+run = "pnpm prisma studio"
+
+[tasks.sync]
+description = "Run scrapers manually"
+depends = ["install"]
+run = "pnpm tsx src/scripts/sync.ts"

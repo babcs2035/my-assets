@@ -1,0 +1,21 @@
+import { sha256 } from "crypto-hash";
+
+/**
+ * 取引 (Transaction) の決定論的な ID を生成する関数である．
+ * サブ口座 ID，日付，金額，摘要を組み合わせて SHA-256 ハッシュを生成することで，
+ * 重複登録を防ぎつつ一意な ID を特定できる．
+ */
+export async function generateTransactionId(
+  subAccountId: string,
+  date: string,
+  amount: number,
+  desc: string,
+): Promise<string> {
+  const input = `${subAccountId}|${date}|${amount}|${desc}`;
+  const id = await sha256(input);
+
+  // ID 生成が完了したことをデバッグログで出力する．
+  console.log(`🔑 Generated transaction ID: ${id.substring(0, 8)}...`);
+
+  return id;
+}
