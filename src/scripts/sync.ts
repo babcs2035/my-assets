@@ -1,7 +1,6 @@
+import "dotenv/config";
 import { execSync } from "node:child_process";
-import { PrismaClient } from "@prisma/client";
-
-const prisma = new PrismaClient();
+import { prisma } from "../lib/prisma";
 
 async function main() {
   console.log("🚀 Starting sync process...");
@@ -22,7 +21,7 @@ async function main() {
       if (provider.type === "mf") {
         // Run MF scraper with environment variable
         execSync("pnpm tsx src/scraper/mf-scraper.ts", {
-          env: { ...process.env, MF_ITEM_NAME: provider.name },
+          env: { ...process.env, MF_ITEM_NAME: provider.name, MF_FULL_SYNC: "true" },
           stdio: "inherit",
         });
       } else if (provider.type === "custom") {

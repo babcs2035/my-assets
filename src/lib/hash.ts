@@ -1,4 +1,4 @@
-import { sha256 } from "crypto-hash";
+import { createHash } from "node:crypto";
 
 /**
  * 取引 (Transaction) の決定論的な ID を生成する関数である．
@@ -12,7 +12,7 @@ export async function generateTransactionId(
   desc: string,
 ): Promise<string> {
   const input = `${subAccountId}|${date}|${amount}|${desc}`;
-  const id = await sha256(input);
+  const id = createHash("sha256").update(input).digest("hex");
 
   // ID 生成が完了したことをデバッグログで出力する．
   console.log(`🔑 Generated transaction ID: ${id.substring(0, 8)}...`);

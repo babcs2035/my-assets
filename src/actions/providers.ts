@@ -50,15 +50,32 @@ export async function deleteProvider(id: string) {
   revalidatePath("/settings");
 }
 
+import { runMfScraper } from "@/scraper/mf-scraper";
+
 /**
  * 指定されたプロバイダーの同期処理を実行する関数である．
  */
 export async function syncProvider(id: string) {
   console.log(`🔄 Syncing provider: ${id}`);
-  // 同期ロジックをここに実装する．現在はシミュレーションとして遅延を入れている．
-  await new Promise(resolve => setTimeout(resolve, 2000));
 
-  console.log(`✅ Sync completed for provider: ${id}`);
+  const provider = await prisma.provider.findUnique({
+    where: { id },
+  });
+
+  if (!provider) {
+    console.error(`❌ Provider not found: ${id}`);
+    throw new Error(`Provider not found: ${id}`);
+  }
+
+  try {
+    console.log(`🚀 Executing scraper for provider: ${provider.name}`);
+    await runMfScraper(provider.name);
+    console.log(`✅ Sync completed for provider: ${provider.name}`);
+  } catch (error) {
+    console.error(`❌ Sync failed for provider: ${provider.name}`, error);
+    throw error;
+  }
+
   revalidatePath("/settings");
   revalidatePath("/");
 }
