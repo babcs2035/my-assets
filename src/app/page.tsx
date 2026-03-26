@@ -34,7 +34,7 @@ export default async function DashboardPage() {
   // KPI，履歴，ポイント情報を並行して取得する．
   const [kpi, history, expiringPoints] = await Promise.all([
     getDashboardKPI(),
-    getAssetHistory(90),
+    getAssetHistory(),
     getExpiringPoints(),
   ]);
 
@@ -64,15 +64,9 @@ export default async function DashboardPage() {
   ];
 
   /**
-   * 推移グラフ表示用のデータを整形する．
+   * 推移グラフ表示用のデータ（getAssetHistory の戻り値をそのまま使用する）．
    */
-  const chartData = history.map(h => ({
-    date: h.date,
-    "預金・現金": h.CASH || 0,
-    "投資信託・証券": h.INVESTMENT || 0,
-    暗号資産: h.CRYPTO || 0,
-    ポイント: h.POINT || 0,
-  }));
+  const chartData = history;
 
   /**
    * 資産構成のドーナツチャート用データを構成する．
@@ -147,9 +141,9 @@ export default async function DashboardPage() {
       {/* グラフエリア */}
       <div className="grid gap-4 md:gap-6 lg:grid-cols-7">
         {/* 資産推移グラフ */}
-        <Card className="col-span-4 lg:col-span-5 overflow-hidden">
+        <Card className="col-span-1 lg:col-span-5 overflow-hidden">
           <CardHeader>
-            <CardTitle>資産推移（90 日間）</CardTitle>
+            <CardTitle>資産推移</CardTitle>
           </CardHeader>
           <CardContent className="pl-0 sm:pl-2">
             <DashboardAreaChart data={chartData} />
@@ -157,12 +151,12 @@ export default async function DashboardPage() {
         </Card>
 
         {/* 資産構成ドーナツチャート */}
-        <Card className="col-span-3 lg:col-span-2 overflow-hidden">
+        <Card className="col-span-1 lg:col-span-2 overflow-hidden">
           <CardHeader>
             <CardTitle>資産構成</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="-ml-4 sm:ml-0">
+            <div>
               <DashboardDonutChart data={donutData} />
             </div>
           </CardContent>

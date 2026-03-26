@@ -39,7 +39,6 @@ import {
   getProviders,
   syncProvider,
 } from "@/actions/providers";
-
 import {
   AlertDialog,
   AlertDialogAction,
@@ -92,6 +91,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
+import { assetTypeColor } from "@/lib/utils";
 
 // Types
 type Provider = Awaited<ReturnType<typeof getProviders>>[number];
@@ -383,28 +383,28 @@ export function SettingsContent() {
           className="w-full"
         >
           <div className="flex w-full items-center justify-between rounded-md px-2 py-2 hover:bg-zinc-800/50">
-            <div className="flex flex-1 items-center gap-2">
+            <div className="flex flex-1 items-center gap-2 min-w-0 mr-2">
               <CollapsibleTrigger asChild>
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="h-auto p-0 hover:bg-transparent"
+                  className="h-auto p-0 hover:bg-transparent min-w-0"
                 >
                   {expandedCategories.has(mc.id) ? (
-                    <ChevronDown className="mr-2 h-3.5 w-3.5 text-zinc-500" />
+                    <ChevronDown className="mr-2 h-3.5 w-3.5 text-zinc-500 shrink-0" />
                   ) : (
-                    <ChevronRight className="mr-2 h-3.5 w-3.5 text-zinc-500" />
+                    <ChevronRight className="mr-2 h-3.5 w-3.5 text-zinc-500 shrink-0" />
                   )}
-                  <span className="text-sm font-medium text-zinc-200">
+                  <span className="text-sm font-medium text-zinc-200 truncate">
                     {mc.name}
                   </span>
                 </Button>
               </CollapsibleTrigger>
-              <Badge variant="secondary" className="text-[10px]">
+              <Badge variant="secondary" className="text-[10px] shrink-0">
                 {mc.subCategories.length}
               </Badge>
             </div>
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-1 shrink-0">
               {/* 並べ替えボタン */}
               <Button
                 variant="ghost"
@@ -469,13 +469,15 @@ export function SettingsContent() {
                   key={sc.id}
                   className="flex items-center justify-between rounded-md px-2 py-1.5 hover:bg-zinc-800/30"
                 >
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm text-zinc-300">{sc.name}</span>
-                    <span className="text-[10px] text-zinc-600">
+                  <div className="flex items-center gap-2 min-w-0 overflow-hidden">
+                    <span className="text-sm text-zinc-300 truncate">
+                      {sc.name}
+                    </span>
+                    <span className="text-[10px] text-zinc-600 shrink-0">
                       ({sc._count.transactions} 明細, {sc._count.rules} ルール)
                     </span>
                   </div>
-                  <div className="flex items-center gap-1">
+                  <div className="flex items-center gap-1 shrink-0 ml-2">
                     {/* サブカテゴリーの並べ替えボタン */}
                     <Button
                       variant="ghost"
@@ -639,22 +641,22 @@ export function SettingsContent() {
               {/* Mobile View */}
               <div className="md:hidden divide-y divide-zinc-800">
                 {providers.map(provider => (
-                  <div key={provider.id} className="p-4 bg-card">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="font-medium text-zinc-200">
+                  <div key={provider.id} className="p-4 bg-card min-w-0">
+                    <div className="flex items-center justify-between gap-2 mb-2 min-w-0">
+                      <span className="font-medium text-zinc-200 truncate flex-1">
                         {provider.name}
                       </span>
                       <Badge
                         variant="outline"
-                        className="bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
+                        className="bg-emerald-500/10 text-emerald-400 border-emerald-500/20 shrink-0"
                       >
                         稼働中
                       </Badge>
                     </div>
-                    <div className="text-sm text-zinc-400 mb-1">
+                    <div className="text-sm text-zinc-400 mb-1 truncate">
                       {getProviderTypeLabel(provider.type)}
                     </div>
-                    <div className="text-xs text-zinc-500 mb-3">
+                    <div className="text-xs text-zinc-500 mb-3 truncate">
                       {provider.lastSyncAt ? (
                         <span
                           className={`flex items-center gap-1 ${provider.lastSyncSuccess ? "text-emerald-500" : "text-red-400"}`}
@@ -874,19 +876,19 @@ export function SettingsContent() {
                     key={provider.id}
                     className="rounded-md border border-zinc-800 bg-zinc-900/20"
                   >
-                    <div className="flex items-center justify-between p-3 bg-zinc-900/50 border-b border-zinc-800">
-                      <div className="flex items-center gap-3">
-                        <span className="font-semibold text-sm text-zinc-200">
+                    <div className="flex items-center justify-between p-3 bg-zinc-900/50 border-b border-zinc-800 min-w-0">
+                      <div className="flex items-center gap-3 min-w-0 flex-1 mr-2">
+                        <span className="font-semibold text-sm text-zinc-200 truncate">
                           {provider.name}
                         </span>
                         <Badge
                           variant="outline"
-                          className="text-[10px] h-5 px-1.5 text-zinc-500 border-zinc-700"
+                          className="text-[10px] h-5 px-1.5 text-zinc-500 border-zinc-700 shrink-0"
                         >
                           {getProviderTypeLabel(provider.type)}
                         </Badge>
                       </div>
-                      <Badge variant="secondary" className="text-xs">
+                      <Badge variant="secondary" className="text-xs shrink-0">
                         {providerAccounts.length} 口座
                       </Badge>
                     </div>
@@ -897,9 +899,9 @@ export function SettingsContent() {
                           {/* Mobile View */}
                           <div className="md:hidden divide-y divide-zinc-800">
                             {providerAccounts.map(ac => (
-                              <div key={ac.id} className="p-4">
-                                <div className="flex justify-between items-start mb-2">
-                                  <div className="font-medium text-sm text-zinc-200">
+                              <div key={ac.id} className="p-4 min-w-0">
+                                <div className="flex justify-between items-start gap-2 mb-2 min-w-0">
+                                  <div className="font-medium text-sm text-zinc-200 truncate flex-1">
                                     {ac.label}
                                   </div>
                                   <AlertDialog>
@@ -938,10 +940,23 @@ export function SettingsContent() {
                                     </AlertDialogContent>
                                   </AlertDialog>
                                 </div>
-                                <div className="text-xs text-zinc-500">
-                                  {ac.subAccounts
-                                    .map(sub => sub.currentName)
-                                    .join(", ")}
+                                <div className="flex flex-wrap gap-1.5 mt-1.5">
+                                  {ac.subAccounts.map(sub => (
+                                    <Badge
+                                      key={sub.id}
+                                      variant="secondary"
+                                      className="text-[9px] max-w-[120px] truncate px-1.5 py-0"
+                                      style={{
+                                        background: `${assetTypeColor(sub.assetType)}20`,
+                                        borderColor: assetTypeColor(
+                                          sub.assetType,
+                                        ),
+                                        color: assetTypeColor(sub.assetType),
+                                      }}
+                                    >
+                                      {sub.currentName}
+                                    </Badge>
+                                  ))}
                                 </div>
                               </div>
                             ))}
@@ -972,10 +987,27 @@ export function SettingsContent() {
                                     <TableCell className="py-2 text-sm whitespace-nowrap">
                                       {ac.label}
                                     </TableCell>
-                                    <TableCell className="py-2 text-sm text-zinc-500 whitespace-nowrap">
-                                      {ac.subAccounts
-                                        .map(sub => sub.currentName)
-                                        .join(", ")}
+                                    <TableCell className="py-2 text-sm text-zinc-500">
+                                      <div className="flex flex-wrap gap-1.5">
+                                        {ac.subAccounts.map(sub => (
+                                          <Badge
+                                            key={sub.id}
+                                            variant="secondary"
+                                            className="text-[9px] max-w-[140px] truncate px-1.5 py-0"
+                                            style={{
+                                              background: `${assetTypeColor(sub.assetType)}20`,
+                                              borderColor: assetTypeColor(
+                                                sub.assetType,
+                                              ),
+                                              color: assetTypeColor(
+                                                sub.assetType,
+                                              ),
+                                            }}
+                                          >
+                                            {sub.currentName}
+                                          </Badge>
+                                        ))}
+                                      </div>
                                     </TableCell>
                                     <TableCell className="py-2 text-right whitespace-nowrap">
                                       <div className="flex justify-end">
@@ -1075,7 +1107,7 @@ export function SettingsContent() {
                     placeholder="食費、日用品など"
                     value={newCategoryName}
                     onChange={e => setNewCategoryName(e.target.value)}
-                    className="flex-1"
+                    className="flex-1 min-w-0 text-sm"
                   />
                   <Button
                     onClick={handleAddMainCategory}
@@ -1087,7 +1119,7 @@ export function SettingsContent() {
                   </Button>
                 </div>
               </div>
-              <div className="space-y-2">
+              <div className="space-y-2 min-w-0">
                 <Label>サブカテゴリー追加</Label>
                 <div className="flex flex-col gap-2 sm:flex-row">
                   <Select
@@ -1111,12 +1143,12 @@ export function SettingsContent() {
                       ))}
                     </SelectContent>
                   </Select>
-                  <div className="flex gap-2 flex-1">
+                  <div className="flex gap-2 flex-1 min-w-0">
                     <Input
                       placeholder="詳細分類"
                       value={newSubCategoryName}
                       onChange={e => setNewSubCategoryName(e.target.value)}
-                      className="flex-1"
+                      className="flex-1 min-w-0 text-sm"
                     />
                     <Button
                       onClick={handleAddSubCategory}
@@ -1171,13 +1203,13 @@ export function SettingsContent() {
                   <Search className="absolute left-2 top-2.5 h-4 w-4 text-zinc-500" />
                   <Input
                     placeholder="明細の摘要に含まれる文字"
-                    className="pl-8"
+                    className="pl-8 text-sm"
                     value={ruleKeywords}
                     onChange={e => setRuleKeywords(e.target.value)}
                   />
                 </div>
               </div>
-              <div className="space-y-2 w-full md:w-[250px]">
+              <div className="space-y-2 w-full sm:w-auto sm:flex-1 md:w-[250px] shrink-0">
                 <Label>適用カテゴリー</Label>
                 <Select
                   value={ruleSubCategoryId}
@@ -1216,13 +1248,16 @@ export function SettingsContent() {
               {/* Mobile View */}
               <div className="md:hidden divide-y divide-zinc-800">
                 {rules.map(rule => (
-                  <div key={rule.id} className="p-4 bg-card">
-                    <div className="flex justify-between items-start gap-4">
-                      <div className="space-y-1 overflow-hidden">
-                        <div className="font-mono text-zinc-200 truncate">
+                  <div key={rule.id} className="p-3 bg-card min-w-0">
+                    <div className="flex justify-between items-start gap-3 min-w-0">
+                      <div className="space-y-1.5 min-w-0 overflow-hidden flex-1">
+                        <div className="font-mono text-zinc-200 text-sm truncate">
                           {rule.keyword}
                         </div>
-                        <Badge variant="secondary" className="text-xs">
+                        <Badge
+                          variant="secondary"
+                          className="text-[10px] truncate max-w-full"
+                        >
                           {rule.subCategory.mainCategory.name} /{" "}
                           {rule.subCategory.name}
                         </Badge>

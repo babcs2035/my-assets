@@ -8,12 +8,13 @@ import {
 
 /**
  * 取引明細の一覧を取得する関数である．
- * サブ口座，年月，振替の有無などの条件でフィルタリングが可能である．
+ * サブ口座，年月，日付，振替の有無などの条件でフィルタリングが可能である．
  */
 export async function getTransactions(params: {
   subAccountId?: string;
   year?: number;
   month?: number;
+  day?: number;
   page?: number;
   pageSize?: number;
   includeTransfers?: boolean;
@@ -22,20 +23,37 @@ export async function getTransactions(params: {
     subAccountId,
     year,
     month,
+    day,
     page = 1,
     pageSize = 50,
     includeTransfers = true,
   } = params;
 
   console.log(`📂 Fetching transactions for page ${page}...`);
+  if (day) {
+    console.log(`📅 Date filter: ${year}-${month}-${day}`);
+  }
   const where: Record<string, unknown> = {};
 
   if (subAccountId) where.subAccountId = subAccountId;
 
   if (year && month) {
-    const start = new Date(year, month - 1, 1);
-    const end = new Date(year, month, 1);
-    where.date = { gte: start, lt: end };
+    if (day) {
+      // 特定の日付のみを取得
+      // データベースの date カラムは @db.Date で時刻なしなので、
+      // YYYY-MM-DD の文字列形式で比較する
+      const dateStr = `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+      const start = new Date(dateStr);
+      const end = new Date(start);
+      end.setDate(end.getDate() + 1);
+      where.date = { gte: start, lt: end };
+      console.log(`📅 Filtering by date: ${dateStr} (${start.toISOString()} to ${end.toISOString()})`);
+    } else {
+      // 月全体を取得
+      const start = new Date(year, month - 1, 1);
+      const end = new Date(year, month, 1);
+      where.date = { gte: start, lt: end };
+    }
   }
 
   if (!includeTransfers) {
@@ -95,7 +113,12 @@ export async function getMonthlyCalendarData(year: number, month: number) {
 
   const dailyData: Record<string, { income: number; expense: number }> = {};
   for (const t of transactions) {
-    const key = t.date.toISOString().split("T")[0];
+    // toISOString() は UTC で変換されるため、ローカル日付で文字列化
+    const year = t.date.getFullYear();
+    const month = String(t.date.getMonth() + 1).padStart(2, "0");
+    const day = String(t.date.getDate()).padStart(2, "0");
+    const key = `${year}-${month}-${day}`;
+    
     if (!dailyData[key]) {
       dailyData[key] = { income: 0, expense: 0 };
     }
@@ -125,18 +148,17 @@ export async function updateTransactionCategory(
 
   if (data.createRule && data.subCategoryId && transaction.desc) {
     console.log(`➕ Creating auto-category rule for: ${transaction.desc}`);
-    await prisma.categoryRule.upsert({
-      where: {
-        keyword_subCategoryId: {
-          keyword: transaction.desc,
-          subCategoryId: data.subCategoryId,
-        },
-      },
-      create: {
+
+    // 古い同じキーワードのルールが存在すれば削除して重複を防ぐ
+    await prisma.categoryRule.deleteMany({
+      where: { keyword: transaction.desc },
+    });
+
+    await prisma.categoryRule.create({
+      data: {
         keyword: transaction.desc,
         subCategoryId: data.subCategoryId,
       },
-      update: {},
     });
 
     const result = await prisma.transaction.updateMany({

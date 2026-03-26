@@ -108,14 +108,13 @@ export default async function AccountsPage() {
                         <Badge
                           key={sa.id}
                           variant="secondary"
-                          className="text-[10px]"
+                          className="text-[10px] max-w-[140px] truncate"
+                          style={{
+                            background: `${assetTypeColor(sa.assetType)}20`,
+                            borderColor: assetTypeColor(sa.assetType),
+                            color: assetTypeColor(sa.assetType),
+                          }}
                         >
-                          <span
-                            className="mr-1 inline-block h-1.5 w-1.5 rounded-full"
-                            style={{
-                              background: assetTypeColor(sa.assetType),
-                            }}
-                          />
                           {sa.currentName}
                         </Badge>
                       ))}

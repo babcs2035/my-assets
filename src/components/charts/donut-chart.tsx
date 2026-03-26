@@ -1,6 +1,13 @@
 "use client";
 
-import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
+import {
+  Cell,
+  Legend,
+  Pie,
+  PieChart,
+  ResponsiveContainer,
+  Tooltip,
+} from "recharts";
 import { assetTypeColor, assetTypeLabel, formatCurrency } from "@/lib/utils";
 
 type DonutData = {
@@ -66,6 +73,13 @@ export function DonutChart({ data }: { data: Record<string, number> }) {
           ))}
         </Pie>
         <Tooltip content={<CustomTooltip />} />
+        <Legend
+          verticalAlign="bottom"
+          formatter={value => (
+            <span className="text-xs text-zinc-300">{String(value)}</span>
+          )}
+          wrapperStyle={{ paddingTop: "12px" }}
+        />
       </PieChart>
     </ResponsiveContainer>
   );

@@ -5,52 +5,59 @@
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
-  --color-background: oklch(0.2 0.012 265.73);
-  --color-foreground: oklch(0.985 0.001 106.42);
+  /* モダンで深みのあるダークベース（Zinc系ベースによりリッチにしたもの） */
+  --color-background: oklch(0.18 0.01 285);
+  --color-foreground: oklch(0.98 0 0);
 
-  --color-card: oklch(0.22 0.012 265.73);
-  --color-card-foreground: oklch(0.985 0.001 106.42);
+  /* カード・ポップオーバーは背景よりわずかに浮き立たせる */
+  --color-card: oklch(0.22 0.01 285);
+  --color-card-foreground: oklch(0.98 0 0);
 
-  --color-popover: oklch(0.22 0.012 265.73);
-  --color-popover-foreground: oklch(0.985 0.001 106.42);
+  --color-popover: oklch(0.22 0.01 285);
+  --color-popover-foreground: oklch(0.98 0 0);
 
-  --color-primary: oklch(0.985 0.001 106.42);
-  --color-primary-foreground: oklch(0.2 0.012 265.73);
+  /* 主要アクセントカラー（ブルー～パープル系などグラデーションとも相性のいい青） */
+  --color-primary: oklch(0.65 0.15 250);
+  --color-primary-foreground: oklch(0.98 0 0);
 
-  --color-secondary: oklch(0.269 0.012 266.39);
-  --color-secondary-foreground: oklch(0.985 0.001 106.42);
+  /* セカンダリ（少し控えめなアクション） */
+  --color-secondary: oklch(0.28 0.02 285);
+  --color-secondary-foreground: oklch(0.98 0 0);
 
-  --color-muted: oklch(0.269 0.012 266.39);
-  --color-muted-foreground: oklch(0.708 0.012 265.54);
+  /* ミュート（非強調用テキストや背景用） */
+  --color-muted: oklch(0.26 0.02 285);
+  --color-muted-foreground: oklch(0.7 0.02 285);
 
-  --color-accent: oklch(0.269 0.012 266.39);
-  --color-accent-foreground: oklch(0.985 0.001 106.42);
+  --color-accent: oklch(0.28 0.02 285);
+  --color-accent-foreground: oklch(0.98 0 0);
 
-  --color-destructive: oklch(0.396 0.141 25.72);
-  --color-destructive-foreground: oklch(0.637 0.237 25.33);
+  --color-destructive: oklch(0.45 0.15 25);
+  --color-destructive-foreground: oklch(0.95 0.05 25);
 
-  --color-border: oklch(0.269 0.012 266.39);
-  --color-input: oklch(0.269 0.012 266.39);
-  --color-ring: oklch(0.439 0.011 265.7);
+  --color-border: oklch(0.28 0.02 285);
+  --color-input: oklch(0.28 0.02 285);
+  --color-ring: oklch(0.65 0.15 250);
 
-  --color-chart-1: oklch(0.488 0.243 264.38);
-  --color-chart-2: oklch(0.696 0.17 162.48);
-  --color-chart-3: oklch(0.769 0.188 70.08);
-  --color-chart-4: oklch(0.627 0.265 303.9);
-  --color-chart-5: oklch(0.645 0.246 16.44);
+  /* チャート用カラー（視認性が高く美しいパレット） */
+  --color-chart-1: oklch(0.65 0.15 250); /* Primary Blue */
+  --color-chart-2: oklch(0.7 0.15 160); /* Emerald Green */
+  --color-chart-3: oklch(0.75 0.15 70); /* Warm Amber */
+  --color-chart-4: oklch(0.65 0.18 310); /* Deep Purple */
+  --color-chart-5: oklch(0.6 0.18 20); /* Vivid Red/Orange */
 
-  --color-sidebar: oklch(0.23 0.012 265.73);
-  --color-sidebar-foreground: oklch(0.985 0.001 106.42);
-  --color-sidebar-primary: oklch(0.488 0.243 264.38);
-  --color-sidebar-primary-foreground: oklch(0.985 0.001 106.42);
-  --color-sidebar-accent: oklch(0.269 0.012 266.39);
-  --color-sidebar-accent-foreground: oklch(0.985 0.001 106.42);
-  --color-sidebar-border: oklch(0.269 0.012 266.39);
-  --color-sidebar-ring: oklch(0.439 0.011 265.7);
+  /* サイドバーは背景と一体化するか少しだけ暗くする */
+  --color-sidebar: oklch(0.16 0.01 285);
+  --color-sidebar-foreground: oklch(0.85 0.01 285);
+  --color-sidebar-primary: oklch(0.65 0.15 250);
+  --color-sidebar-primary-foreground: oklch(0.98 0 0);
+  --color-sidebar-accent: oklch(0.22 0.01 285);
+  --color-sidebar-accent-foreground: oklch(0.98 0 0);
+  --color-sidebar-border: oklch(0.22 0.01 285);
+  --color-sidebar-ring: oklch(0.65 0.15 250);
 
-  --radius-lg: 0.5rem;
-  --radius-md: calc(0.5rem - 2px);
-  --radius-sm: calc(0.5rem - 4px);
+  --radius-lg: 0.75rem;
+  --radius-md: calc(0.75rem - 2px);
+  --radius-sm: calc(0.75rem - 4px);
 }
 
 @layer base {
@@ -59,6 +66,8 @@
   }
   body {
     @apply bg-background text-foreground antialiased;
+    /* PWA などアプリライクなスクロール感 */
+    -webkit-tap-highlight-color: transparent;
   }
 }
 
@@ -81,11 +90,80 @@ input[type="radio"],
 
 /* 常にダークモードを適用 */
 .dark body {
-  /* Slightly brighter dark theme (~Zinc 900) */
-  --color-background: oklch(0.21 0.006 285.8);
-  --color-sidebar: oklch(0.23 0.006 285.8);
-  --color-card: oklch(0.23 0.006 285.8);
-
   background-color: var(--color-background);
   color: var(--color-foreground);
+}
+
+/* Sonner Toast カスタムスタイル */
+@layer base {
+  /* 成功トースト（緑色） */
+  [data-sonner-toast][data-type="success"] {
+    background-color: hsl(158 64% 12%) !important;
+    border-color: hsl(158 64% 28%) !important;
+    color: hsl(158 64% 95%) !important;
+  }
+
+  [data-sonner-toast][data-type="success"] [data-icon] {
+    color: hsl(158 64% 52%) !important;
+  }
+
+  [data-sonner-toast][data-type="success"] [data-description] {
+    color: hsl(158 64% 75%) !important;
+  }
+
+  /* エラートースト（赤色） */
+  [data-sonner-toast][data-type="error"] {
+    background-color: hsl(0 72% 15%) !important;
+    border-color: hsl(0 72% 35%) !important;
+    color: hsl(0 72% 95%) !important;
+  }
+
+  [data-sonner-toast][data-type="error"] [data-icon] {
+    color: hsl(0 72% 60%) !important;
+  }
+
+  [data-sonner-toast][data-type="error"] [data-description] {
+    color: hsl(0 72% 80%) !important;
+  }
+
+  /* 警告トースト（琥珀色） */
+  [data-sonner-toast][data-type="warning"] {
+    background-color: hsl(35 92% 15%) !important;
+    border-color: hsl(35 92% 35%) !important;
+    color: hsl(35 92% 95%) !important;
+  }
+
+  [data-sonner-toast][data-type="warning"] [data-icon] {
+    color: hsl(35 92% 55%) !important;
+  }
+
+  [data-sonner-toast][data-type="warning"] [data-description] {
+    color: hsl(35 92% 80%) !important;
+  }
+
+  /* 情報トースト（青色） */
+  [data-sonner-toast][data-type="info"] {
+    background-color: hsl(215 70% 15%) !important;
+    border-color: hsl(215 70% 35%) !important;
+    color: hsl(215 70% 95%) !important;
+  }
+
+  [data-sonner-toast][data-type="info"] [data-icon] {
+    color: hsl(215 70% 60%) !important;
+  }
+
+  [data-sonner-toast][data-type="info"] [data-description] {
+    color: hsl(215 70% 80%) !important;
+  }
+
+  /* 読み込み中トースト */
+  [data-sonner-toast][data-type="loading"] {
+    background-color: hsl(215 20% 20%) !important;
+    border-color: hsl(215 20% 35%) !important;
+    color: hsl(215 20% 95%) !important;
+  }
+
+  [data-sonner-toast][data-type="loading"] [data-icon] {
+    color: hsl(215 70% 60%) !important;
+  }
 }

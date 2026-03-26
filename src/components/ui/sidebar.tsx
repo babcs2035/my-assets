@@ -68,8 +68,9 @@ export function SidebarProvider({
 
   // Auto-close mobile sidebar on pathname change
   React.useEffect(() => {
+    void _pathname; // Use the variable to satisfy lint
     setOpenMobile(false);
-  }, []);
+  }, [_pathname]);
 
   const toggleExpanded = React.useCallback(() => {
     setExpanded(prev => !prev);

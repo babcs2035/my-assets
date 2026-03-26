@@ -79,15 +79,18 @@ export async function getDashboardKPI() {
  * 指定された日数分の資産推移データを取得する関数である．
  * 日ごとの資産タイプ別合計金額を計算し，グラフ表示用の形式で返す．
  */
-export async function getAssetHistory(days = 90) {
-  console.log(`📈 Fetching asset history for the last ${days} days...`);
-  const since = new Date();
-  since.setDate(since.getDate() - days);
+export async function getAssetHistory(days?: number) {
+  console.log(`📈 Fetching asset history...`);
+  const where: import("@prisma/client").Prisma.BalanceHistoryWhereInput = {};
+
+  if (days) {
+    const since = new Date();
+    since.setDate(since.getDate() - days);
+    where.date = { gte: since };
+  }
 
   const histories = await prisma.balanceHistory.findMany({
-    where: {
-      date: { gte: since },
-    },
+    where,
     include: {
       subAccount: {
         select: {

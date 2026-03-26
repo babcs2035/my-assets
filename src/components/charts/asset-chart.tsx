@@ -4,11 +4,13 @@ import {
   Area,
   AreaChart,
   CartesianGrid,
+  Legend,
   ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
 } from "recharts";
+import { formatYAxisCurrency, getNiceChartDomain } from "@/lib/chart-format";
 import { assetTypeColor, assetTypeLabel, formatCurrency } from "@/lib/utils";
 
 type AssetHistoryEntry = {
@@ -60,6 +62,9 @@ export function AssetChart({ data }: { data: AssetHistoryEntry[] }) {
     );
   }
 
+  const totals = data.map(d => Number(d.total));
+  const [minVal, maxVal] = getNiceChartDomain(totals);
+
   return (
     <ResponsiveContainer width="100%" height={320}>
       <AreaChart data={data}>
@@ -90,21 +95,34 @@ export function AssetChart({ data }: { data: AssetHistoryEntry[] }) {
         <XAxis
           dataKey="date"
           stroke="#52525b"
-          fontSize={11}
+          fontSize={12}
+          tickLine={false}
+          axisLine={false}
           tickFormatter={v => v.slice(5)}
+          minTickGap={24}
         />
         <YAxis
           stroke="#52525b"
-          fontSize={11}
-          tickFormatter={v => `${(Number(v) / 10000).toFixed(0)}万`}
+          fontSize={12}
+          tickLine={false}
+          axisLine={false}
+          tickFormatter={v => formatYAxisCurrency(Number(v))}
+          domain={[minVal, maxVal]}
+          tickCount={6}
+          width={70}
         />
         <Tooltip content={<CustomTooltip />} />
+        <Legend
+          verticalAlign="bottom"
+          wrapperStyle={{ paddingTop: "12px", fontSize: "12px" }}
+        />
         {assetTypes.map(type => (
           <Area
             key={type}
             type="monotone"
             dataKey={type}
             stackId="1"
+            name={assetTypeLabel(type)}
             stroke={assetTypeColor(type)}
             fill={`url(#gradient-${type})`}
             strokeWidth={2}

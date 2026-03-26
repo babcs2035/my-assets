@@ -1,10 +1,8 @@
 "use client";
 
 import type { AssetType, SubAccount } from "@prisma/client";
-import { Settings2 } from "lucide-react";
 import { toast } from "sonner";
 import { updateSubAccountAssetType } from "@/actions/accounts";
-import { Badge } from "@/components/ui/badge";
 import {
   Select,
   SelectContent,
@@ -12,7 +10,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { assetTypeColor, assetTypeLabel, formatCurrency } from "@/lib/utils";
+import { assetTypeColor, formatCurrency } from "@/lib/utils";
 
 /**
  * 子口座のリレーションを含む型定義である．
@@ -56,63 +54,45 @@ export function AccountSubAccountManager({
   };
 
   return (
-    <div className="space-y-3">
-      {/* セクション見出し */}
-      <div className="flex items-center gap-2 text-sm text-zinc-400">
-        <Settings2 className="h-4 w-4" />
-        子口座の管理
-      </div>
-
+    <div className="space-y-2">
       {/* 子口座リスト */}
-      <div className="space-y-2">
-        {subAccounts.map(sa => (
-          <div
-            key={sa.id}
-            className="flex items-center justify-between rounded-lg border border-zinc-800 bg-zinc-900/50 px-4 py-3"
-          >
-            <div className="flex items-center gap-3">
-              {/* 資産タイプに応じたカラーチップ */}
-              <span
-                className="inline-block h-3 w-3 rounded-full"
-                style={{ background: assetTypeColor(sa.assetType) }}
-              />
-              <div>
-                <p className="text-sm font-medium text-zinc-200">
-                  {sa.currentName}
-                </p>
-                <p className="text-xs text-zinc-500">
-                  {formatCurrency(sa.balance)}
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2">
-              {/* 現在の区分のバッジ表示 */}
-              <Badge variant="secondary" className="text-[10px]">
-                {assetTypeLabel(sa.assetType)}
-              </Badge>
-
-              {/* 区分変更用のセレクトボックス */}
-              <Select
-                defaultValue={sa.assetType}
-                onValueChange={(val: string) =>
-                  handleAssetTypeChange(sa.id, val as AssetType)
-                }
-              >
-                <SelectTrigger className="h-8 w-[140px] text-xs">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="CASH">預金・現金</SelectItem>
-                  <SelectItem value="INVESTMENT">投資信託・証券</SelectItem>
-                  <SelectItem value="CRYPTO">暗号資産</SelectItem>
-                  <SelectItem value="POINT">ポイント</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+      {subAccounts.map(sa => (
+        <div
+          key={sa.id}
+          className="flex items-center justify-between gap-3 rounded-lg border border-zinc-800 px-4 py-3"
+          style={{
+            background: `linear-gradient(to right, ${assetTypeColor(sa.assetType)}15 0%, transparent 100%)`,
+            borderLeft: `3px solid ${assetTypeColor(sa.assetType)}`,
+          }}
+        >
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium text-zinc-200 truncate">
+              {sa.currentName}
+            </p>
+            <p className="text-xs text-zinc-500 font-mono">
+              {formatCurrency(sa.balance)}
+            </p>
           </div>
-        ))}
-      </div>
+
+          {/* 区分変更用のセレクトボックス */}
+          <Select
+            defaultValue={sa.assetType}
+            onValueChange={(val: string) =>
+              handleAssetTypeChange(sa.id, val as AssetType)
+            }
+          >
+            <SelectTrigger className="h-8 w-[140px] text-xs shrink-0">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="CASH">預金・現金</SelectItem>
+              <SelectItem value="INVESTMENT">投資信託・証券</SelectItem>
+              <SelectItem value="CRYPTO">暗号資産</SelectItem>
+              <SelectItem value="POINT">ポイント</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      ))}
     </div>
   );
 }

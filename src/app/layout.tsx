@@ -41,11 +41,12 @@ export const metadata: Metadata = {
  * 画面の表示領域に関する設定 (ビューポート) を定義する定数である．
  */
 export const viewport: Viewport = {
-  themeColor: "#09090b",
+  themeColor: "#18181b", // manifest.jsonに合わせる
   width: "device-width",
   initialScale: 1,
   maximumScale: 1,
   userScalable: false,
+  viewportFit: "cover", // Notch などセーフエリア対応
 };
 
 /**

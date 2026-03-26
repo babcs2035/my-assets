@@ -51,7 +51,6 @@ export async function getAccountDetail(id: string) {
           pointDetail: true,
           histories: {
             orderBy: { date: "desc" },
-            take: 90,
           },
         },
       },

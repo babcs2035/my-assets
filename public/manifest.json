@@ -5,16 +5,29 @@
   "start_url": "/my-assets/",
   "scope": "/my-assets/",
   "display": "standalone",
-  "background_color": "#09090b",
-  "theme_color": "#09090b",
+  "background_color": "#18181b",
+  "theme_color": "#18181b",
   "orientation": "portrait-primary",
   "icons": [
     {
       "src": "/my-assets/icon.svg",
-      "sizes": "any",
-      "type": "image/svg+xml"
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
     }
   ],
   "screenshots": [],
-  "shortcuts": []
+  "shortcuts": [
+    {
+      "name": "ダッシュボード",
+      "url": "/my-assets/",
+      "description": "資産状況の確認"
+    },
+    {
+      "name": "入出金明細",
+      "url": "/my-assets/transactions",
+      "description": "取引履歴の確認"
+    }
+  ],
+  "categories": ["finance"]
 }

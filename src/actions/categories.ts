@@ -119,6 +119,12 @@ export async function getCategoryRules() {
 export async function createCategoryRule(input: CategoryRuleCreateInput) {
   const data = categoryRuleCreateSchema.parse(input);
   console.log(`➕ Creating category rule for keyword: ${data.keyword}`);
+
+  // 同じキーワードを持つ既存のルールを削除してから新規作成する
+  await prisma.categoryRule.deleteMany({
+    where: { keyword: data.keyword },
+  });
+
   return prisma.categoryRule.create({ data });
 }
 

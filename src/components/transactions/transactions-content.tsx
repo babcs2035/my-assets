@@ -55,6 +55,7 @@ type Category = Awaited<ReturnType<typeof getCategories>>[number];
  */
 export function TransactionsContent() {
   const [currentDate, setCurrentDate] = useState<Date>(new Date());
+  const [selectedDay, setSelectedDay] = useState<number | null>(null);
   const [page, setPage] = useState(1);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [totalPages, setTotalPages] = useState(1);
@@ -68,16 +69,28 @@ export function TransactionsContent() {
   const month = currentDate.getMonth() + 1;
 
   /**
-   * 現在の年・月・ページに基づいてデータをフェッチする関数である．
+   * 現在の年・月・日・ページに基づいてデータをフェッチする関数である．
    */
   const fetchData = () => {
+    const dateInfo = selectedDay
+      ? `${year}/${month}/${selectedDay}`
+      : `${year}/${month}`;
     console.log(
-      `📂 Fetching transaction data for ${year}/${month} (Page: ${page})...`,
+      `📂 Fetching transaction data for ${dateInfo} (Page: ${page})...`,
+    );
+    console.log(
+      `📍 Params: year=${year}, month=${month}, day=${selectedDay ?? "undefined"}, page=${page}`,
     );
     startTransition(async () => {
       try {
         const [txResult, calResult, catResult] = await Promise.all([
-          getTransactions({ year, month, page, pageSize: 50 }),
+          getTransactions({
+            year,
+            month,
+            day: selectedDay ?? undefined,
+            page,
+            pageSize: 50,
+          }),
           getMonthlyCalendarData(year, month),
           getCategories(),
         ]);
@@ -85,7 +98,9 @@ export function TransactionsContent() {
         setTotalPages(txResult.totalPages);
         setCalendarData(calResult);
         setCategories(catResult);
-        console.log("✅ Data fetched successfully.");
+        console.log(
+          `✅ Data fetched successfully: ${txResult.transactions.length} transactions`,
+        );
       } catch (error) {
         console.error("❌ Failed to fetch transaction data:", error);
         toast.error("データの取得に失敗しました．");
@@ -94,12 +109,12 @@ export function TransactionsContent() {
   };
 
   /**
-   * 年，月，またはページが変更された際にデータを再取得する．
+   * 年，月，日，またはページが変更された際にデータを再取得する．
    */
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional dependencies
   useEffect(() => {
     fetchData();
-  }, [year, month, page]);
+  }, [year, month, selectedDay, page]);
 
   /**
    * 取引のカテゴリーを変更し，必要に応じて自動分類ルールを更新するハンドラである．
@@ -133,6 +148,37 @@ export function TransactionsContent() {
     setPage(newPage);
   };
 
+  /**
+   * カレンダーの日付をクリックしたときのハンドラである．
+   * その日の明細のみを表示するか，月全体表示に戻す．
+   */
+  const handleDayClick = (date: Date) => {
+    // ローカルタイムゾーンで日付を取得
+    const clickedDay = date.getDate();
+    const clickedMonth = date.getMonth() + 1;
+    const clickedYear = date.getFullYear();
+
+    console.log(
+      `📅 Calendar clicked: ${clickedYear}-${clickedMonth}-${clickedDay} (Date object: ${date.toString()})`,
+    );
+
+    // 異なる月の日付がクリックされた場合は月を変更
+    if (clickedYear !== year || clickedMonth !== month) {
+      setCurrentDate(date);
+      setSelectedDay(null);
+      setPage(1);
+      return;
+    }
+
+    // 同じ日付をクリックした場合は選択解除（月全体表示に戻る）
+    if (selectedDay === clickedDay) {
+      setSelectedDay(null);
+    } else {
+      setSelectedDay(clickedDay);
+    }
+    setPage(1);
+  };
+
   return (
     <div className="space-y-6">
       <div className="space-y-6">
@@ -141,29 +187,49 @@ export function TransactionsContent() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
               カレンダー
+              {selectedDay && (
+                <Badge variant="secondary" className="ml-2 text-xs">
+                  {month}/{selectedDay} の明細
+                </Badge>
+              )}
             </CardTitle>
           </CardHeader>
           <CardContent className="p-4">
             <Calendar
               mode="single"
-              selected={currentDate}
-              onSelect={date => date && setCurrentDate(date)}
+              selected={
+                selectedDay ? new Date(year, month - 1, selectedDay) : undefined
+              }
+              onSelect={date => {
+                if (!date) {
+                  // 選択解除された場合
+                  setSelectedDay(null);
+                  setPage(1);
+                } else {
+                  handleDayClick(date);
+                }
+              }}
               month={currentDate}
-              onMonthChange={setCurrentDate}
+              onMonthChange={date => {
+                setCurrentDate(date);
+                setSelectedDay(null);
+                setPage(1);
+              }}
               locale={ja}
               className="w-full rounded-md border"
               classNames={{
                 month: "space-y-4 w-full",
-                table: "w-full border-collapse space-y-1",
+                table: "w-full border-collapse space-y-1 table-fixed",
                 head_row: "flex w-full",
                 head_cell:
-                  "text-muted-foreground rounded-md w-full font-normal text-[0.8rem] text-center",
+                  "text-muted-foreground rounded-md w-full font-normal text-[0.8rem] sm:text-[0.85rem] text-center",
                 row: "flex w-full mt-2",
-                cell: "h-auto w-full p-0 relative [&:has([aria-selected].day-range-end)]:rounded-r-md [&:has([aria-selected].day-outside)]:bg-accent/50 [&:has([aria-selected])]:bg-accent first:[&:has([aria-selected])]:rounded-l-md last:[&:has([aria-selected])]:rounded-r-md focus-within:relative focus-within:z-20",
-                day: "h-16 md:h-24 w-full p-2 font-normal aria-selected:opacity-100 items-start justify-start hover:bg-zinc-800/50 border border-transparent hover:border-zinc-700 rounded-md transition-colors",
+                cell: "h-auto w-full p-0 relative [&:has([aria-selected].day-range-end)]:rounded-r-md [&:has([aria-selected].day-outside)]:bg-accent/50 [&:has([aria-selected])]:bg-accent first:[&:has([aria-selected])]:rounded-l-md last:[&:has([aria-selected])]:rounded-r-md focus-within:relative focus-within:z-20 min-w-0 overflow-hidden",
+                day: "h-16 sm:h-18 md:h-28 w-full p-1 sm:p-1.5 md:p-2 font-normal aria-selected:opacity-100 items-start justify-start hover:bg-zinc-800/50 border border-transparent hover:border-zinc-700 rounded-md transition-colors min-w-0 flex-col",
                 day_selected:
-                  "bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground focus:bg-primary focus:text-primary-foreground !bg-blue-600/20 !text-blue-200 border-blue-500",
-                day_today: "bg-accent/50 text-accent-foreground",
+                  "bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground focus:bg-primary focus:text-primary-foreground !bg-blue-600/30 !text-blue-100 border-blue-400",
+                day_today:
+                  "bg-accent/50 text-accent-foreground border-zinc-600",
               }}
               components={{
                 DayContent: ({ date }) => {
@@ -174,17 +240,25 @@ export function TransactionsContent() {
                   const data = calendarData[dateKey];
 
                   return (
-                    <div className="flex h-full w-full flex-col items-start justify-between">
-                      <span className="text-sm font-medium">{d}</span>
+                    <div className="flex h-full w-full flex-col items-start justify-between min-w-0 overflow-hidden">
+                      <span className="text-sm sm:text-base md:text-lg font-semibold text-zinc-200">
+                        {d}
+                      </span>
                       {data && (
-                        <div className="flex w-full flex-col items-end gap-0.5 text-[10px]">
+                        <div className="flex w-full flex-col items-end gap-0.5 text-[9px] sm:text-[10px] md:text-xs min-w-0">
                           {data.income > 0 && (
-                            <span className="font-mono text-emerald-400">
+                            <span
+                              className="font-mono font-medium text-emerald-400 truncate w-full text-right"
+                              title={`+¥${data.income.toLocaleString()}`}
+                            >
                               +{data.income.toLocaleString()}
                             </span>
                           )}
                           {data.expense > 0 && (
-                            <span className="font-mono text-red-400">
+                            <span
+                              className="font-mono font-medium text-red-400 truncate w-full text-right"
+                              title={`-¥${data.expense.toLocaleString()}`}
+                            >
                               -{data.expense.toLocaleString()}
                             </span>
                           )}
@@ -222,29 +296,45 @@ export function TransactionsContent() {
                   {transactions.map(tx => (
                     <div
                       key={tx.id}
-                      className={`p-4 ${tx.isTransfer ? "opacity-70" : ""}`}
+                      className={`p-3 ${tx.isTransfer ? "opacity-70" : ""}`}
                     >
-                      <div className="flex justify-between items-start mb-2">
-                        <div className="text-sm text-zinc-400">
-                          {dayjs(tx.date).format("MM/DD")}
+                      <div className="flex justify-between items-start gap-2 min-w-0">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-0.5">
+                            <span className="text-xs text-zinc-500 shrink-0">
+                              {dayjs(tx.date).format("MM/DD")}
+                            </span>
+                            <span className="text-sm font-medium text-zinc-200 truncate">
+                              {tx.desc}
+                            </span>
+                          </div>
+                          <div className="text-[10px] text-zinc-500 truncate">
+                            {tx.subAccount.mainAccount.label} (
+                            {tx.subAccount.currentName})
+                          </div>
                         </div>
-                        <div
-                          className={`font-mono font-medium ${
-                            tx.amount >= 0 ? "text-emerald-400" : "text-red-400"
-                          }`}
-                        >
-                          {tx.amount >= 0 && "+"}
-                          {tx.amount.toLocaleString()}
+                        <div className="flex flex-col items-end shrink-0 gap-1">
+                          <div
+                            className={`font-mono font-medium text-sm ${
+                              tx.amount >= 0
+                                ? "text-emerald-400"
+                                : "text-red-400"
+                            }`}
+                          >
+                            {tx.amount >= 0 && "+"}
+                            {tx.amount.toLocaleString()}
+                          </div>
+                          {tx.isTransfer && (
+                            <Badge
+                              variant="secondary"
+                              className="text-[9px] px-1 py-0 h-4"
+                            >
+                              振替
+                            </Badge>
+                          )}
                         </div>
                       </div>
-                      <div className="mb-2">
-                        <div className="text-base text-zinc-200">{tx.desc}</div>
-                        <div className="text-xs text-zinc-500 mt-0.5">
-                          {tx.subAccount.mainAccount.label} (
-                          {tx.subAccount.currentName})
-                        </div>
-                      </div>
-                      <div className="flex items-center justify-between mt-3">
+                      <div className="flex items-center justify-between mt-2">
                         <Select
                           value={tx.subCategoryId ?? "none"}
                           onValueChange={val =>
@@ -274,11 +364,6 @@ export function TransactionsContent() {
                               )}
                           </SelectContent>
                         </Select>
-                        {tx.isTransfer && (
-                          <Badge variant="secondary" className="text-[10px]">
-                            振替
-                          </Badge>
-                        )}
                       </div>
                     </div>
                   ))}
@@ -294,7 +379,6 @@ export function TransactionsContent() {
                         <TableHead>摘要</TableHead>
                         <TableHead className="text-right">金額</TableHead>
                         <TableHead>カテゴリー</TableHead>
-                        <TableHead>状態</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -357,16 +441,6 @@ export function TransactionsContent() {
                                   )}
                               </SelectContent>
                             </Select>
-                          </TableCell>
-                          <TableCell>
-                            {tx.isTransfer && (
-                              <Badge
-                                variant="secondary"
-                                className="text-[10px]"
-                              >
-                                振替
-                              </Badge>
-                            )}
                           </TableCell>
                         </TableRow>
                       ))}
