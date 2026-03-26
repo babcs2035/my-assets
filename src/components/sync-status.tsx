@@ -2,7 +2,7 @@
 
 import { CheckCircle2, Loader2, XCircle } from "lucide-react";
 import { useEffect, useState } from "react";
-import { getLastSyncTime } from "@/actions/system";
+import { getLastSyncInfo } from "@/actions/system";
 import { useSidebar } from "@/components/ui/sidebar";
 import {
   Tooltip,
@@ -32,28 +32,28 @@ export function SyncStatus() {
      */
     const checkSync = async () => {
       try {
-        const lastSync = await getLastSyncTime();
+        const info = await getLastSyncInfo();
         const now = new Date();
 
-        if (!lastSync) {
+        if (!info) {
           setStatus("idle");
           setLastSyncText("未実行");
           return;
         }
 
-        const last = new Date(lastSync);
+        const last = new Date(info.date);
         const isToday =
           now.getFullYear() === last.getFullYear() &&
           now.getMonth() === last.getMonth() &&
           now.getDate() === last.getDate();
 
         if (isToday) {
-          setStatus("success");
+          setStatus(info.success ? "success" : "error");
           setLastSyncText(
             `${last.getHours().toString().padStart(2, "0")}:${last
               .getMinutes()
               .toString()
-              .padStart(2, "0")} 完了`,
+              .padStart(2, "0")} ${info.success ? "完了" : "失敗"}`,
           );
         } else {
           // 現在同期実行中かどうかを判定する (例: 08:00 - 08:10)．
@@ -64,7 +64,7 @@ export function SyncStatus() {
             setStatus("syncing");
             setLastSyncText("実行中...");
           } else if (hour >= 8 || (hour === 7 && minute > 55)) {
-            setStatus("error");
+            setStatus(info.success ? "idle" : "error");
             setLastSyncText("未実行");
           } else {
             setStatus("idle");

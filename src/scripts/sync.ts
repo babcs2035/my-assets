@@ -21,7 +21,11 @@ async function main() {
       if (provider.type === "mf") {
         // Run MF scraper with environment variable
         execSync("pnpm tsx src/scraper/mf-scraper.ts", {
-          env: { ...process.env, MF_ITEM_NAME: provider.name, MF_FULL_SYNC: "true" },
+          env: {
+            ...process.env,
+            MF_ITEM_NAME: provider.name,
+            MF_FULL_SYNC: "true",
+          },
           stdio: "inherit",
         });
       } else if (provider.type === "custom") {

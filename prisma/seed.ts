@@ -16,56 +16,75 @@ async function main() {
   console.log("🌱 Seeding database...");
 
   // 1. デフォルトカテゴリの作成
-  const categoryData = [
+  const categoryData: {
+    name: string;
+    type: "EXPENSE" | "INCOME";
+    subs: string[];
+  }[] = [
     {
       name: "食費",
+      type: "EXPENSE",
       subs: ["食料品", "外食", "カフェ", "デリバリー"],
     },
     {
       name: "日用品",
+      type: "EXPENSE",
       subs: ["生活雑貨", "医薬品", "衛生用品"],
     },
     {
       name: "住居",
+      type: "EXPENSE",
       subs: ["家賃", "水道光熱費", "通信費", "修繕費"],
     },
     {
       name: "交通",
+      type: "EXPENSE",
       subs: ["電車・バス", "タクシー", "ガソリン", "駐車場"],
     },
     {
       name: "趣味・娯楽",
+      type: "EXPENSE",
       subs: ["書籍", "映画・音楽", "ゲーム", "旅行"],
     },
     {
       name: "衣服・美容",
+      type: "EXPENSE",
       subs: ["衣類", "クリーニング", "美容院"],
     },
     {
       name: "医療・保険",
+      type: "EXPENSE",
       subs: ["医療費", "保険料", "薬代"],
     },
     {
       name: "教育・教養",
+      type: "EXPENSE",
       subs: ["学費", "書籍・教材", "セミナー"],
     },
     {
       name: "収入",
+      type: "INCOME",
       subs: ["給与", "副業", "配当", "利息", "ポイント"],
     },
     {
       name: "その他",
+      type: "EXPENSE",
       subs: ["手数料", "税金", "寄付", "雑費"],
     },
   ];
 
+  // タイプごとの sortOrder カウンタ
+  const sortCounters: Record<string, number> = { EXPENSE: 0, INCOME: 0 };
+
   for (const cat of categoryData) {
+    const order = sortCounters[cat.type]++;
     const mainCategory = await prisma.mainCategory.upsert({
-      where: { name: cat.name },
-      update: {},
-      create: { name: cat.name },
+      where: { name_type: { name: cat.name, type: cat.type } },
+      update: { sortOrder: order },
+      create: { name: cat.name, type: cat.type, sortOrder: order },
     });
 
+    let subOrder = 0;
     for (const sub of cat.subs) {
       await prisma.subCategoryItem.upsert({
         where: {
@@ -74,30 +93,32 @@ async function main() {
             name: sub,
           },
         },
-        update: {},
+        update: { sortOrder: subOrder },
         create: {
           name: sub,
           mainCategoryId: mainCategory.id,
+          sortOrder: subOrder,
         },
       });
+      subOrder++;
     }
   }
 
-  console.log("✅ Categories seeded");
+  console.log("Categories seeded");
 
-  // 2. デフォルト Provider（手動）の作成
+  // 2. デフォルト Provider（カスタム）の作成
   await prisma.provider.upsert({
     where: { name: "manual" },
-    update: {},
+    update: { type: "custom" },
     create: {
       name: "manual",
-      type: "manual",
+      type: "custom",
       isActive: true,
     },
   });
 
-  console.log("✅ Default provider seeded");
-  console.log("🎉 Seeding complete!");
+  console.log("Default provider seeded");
+  console.log("Seeding complete!");
 }
 
 main()

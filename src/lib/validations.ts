@@ -34,6 +34,7 @@ export type SubAccountUpdateInput = z.infer<typeof subAccountUpdateSchema>;
  */
 export const mainCategoryCreateSchema = z.object({
   name: z.string().min(1, "カテゴリー名は必須です"),
+  type: z.enum(["INCOME", "EXPENSE"]).default("EXPENSE"),
 });
 export type MainCategoryCreateInput = z.infer<typeof mainCategoryCreateSchema>;
 

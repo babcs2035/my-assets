@@ -259,13 +259,19 @@ export function TransactionsContent() {
                           </SelectTrigger>
                           <SelectContent>
                             <SelectItem value="none">未分類</SelectItem>
-                            {categories.map(mc =>
-                              mc.subCategories.map(sc => (
-                                <SelectItem key={sc.id} value={sc.id}>
-                                  {mc.name} / {sc.name}
-                                </SelectItem>
-                              )),
-                            )}
+                            {categories
+                              .filter(
+                                mc =>
+                                  (mc as Category & { type: string }).type ===
+                                  (tx.amount >= 0 ? "INCOME" : "EXPENSE"),
+                              )
+                              .map(mc =>
+                                mc.subCategories.map(sc => (
+                                  <SelectItem key={sc.id} value={sc.id}>
+                                    {mc.name} / {sc.name}
+                                  </SelectItem>
+                                )),
+                              )}
                           </SelectContent>
                         </Select>
                         {tx.isTransfer && (
@@ -335,13 +341,20 @@ export function TransactionsContent() {
                               </SelectTrigger>
                               <SelectContent>
                                 <SelectItem value="none">未分類</SelectItem>
-                                {categories.map(mc =>
-                                  mc.subCategories.map(sc => (
-                                    <SelectItem key={sc.id} value={sc.id}>
-                                      {mc.name} / {sc.name}
-                                    </SelectItem>
-                                  )),
-                                )}
+                                {categories
+                                  .filter(
+                                    mc =>
+                                      (mc as Category & { type: string })
+                                        .type ===
+                                      (tx.amount >= 0 ? "INCOME" : "EXPENSE"),
+                                  )
+                                  .map(mc =>
+                                    mc.subCategories.map(sc => (
+                                      <SelectItem key={sc.id} value={sc.id}>
+                                        {mc.name} / {sc.name}
+                                      </SelectItem>
+                                    )),
+                                  )}
                               </SelectContent>
                             </Select>
                           </TableCell>

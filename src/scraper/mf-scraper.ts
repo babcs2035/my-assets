@@ -1,8 +1,8 @@
 import "dotenv/config";
 import { execSync } from "node:child_process";
+import { chromium, type Page } from "playwright";
 import { generateTransactionId } from "../lib/hash";
 import { prisma } from "../lib/prisma";
-import { chromium, type Page } from "playwright";
 
 /**
  * 1Password CLI を使用して認証情報を取得する
@@ -41,8 +41,9 @@ function getCredentials(itemName: string) {
 async function getAccountLinks(page: Page) {
   // 詳細ページ（/accounts/show/xxx）にいる場合も includes("/accounts") がヒットしてしまうので、
   // 厳密なURL比較または要素の存在確認を行う。
-  const isAccountsPage = page.url().replace(/\/$/, "") === "https://moneyforward.com/accounts";
-  const hasTable = await page.locator("#account-table").count() > 0;
+  const isAccountsPage =
+    page.url().replace(/\/$/, "") === "https://moneyforward.com/accounts";
+  const hasTable = (await page.locator("#account-table").count()) > 0;
 
   if (!isAccountsPage || !hasTable) {
     await page.goto("https://moneyforward.com/accounts");
@@ -57,7 +58,7 @@ async function getAccountLinks(page: Page) {
 
   return await page.evaluate(() => {
     return Array.from(document.querySelectorAll("#account-table tbody tr"))
-      .map((row) => {
+      .map(row => {
         const serviceLink = row.querySelector("td.service a");
         let name = serviceLink?.textContent?.trim() ?? "Unknown";
         // "(本サイト)" などを除去
@@ -68,7 +69,7 @@ async function getAccountLinks(page: Page) {
           href: (serviceLink as HTMLAnchorElement)?.href ?? null,
         };
       })
-      .filter((acc) => acc.name && acc.href);
+      .filter(acc => acc.name && acc.href);
   });
 }
 
@@ -87,7 +88,7 @@ async function triggerSync(page: Page, providerId: string) {
     where: { providerId },
     select: { label: true },
   });
-  const targetLabels = new Set(mainAccounts.map((a) => a.label));
+  const targetLabels = new Set(mainAccounts.map(a => a.label));
   console.log(
     `📋 Target accounts for sync: ${Array.from(targetLabels).join(", ")}`,
   );
@@ -103,8 +104,13 @@ async function triggerSync(page: Page, providerId: string) {
     const serviceName = serviceNameFull.trim(); // aタグ内のみ取得しているのでsplit不要
 
     if (targetLabels.has(serviceName)) {
-      const updateButton = row.locator('form input[type="submit"][value="更新"]');
-      if ((await updateButton.count()) > 0 && (await updateButton.isVisible())) {
+      const updateButton = row.locator(
+        'form input[type="submit"][value="更新"]',
+      );
+      if (
+        (await updateButton.count()) > 0 &&
+        (await updateButton.isVisible())
+      ) {
         console.log(`🔄 Clicking update for: ${serviceName}`);
         await updateButton.click();
         triggeredCount++;
@@ -125,14 +131,14 @@ async function scrapeBalances(page: Page, providerId: string) {
     where: { providerId },
     select: { label: true },
   });
-  const targetLabels = new Set(mainAccounts.map((a) => a.label));
+  const targetLabels = new Set(mainAccounts.map(a => a.label));
 
   console.log(
     `📋 Target accounts (DB): ${Array.from(targetLabels).join(", ")}`,
   );
 
   const accounts = await getAccountLinks(page);
-  const targetAccounts = accounts.filter((acc) => targetLabels.has(acc.name));
+  const targetAccounts = accounts.filter(acc => targetLabels.has(acc.name));
 
   console.log(
     `✅ Processing ${targetAccounts.length} accounts matching DB records...`,
@@ -168,16 +174,16 @@ async function scrapeBalances(page: Page, providerId: string) {
 
         for (const table of tables) {
           const headers = Array.from(table.querySelectorAll("thead th")).map(
-            (th) => th.textContent?.trim() || "",
+            th => th.textContent?.trim() || "",
           );
-          const amountIdx = headers.findIndex((h) =>
-            ["残高", "評価額", "資産"].some((k) => h.includes(k)),
+          const amountIdx = headers.findIndex(h =>
+            ["残高", "評価額", "資産"].some(k => h.includes(k)),
           );
           const nameIndices = headers
             .map((h, i) =>
-              ["種類", "名称", "銘柄"].some((k) => h.includes(k)) ? i : -1,
+              ["種類", "名称", "銘柄"].some(k => h.includes(k)) ? i : -1,
             )
-            .filter((i) => i !== -1);
+            .filter(i => i !== -1);
 
           const rows = Array.from(table.querySelectorAll("tbody tr"));
           for (const row of rows) {
@@ -197,8 +203,8 @@ async function scrapeBalances(page: Page, providerId: string) {
 
             if (nameIndices.length > 0) {
               const parts = nameIndices
-                .map((i) => cells[i]?.textContent?.trim())
-                .filter((s) => s && s.length > 0);
+                .map(i => cells[i]?.textContent?.trim())
+                .filter(s => s && s.length > 0);
               if (parts.length > 0) subNameCandidate = parts.join(" ");
             }
 
@@ -271,10 +277,7 @@ async function scrapeBalances(page: Page, providerId: string) {
         });
       }
     } catch (e) {
-      console.error(
-        `❌ Failed to scrape balances for ${account.name}:`,
-        e,
-      );
+      console.error(`❌ Failed to scrape balances for ${account.name}:`, e);
     }
   }
 
@@ -301,7 +304,7 @@ async function scrapeTransactions(page: Page, providerId: string) {
   for (const ma of mainAccounts) {
     subAccountMap.set(
       ma.label,
-      ma.subAccounts.map((s) => s.currentName),
+      ma.subAccounts.map(s => s.currentName),
     );
   }
 
@@ -312,9 +315,7 @@ async function scrapeTransactions(page: Page, providerId: string) {
 
   // リンク取得
   const accounts = await getAccountLinks(page);
-  const targetAccounts = accounts.filter((acc) =>
-    subAccountMap.has(acc.name),
-  );
+  const targetAccounts = accounts.filter(acc => subAccountMap.has(acc.name));
 
   const allTransactions = [];
 
@@ -359,7 +360,9 @@ async function scrapeTransactions(page: Page, providerId: string) {
             const amount = parseInt(amountText.replace(/,/g, ""), 10);
 
             const idAttr = row.getAttribute("id");
-            const msgUrlId = idAttr ? idAttr.replace("js-transaction-", "") : "";
+            const msgUrlId = idAttr
+              ? idAttr.replace("js-transaction-", "")
+              : "";
 
             const accountCell = row.querySelectorAll("td")[4];
             const accText = accountCell?.textContent?.trim() ?? "";
@@ -367,10 +370,13 @@ async function scrapeTransactions(page: Page, providerId: string) {
             const accDataTitle =
               accountCell?.getAttribute("data-original-title") ?? "";
             // すべての情報を統合して判定に使用
-            const info = (accText + " " + accTitle + " " + accDataTitle).replace(
-              /\s+/g,
-              " ",
-            );
+            const info = (
+              accText +
+              " " +
+              accTitle +
+              " " +
+              accDataTitle
+            ).replace(/\s+/g, " ");
 
             let subAccountName = "";
             for (const name of subAccountNames) {
@@ -423,7 +429,7 @@ async function scrapeTransactions(page: Page, providerId: string) {
         await prevBtn.click();
         try {
           await page.waitForFunction(
-            (old) => {
+            old => {
               const el = document.querySelector(".fc-header-title h2");
               return el && el.textContent !== old;
             },
@@ -539,10 +545,12 @@ async function saveToDatabase(
       });
       if (ma) {
         console.warn(
-          `   Available DB subAccounts: ${ma.subAccounts.map((s) => `"${s.currentName}"`).join(", ")}`,
+          `   Available DB subAccounts: ${ma.subAccounts.map(s => `"${s.currentName}"`).join(", ")}`,
         );
       } else {
-        console.warn(`   MainAccount "${tx.institutionName}" not found either.`);
+        console.warn(
+          `   MainAccount "${tx.institutionName}" not found either.`,
+        );
       }
       continue;
     }
@@ -585,7 +593,9 @@ async function saveToDatabase(
     });
   }
 
-  console.log(`✅ Saved ${savedCount}/${transactions.length} transactions to database.`);
+  console.log(
+    `✅ Saved ${savedCount}/${transactions.length} transactions to database.`,
+  );
 }
 
 /**
@@ -721,7 +731,7 @@ export async function runMfScraper(itemName: string) {
 
 // 直接実行された場合の処理
 if (process.env.MF_ITEM_NAME) {
-  runMfScraper(process.env.MF_ITEM_NAME).catch((err) => {
+  runMfScraper(process.env.MF_ITEM_NAME).catch(err => {
     console.error(err);
     process.exit(1);
   });

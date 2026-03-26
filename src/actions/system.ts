@@ -3,14 +3,36 @@
 import { prisma } from "@/lib/prisma";
 
 /**
- * 最後に資産データが同期された日時を取得する関数である．
- * BalanceHistory テーブルの最新の日付を取得して返す．
+ * 最後に同期が実行された Provider の情報を取得する関数である．
+ * 各 Provider の lastSyncAt / lastSyncSuccess を参照し，最も新しい同期情報を返す．
  */
-export async function getLastSyncTime() {
-  console.log("🕒 Fetching last sync time...");
-  const lastHistory = await prisma.balanceHistory.findFirst({
-    orderBy: { date: "desc" },
+export async function getLastSyncInfo() {
+  console.log("🕒 Fetching last sync info from providers...");
+  const provider = await prisma.provider.findFirst({
+    where: { lastSyncAt: { not: null } },
+    orderBy: { lastSyncAt: "desc" },
+    select: {
+      lastSyncAt: true,
+      lastSyncSuccess: true,
+      name: true,
+    },
   });
 
-  return lastHistory?.date ?? null;
+  if (!provider || !provider.lastSyncAt) {
+    return null;
+  }
+
+  return {
+    date: provider.lastSyncAt,
+    success: provider.lastSyncSuccess ?? false,
+    providerName: provider.name,
+  };
+}
+
+/**
+ * 後方互換性のために残す関数である．
+ */
+export async function getLastSyncTime() {
+  const info = await getLastSyncInfo();
+  return info?.date ?? null;
 }

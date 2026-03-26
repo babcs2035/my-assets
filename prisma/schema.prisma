@@ -16,14 +16,22 @@ enum AssetType {
   POINT // ポイント
 }
 
+// カテゴリーの収支区分
+enum CategoryType {
+  INCOME  // 収入
+  EXPENSE // 支出
+}
+
 // 3. Provider & Accounts
 model Provider {
-  id           String        @id @default(cuid())
-  name         String        @unique // 1Password のアイテム名 (例: "MF_Main")
-  type         String // "mf", "direct_crypto", "manual"
-  scraperScript String?
-  isActive     Boolean       @default(true)
-  mainAccounts MainAccount[]
+  id              String        @id @default(cuid())
+  name            String        @unique // 1Password のアイテム名 (例: "MF_Main")
+  type            String // "mf", "custom"
+  scraperScript   String?
+  isActive        Boolean       @default(true)
+  lastSyncAt      DateTime?     // 最終同期日時
+  lastSyncSuccess Boolean?      // 最終同期の成否
+  mainAccounts    MainAccount[]
 }
 
 model MainAccount {
@@ -107,13 +115,18 @@ model PointDetail {
 // 6. Transactions & Categorization
 model MainCategory {
   id            String            @id @default(cuid())
-  name          String            @unique
+  name          String
+  type          CategoryType      @default(EXPENSE) // 収入 or 支出
+  sortOrder     Int               @default(0) // 表示順序
   subCategories SubCategoryItem[]
+
+  @@unique([name, type])
 }
 
 model SubCategoryItem {
   id             String         @id @default(cuid())
   name           String
+  sortOrder      Int            @default(0) // 表示順序
   mainCategoryId String
   mainCategory   MainCategory   @relation(fields: [mainCategoryId], references: [id])
   transactions   Transaction[]
