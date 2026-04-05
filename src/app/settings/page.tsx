@@ -1,20 +1,21 @@
 import { Suspense } from "react";
 import { SettingsContent } from "@/components/settings/settings-content";
+import { PageHeader } from "@/components/page-header";
 import { Skeleton } from "@/components/ui/skeleton";
 
 export const dynamic = "force-dynamic";
 
+/**
+ * 設定ページコンポーネントである．
+ * ガイドブック: タイトルにページの内容を正確に表記する．
+ */
 export default function SettingsPage() {
   return (
-    <div className="space-y-8 animate-fade-in">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight text-zinc-100">
-          設定
-        </h1>
-        <p className="mt-1 text-sm text-zinc-500">
-          カテゴリーと自動分類ルールを管理します
-        </p>
-      </div>
+    <div className="space-y-6 animate-fade-in">
+      <PageHeader
+        title="設定"
+        description="カテゴリーと自動分類ルールを管理します"
+      />
 
       <Suspense
         fallback={

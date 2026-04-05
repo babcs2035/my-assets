@@ -5,7 +5,6 @@ import {
   Building2,
   LayoutDashboard,
   Settings,
-  Wallet,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -77,14 +76,15 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           <SidebarMenuItem>
             <SidebarMenuButton size="lg" asChild>
               <Link href="/">
-                <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-gradient-to-br from-blue-500 to-purple-600 text-sidebar-primary-foreground">
-                  <Wallet className="size-4 text-white" />
+                <div className="flex aspect-square size-8 items-center justify-center overflow-hidden rounded-lg">
+                  <img
+                    src={`${basePath}/icon.svg`}
+                    alt="My Assets"
+                    className="size-8"
+                  />
                 </div>
                 <div className="grid flex-1 text-left text-sm leading-tight">
                   <span className="truncate font-semibold">My Assets</span>
-                  <span className="truncate text-xs">
-                    資産管理ダッシュボード
-                  </span>
                 </div>
               </Link>
             </SidebarMenuButton>

@@ -1,5 +1,6 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import {
   type CategoryRuleCreateInput,
@@ -45,12 +46,15 @@ export async function createMainCategory(input: MainCategoryCreateInput) {
   });
   const nextOrder = (maxOrder._max.sortOrder ?? -1) + 1;
 
-  return prisma.mainCategory.create({
+  const result = await prisma.mainCategory.create({
     data: {
       ...data,
       sortOrder: nextOrder,
     },
   });
+  revalidatePath("/settings");
+  revalidatePath("/transactions");
+  return result;
 }
 
 /**
@@ -58,9 +62,29 @@ export async function createMainCategory(input: MainCategoryCreateInput) {
  */
 export async function deleteMainCategory(id: string) {
   console.log(`🗑️ Deleting main category: ${id}`);
-  return prisma.mainCategory.delete({
+  // サブカテゴリーに紐付くトランザクションのsubCategoryIdをnullにする
+  const subCategories = await prisma.subCategoryItem.findMany({
+    where: { mainCategoryId: id },
+    select: { id: true },
+  });
+  const subCategoryIds = subCategories.map(sc => sc.id);
+  
+  if (subCategoryIds.length > 0) {
+    await prisma.transaction.updateMany({
+      where: { subCategoryId: { in: subCategoryIds } },
+      data: { subCategoryId: null },
+    });
+    await prisma.categoryRule.deleteMany({
+      where: { subCategoryId: { in: subCategoryIds } },
+    });
+  }
+  
+  const result = await prisma.mainCategory.delete({
     where: { id },
   });
+  revalidatePath("/settings");
+  revalidatePath("/transactions");
+  return result;
 }
 
 /**
@@ -77,12 +101,15 @@ export async function createSubCategory(input: SubCategoryCreateInput) {
   });
   const nextOrder = (maxOrder._max.sortOrder ?? -1) + 1;
 
-  return prisma.subCategoryItem.create({
+  const result = await prisma.subCategoryItem.create({
     data: {
       ...data,
       sortOrder: nextOrder,
     },
   });
+  revalidatePath("/settings");
+  revalidatePath("/transactions");
+  return result;
 }
 
 /**
@@ -90,9 +117,20 @@ export async function createSubCategory(input: SubCategoryCreateInput) {
  */
 export async function deleteSubCategory(id: string) {
   console.log(`🗑️ Deleting sub category: ${id}`);
-  return prisma.subCategoryItem.delete({
+  // 紐付くトランザクションのsubCategoryIdをnullにする
+  await prisma.transaction.updateMany({
+    where: { subCategoryId: id },
+    data: { subCategoryId: null },
+  });
+  await prisma.categoryRule.deleteMany({
+    where: { subCategoryId: id },
+  });
+  const result = await prisma.subCategoryItem.delete({
     where: { id },
   });
+  revalidatePath("/settings");
+  revalidatePath("/transactions");
+  return result;
 }
 
 /**
@@ -125,7 +163,10 @@ export async function createCategoryRule(input: CategoryRuleCreateInput) {
     where: { keyword: data.keyword },
   });
 
-  return prisma.categoryRule.create({ data });
+  const result = await prisma.categoryRule.create({ data });
+  revalidatePath("/settings");
+  revalidatePath("/transactions");
+  return result;
 }
 
 /**
@@ -136,10 +177,12 @@ export async function updateCategoryRule(
   data: { keyword?: string; priority?: number; subCategoryId?: string },
 ) {
   console.log(`📝 Updating category rule: ${id}`);
-  return prisma.categoryRule.update({
+  const result = await prisma.categoryRule.update({
     where: { id },
     data,
   });
+  revalidatePath("/settings");
+  return result;
 }
 
 /**
@@ -147,9 +190,11 @@ export async function updateCategoryRule(
  */
 export async function deleteCategoryRule(id: string) {
   console.log(`🗑️ Deleting category rule: ${id}`);
-  return prisma.categoryRule.delete({
+  const result = await prisma.categoryRule.delete({
     where: { id },
   });
+  revalidatePath("/settings");
+  return result;
 }
 
 /**
@@ -167,7 +212,7 @@ export async function applyAllCategoryRules() {
   for (const rule of rules) {
     const result = await prisma.transaction.updateMany({
       where: {
-        desc: { contains: rule.keyword },
+        desc: { contains: rule.keyword, mode: "insensitive" },
         subCategoryId: null,
       },
       data: {
@@ -178,6 +223,7 @@ export async function applyAllCategoryRules() {
   }
 
   console.log(`Category rules applied to ${applied} transactions.`);
+  revalidatePath("/transactions");
   return { applied };
 }
 
@@ -225,6 +271,7 @@ export async function reorderMainCategory(
     ),
   );
 
+  revalidatePath("/settings");
   console.log(`Reordered category ${id} ${direction}.`);
 }
 
@@ -268,5 +315,48 @@ export async function reorderSubCategory(id: string, direction: "up" | "down") {
     ),
   );
 
+  revalidatePath("/settings");
   console.log(`Reordered sub category ${id} ${direction}.`);
+}
+
+/**
+ * メインカテゴリーの並び順を一括更新する関数である．
+ * 同じ type 内の ID 配列を受け取り，順番通りに sortOrder を振り直す．
+ */
+export async function reorderMainCategories(
+  type: "INCOME" | "EXPENSE",
+  orderedIds: string[],
+) {
+  console.log(`Reordering main categories in ${type}...`);
+  await prisma.$transaction(
+    orderedIds.map((id, index) =>
+      prisma.mainCategory.update({
+        where: { id, type },
+        data: { sortOrder: index },
+      }),
+    ),
+  );
+  revalidatePath("/settings");
+}
+
+/**
+ * サブカテゴリーの並び順を一括更新する関数である．
+ * 同じメインカテゴリー配下の ID 配列を受け取り，順番通りに sortOrder を振り直す．
+ */
+export async function reorderSubCategories(
+  mainCategoryId: string,
+  orderedIds: string[],
+) {
+  console.log(
+    `Reordering sub categories in main category ${mainCategoryId}...`,
+  );
+  await prisma.$transaction(
+    orderedIds.map((id, index) =>
+      prisma.subCategoryItem.update({
+        where: { id, mainCategoryId },
+        data: { sortOrder: index },
+      }),
+    ),
+  );
+  revalidatePath("/settings");
 }

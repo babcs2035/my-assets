@@ -2,7 +2,7 @@
 
 import { ja } from "date-fns/locale";
 import dayjs from "dayjs";
-import { ArrowLeftRight, List } from "lucide-react";
+import { ArrowLeftRight, ArrowRight, List } from "lucide-react";
 import { useEffect, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { getCategories } from "@/actions/categories";
@@ -36,6 +36,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { nowJST } from "@/lib/utils";
 
 /**
  * 取引明細の型定義である．
@@ -54,7 +55,7 @@ type Category = Awaited<ReturnType<typeof getCategories>>[number];
  * カレンダー表示と一覧表示の 2 つの形式で取引明細を確認・管理できる．
  */
 export function TransactionsContent() {
-  const [currentDate, setCurrentDate] = useState<Date>(new Date());
+  const [currentDate, setCurrentDate] = useState<Date>(nowJST());
   const [selectedDay, setSelectedDay] = useState<number | null>(null);
   const [page, setPage] = useState(1);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -304,67 +305,89 @@ export function TransactionsContent() {
                             <span className="text-xs text-zinc-500 shrink-0">
                               {dayjs(tx.date).format("MM/DD")}
                             </span>
-                            <span className="text-sm font-medium text-zinc-200 truncate">
-                              {tx.desc}
-                            </span>
+                            {tx.isTransfer ? (
+                              <Badge
+                                variant="secondary"
+                                className="text-[9px] px-1 py-0 h-4 bg-blue-500/10 text-blue-400 border-blue-500/30"
+                              >
+                                振替
+                              </Badge>
+                            ) : (
+                              <span className="text-sm font-medium text-zinc-200 truncate">
+                                {tx.desc}
+                              </span>
+                            )}
                           </div>
-                          <div className="text-[10px] text-zinc-500 truncate">
-                            {tx.subAccount.mainAccount.label} (
-                            {tx.subAccount.currentName})
-                          </div>
+                          {tx.isTransfer && tx.linkedAccount ? (
+                            <div className="flex items-center gap-1.5 text-xs text-blue-400 mt-0.5">
+                              <ArrowLeftRight className="h-3 w-3 shrink-0" />
+                              <span>
+                                {tx.amount < 0
+                                  ? tx.subAccount.mainAccount.label
+                                  : tx.linkedAccount.mainAccountLabel}
+                              </span>
+                              <ArrowRight className="h-3 w-3 shrink-0" />
+                              <span>
+                                {tx.amount < 0
+                                  ? tx.linkedAccount.mainAccountLabel
+                                  : tx.subAccount.mainAccount.label}
+                              </span>
+                            </div>
+                          ) : (
+                            <div className="text-xs text-zinc-500 truncate">
+                              {tx.subAccount.mainAccount.label}（{tx.subAccount.currentName}）
+                            </div>
+                          )}
                         </div>
                         <div className="flex flex-col items-end shrink-0 gap-1">
                           <div
                             className={`font-mono font-medium text-sm ${
-                              tx.amount >= 0
-                                ? "text-emerald-400"
-                                : "text-red-400"
+                              tx.isTransfer
+                                ? "text-blue-400"
+                                : tx.amount >= 0
+                                  ? "text-emerald-400"
+                                  : "text-red-400"
                             }`}
                           >
                             {tx.amount >= 0 && "+"}
                             {tx.amount.toLocaleString()}
                           </div>
-                          {tx.isTransfer && (
-                            <Badge
-                              variant="secondary"
-                              className="text-[9px] px-1 py-0 h-4"
-                            >
-                              振替
-                            </Badge>
-                          )}
                         </div>
                       </div>
-                      <div className="flex items-center justify-between mt-2">
-                        <Select
-                          value={tx.subCategoryId ?? "none"}
-                          onValueChange={val =>
-                            handleCategoryChange(
-                              tx.id,
-                              val === "none" ? null : val,
-                            )
-                          }
-                        >
-                          <SelectTrigger className="h-8 w-[140px] text-xs">
-                            <SelectValue placeholder="未分類" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="none">未分類</SelectItem>
-                            {categories
-                              .filter(
-                                mc =>
-                                  (mc as Category & { type: string }).type ===
-                                  (tx.amount >= 0 ? "INCOME" : "EXPENSE"),
+                      {/* 振替でない場合のみカテゴリーセレクターを表示する */}
+                      {!tx.isTransfer && (
+                        <div className="flex items-center justify-between mt-2">
+                          <Select
+                            value={tx.subCategoryId ?? "none"}
+                            onValueChange={val =>
+                              handleCategoryChange(
+                                tx.id,
+                                val === "none" ? null : val,
                               )
-                              .map(mc =>
-                                mc.subCategories.map(sc => (
-                                  <SelectItem key={sc.id} value={sc.id}>
-                                    {mc.name} / {sc.name}
-                                  </SelectItem>
-                                )),
-                              )}
-                          </SelectContent>
-                        </Select>
-                      </div>
+                            }
+                          >
+                            <SelectTrigger className="h-8 w-[140px] text-xs">
+                              <SelectValue placeholder="未分類" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="none">未分類</SelectItem>
+                              {categories
+                                .filter(
+                                  mc =>
+                                    (mc as Category & { type: string }).type ===
+                                    (tx.amount >= 0 ? "INCOME" : "EXPENSE"),
+                                )
+                                .map(mc =>
+                                  mc.subCategories.map(sc => (
+                                    <SelectItem key={sc.id} value={sc.id}>
+                                      {mc.name} / {sc.name}
+                                    </SelectItem>
+                                  )),
+                                )}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -385,62 +408,90 @@ export function TransactionsContent() {
                       {transactions.map(tx => (
                         <TableRow
                           key={tx.id}
-                          className={tx.isTransfer ? "opacity-50" : ""}
+                          className={tx.isTransfer ? "opacity-60" : ""}
                         >
                           <TableCell className="whitespace-nowrap text-zinc-300">
                             {dayjs(tx.date).format("MM/DD")}
                           </TableCell>
-                          <TableCell className="text-zinc-400 text-xs">
-                            {tx.subAccount.mainAccount.label}
-                            <br />
-                            <span className="text-zinc-500">
-                              {tx.subAccount.currentName}
-                            </span>
+                          <TableCell className="text-zinc-400 text-sm">
+                            {tx.isTransfer && tx.linkedAccount ? (
+                              <div className="flex items-center gap-1.5 text-blue-400">
+                                <span className="whitespace-nowrap">
+                                  {tx.amount < 0
+                                    ? tx.subAccount.mainAccount.label
+                                    : tx.linkedAccount.mainAccountLabel}
+                                </span>
+                                <ArrowRight className="h-3.5 w-3.5 shrink-0" />
+                                <span className="whitespace-nowrap">
+                                  {tx.amount < 0
+                                    ? tx.linkedAccount.mainAccountLabel
+                                    : tx.subAccount.mainAccount.label}
+                                </span>
+                              </div>
+                            ) : (
+                              <>
+                                <span className="text-zinc-300">{tx.subAccount.mainAccount.label}</span>
+                                <br />
+                                <span className="text-zinc-500 text-xs">
+                                  {tx.subAccount.currentName}
+                                </span>
+                              </>
+                            )}
                           </TableCell>
-                          <TableCell className="max-w-[200px] truncate text-zinc-200">
-                            {tx.desc}
+                          <TableCell className="max-w-[300px] truncate text-zinc-200">
+                            {tx.isTransfer ? (
+                              <span className="text-sm text-zinc-500 italic">—</span>
+                            ) : (
+                              tx.desc
+                            )}
                           </TableCell>
                           <TableCell
                             className={`text-right font-mono font-medium ${
-                              tx.amount >= 0
-                                ? "text-emerald-400"
-                                : "text-red-400"
+                              tx.isTransfer
+                                ? "text-blue-400"
+                                : tx.amount >= 0
+                                  ? "text-emerald-400"
+                                  : "text-red-400"
                             }`}
                           >
                             {tx.amount >= 0 ? "+" : ""}
                             {tx.amount.toLocaleString()}
                           </TableCell>
                           <TableCell>
-                            <Select
-                              value={tx.subCategoryId ?? "none"}
-                              onValueChange={val =>
-                                handleCategoryChange(
-                                  tx.id,
-                                  val === "none" ? null : val,
-                                )
-                              }
-                            >
-                              <SelectTrigger className="h-7 w-[160px] text-xs">
-                                <SelectValue placeholder="未分類" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="none">未分類</SelectItem>
-                                {categories
-                                  .filter(
-                                    mc =>
-                                      (mc as Category & { type: string })
-                                        .type ===
-                                      (tx.amount >= 0 ? "INCOME" : "EXPENSE"),
+                            {tx.isTransfer ? (
+                              <span className="text-sm text-zinc-500 italic">—</span>
+                            ) : (
+                              <Select
+                                value={tx.subCategoryId ?? "none"}
+                                onValueChange={val =>
+                                  handleCategoryChange(
+                                    tx.id,
+                                    val === "none" ? null : val,
                                   )
-                                  .map(mc =>
-                                    mc.subCategories.map(sc => (
-                                      <SelectItem key={sc.id} value={sc.id}>
-                                        {mc.name} / {sc.name}
-                                      </SelectItem>
-                                    )),
-                                  )}
-                              </SelectContent>
-                            </Select>
+                                }
+                              >
+                                <SelectTrigger className="h-8 w-[180px] text-sm">
+                                  <SelectValue placeholder="未分類" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="none">未分類</SelectItem>
+                                  {categories
+                                    .filter(
+                                      mc =>
+                                        (mc as Category & { type: string })
+                                          .type ===
+                                        (tx.amount >= 0 ? "INCOME" : "EXPENSE"),
+                                    )
+                                    .map(mc =>
+                                      mc.subCategories.map(sc => (
+                                        <SelectItem key={sc.id} value={sc.id}>
+                                          {mc.name} / {sc.name}
+                                        </SelectItem>
+                                      )),
+                                    )}
+                                </SelectContent>
+                              </Select>
+                            )}
                           </TableCell>
                         </TableRow>
                       ))}

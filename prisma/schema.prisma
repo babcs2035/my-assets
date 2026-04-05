@@ -40,18 +40,20 @@ model MainAccount {
   providerId  String
   provider    Provider     @relation(fields: [providerId], references: [id])
   mfUrlId     String?      @unique // URL から抽出した MF 内部の親口座 ID
+  sortOrder   Int          @default(0) // 表示順序
   subAccounts SubAccount[]
 }
 
 model SubAccount {
   id            String           @id @default(cuid())
   mainAccountId String
-  mainAccount   MainAccount      @relation(fields: [mainAccountId], references: [id])
+  mainAccount   MainAccount      @relation(fields: [mainAccountId], references: [id], onDelete: Cascade)
 
   // MF 上で子口座 ID がないため、親 ID と名称の組み合わせで同定を試みる
   currentName String
   assetType   AssetType @default(CASH)
   balance     Int // 最新の日本円換算残高
+  sortOrder   Int       @default(0) // 表示順序
 
   transactions Transaction[]
   histories    BalanceHistory[]
@@ -67,7 +69,7 @@ model SubAccount {
 model BalanceHistory {
   id           String     @id @default(cuid())
   subAccountId String
-  subAccount   SubAccount @relation(fields: [subAccountId], references: [id])
+  subAccount   SubAccount @relation(fields: [subAccountId], references: [id], onDelete: Cascade)
   date         DateTime // 08:00 同期完了直後の日付
   balance      Int
 
@@ -78,7 +80,7 @@ model BalanceHistory {
 model Holding {
   id             String     @id @default(cuid())
   subAccountId   String
-  subAccount     SubAccount @relation(fields: [subAccountId], references: [id])
+  subAccount     SubAccount @relation(fields: [subAccountId], references: [id], onDelete: Cascade)
   name           String // 銘柄名
   quantity       Float // 保有数
   avgCostBasis   Int // 平均取得単価
@@ -93,7 +95,7 @@ model Holding {
 model CryptoAsset {
   id             String     @id @default(cuid())
   subAccountId   String
-  subAccount     SubAccount @relation(fields: [subAccountId], references: [id])
+  subAccount     SubAccount @relation(fields: [subAccountId], references: [id], onDelete: Cascade)
   symbol         String // 通貨記号 (XMR, BTC 等)
   name           String // 通貨名
   quantity       Float // 枚数
@@ -106,7 +108,7 @@ model CryptoAsset {
 model PointDetail {
   id             String     @id @default(cuid())
   subAccountId   String     @unique
-  subAccount     SubAccount @relation(fields: [subAccountId], references: [id])
+  subAccount     SubAccount @relation(fields: [subAccountId], references: [id], onDelete: Cascade)
   points         Float // ポイント数
   rate           Float      @default(1.0) // 換算レート
   expirationDate DateTime? // 有効期限
@@ -139,7 +141,7 @@ model Transaction {
   // ID は決定論的ハッシュ: sha256(subAccountId + date + amount + desc)
   id            String           @id
   subAccountId  String
-  subAccount    SubAccount       @relation(fields: [subAccountId], references: [id])
+  subAccount    SubAccount       @relation(fields: [subAccountId], references: [id], onDelete: Cascade)
   date          DateTime         @db.Date
   amount        Int
   desc          String

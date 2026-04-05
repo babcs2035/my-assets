@@ -1,11 +1,12 @@
 "use client";
 
 import dayjs from "dayjs";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Area,
   AreaChart,
   CartesianGrid,
+  Cell,
   Pie,
   PieChart,
   XAxis,
@@ -22,29 +23,12 @@ import {
   filterByUnifiedTimeRange,
   type UnifiedTimeRange,
 } from "@/lib/chart-time-range";
+import { formatCurrency } from "@/lib/utils";
 
 /**
- * チャートのカラー配色とラベルを定義する設定オブジェクトである．
+ * ガイドブック準拠のカラーパレット (1〜5色)
+ * Blue / Violet / Amber / Emerald の4色体系
  */
-const chartConfig = {
-  cash: {
-    label: "預金・現金",
-    color: "var(--color-chart-1)",
-  },
-  investment: {
-    label: "投資信託・証券",
-    color: "var(--color-chart-2)",
-  },
-  crypto: {
-    label: "暗号資産",
-    color: "var(--color-chart-3)",
-  },
-  point: {
-    label: "ポイント",
-    color: "var(--color-chart-4)",
-  },
-} satisfies ChartConfig;
-
 const areaSeries = [
   { key: "CASH", label: "預金・現金", color: "#3b82f6" },
   { key: "INVESTMENT", label: "投資信託・証券", color: "#8b5cf6" },
@@ -53,11 +37,15 @@ const areaSeries = [
 ] as const;
 
 /**
- * 日本語の資産タイプ名を ChartConfig のキーに変換するためのマッピングである．
+ * チャートのカラー配色とラベルを定義する設定オブジェクトである．
  */
-/**
- * チャート上の数値を日本円形式にフォーマットする関数である．
- */
+const chartConfig = {
+  cash: { label: "預金・現金", color: areaSeries[0].color },
+  investment: { label: "投資信託・証券", color: areaSeries[1].color },
+  crypto: { label: "暗号資産", color: areaSeries[2].color },
+  point: { label: "ポイント", color: areaSeries[3].color },
+} satisfies ChartConfig;
+
 const valueFormatter = (number: number) =>
   `¥ ${Intl.NumberFormat("ja-JP").format(number)}`;
 
@@ -77,10 +65,23 @@ interface DashboardAreaChartProps {
 
 /**
  * ダッシュボードに表示する資産推移 (積み上げエリアチャート) コンポーネントである．
+ * ガイドブック:
+ *   - グリッド線は最小限（水平のみ）
+ *   - 不要な装飾を排除
+ *   - 凡例をグラフと隣接
+ *   - Y軸原点を0に設定
  */
 export function DashboardAreaChart({ data }: DashboardAreaChartProps) {
   const [mounted, setMounted] = useState(false);
   const [timeRange, setTimeRange] = useState<UnifiedTimeRange>("1M");
+  const [visibleSeries, setVisibleSeries] = useState<
+    Record<(typeof areaSeries)[number]["key"], boolean>
+  >({
+    CASH: true,
+    INVESTMENT: true,
+    CRYPTO: true,
+    POINT: true,
+  });
 
   useEffect(() => {
     setMounted(true);
@@ -91,33 +92,42 @@ export function DashboardAreaChart({ data }: DashboardAreaChartProps) {
   }
 
   const filteredData = filterByUnifiedTimeRange(data, timeRange, d => d.date);
-
   const chartData = filteredData.length > 0 ? filteredData : data;
+  const activeSeries = areaSeries.filter(item => visibleSeries[item.key]);
+  const hasVisibleSeries = activeSeries.length > 0;
 
-  if (chartData.length === 0) {
+  if (chartData.length === 0 || !hasVisibleSeries) {
     return (
-      <div className="flex flex-col gap-4">
+      <div className="flex flex-col gap-3">
         <UnifiedTimeRangeTabs value={timeRange} onChange={setTimeRange} />
-        <div className="flex h-72 w-full items-center justify-center text-sm text-zinc-500 border border-dashed rounded-md">
-          表示するデータがありません．
+        <div className="flex h-60 w-full items-center justify-center text-sm text-zinc-500 border border-dashed border-zinc-800 rounded-md">
+          {chartData.length === 0
+            ? "表示するデータがありません"
+            : "表示する項目を選択してください"}
         </div>
+        <SeriesLegend
+          visibleSeries={visibleSeries}
+          onToggle={(key) =>
+            setVisibleSeries(prev => ({ ...prev, [key]: !prev[key] }))
+          }
+        />
       </div>
     );
   }
 
-  const totals = chartData.map(d => d.total);
-  const [minVal, maxVal] = getNiceChartDomain(totals);
+  const totals = chartData.map(d =>
+    activeSeries.reduce((sum, item) => sum + Number(d[item.key] ?? 0), 0),
+  );
+  const [, maxVal] = getNiceChartDomain(totals);
 
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex flex-col gap-3">
-        <UnifiedTimeRangeTabs
-          value={timeRange}
-          onChange={setTimeRange}
-          className="w-full lg:w-auto"
-        />
-      </div>
-      <div className="h-[300px] w-full">
+    <div className="flex flex-col gap-3">
+      <UnifiedTimeRangeTabs
+        value={timeRange}
+        onChange={setTimeRange}
+        className="w-full lg:w-auto"
+      />
+      <div className="h-[280px] w-full">
         <ChartContainer config={chartConfig} className="h-full w-full">
           <AreaChart
             data={chartData}
@@ -125,54 +135,23 @@ export function DashboardAreaChart({ data }: DashboardAreaChartProps) {
           >
             <defs>
               <linearGradient id="colorCash" x1="0" y1="0" x2="0" y2="1">
-                <stop
-                  offset="5%"
-                  stopColor={chartConfig.cash.color}
-                  stopOpacity={0.6}
-                />
-                <stop
-                  offset="95%"
-                  stopColor={chartConfig.cash.color}
-                  stopOpacity={0.1}
-                />
+                <stop offset="5%" stopColor={chartConfig.cash.color} stopOpacity={0.35} />
+                <stop offset="95%" stopColor={chartConfig.cash.color} stopOpacity={0.02} />
               </linearGradient>
               <linearGradient id="colorInvestment" x1="0" y1="0" x2="0" y2="1">
-                <stop
-                  offset="5%"
-                  stopColor={chartConfig.investment.color}
-                  stopOpacity={0.6}
-                />
-                <stop
-                  offset="95%"
-                  stopColor={chartConfig.investment.color}
-                  stopOpacity={0.1}
-                />
+                <stop offset="5%" stopColor={chartConfig.investment.color} stopOpacity={0.35} />
+                <stop offset="95%" stopColor={chartConfig.investment.color} stopOpacity={0.02} />
               </linearGradient>
               <linearGradient id="colorCrypto" x1="0" y1="0" x2="0" y2="1">
-                <stop
-                  offset="5%"
-                  stopColor={chartConfig.crypto.color}
-                  stopOpacity={0.6}
-                />
-                <stop
-                  offset="95%"
-                  stopColor={chartConfig.crypto.color}
-                  stopOpacity={0.1}
-                />
+                <stop offset="5%" stopColor={chartConfig.crypto.color} stopOpacity={0.35} />
+                <stop offset="95%" stopColor={chartConfig.crypto.color} stopOpacity={0.02} />
               </linearGradient>
               <linearGradient id="colorPoint" x1="0" y1="0" x2="0" y2="1">
-                <stop
-                  offset="5%"
-                  stopColor={chartConfig.point.color}
-                  stopOpacity={0.6}
-                />
-                <stop
-                  offset="95%"
-                  stopColor={chartConfig.point.color}
-                  stopOpacity={0.1}
-                />
+                <stop offset="5%" stopColor={chartConfig.point.color} stopOpacity={0.35} />
+                <stop offset="95%" stopColor={chartConfig.point.color} stopOpacity={0.02} />
               </linearGradient>
             </defs>
+            {/* ガイドブック: グリッド線は水平のみ、薄色 */}
             <CartesianGrid
               strokeDasharray="3 3"
               vertical={false}
@@ -187,13 +166,14 @@ export function DashboardAreaChart({ data }: DashboardAreaChartProps) {
               tickFormatter={value => dayjs(value).format("MM/DD")}
               minTickGap={30}
             />
+            {/* ガイドブック: Y軸原点を0に */}
             <YAxis
               stroke="#52525b"
               fontSize={12}
               tickLine={false}
               axisLine={false}
               tickFormatter={value => formatYAxisCurrency(Number(value))}
-              domain={[minVal, maxVal]}
+              domain={[0, maxVal]}
               tickCount={6}
               width={60}
             />
@@ -204,11 +184,11 @@ export function DashboardAreaChart({ data }: DashboardAreaChartProps) {
 
                 return (
                   <div className={tooltipCardClassName}>
-                    <div className="mb-1 text-[10px] text-zinc-400">
+                    <div className="mb-1.5 text-[10px] text-zinc-400">
                       {dayjs(date).format("YYYY/MM/DD")}
                     </div>
                     <div className="space-y-1">
-                      {areaSeries
+                      {activeSeries
                         .map(series =>
                           payload.find(
                             item => String(item.name) === series.key,
@@ -250,67 +230,67 @@ export function DashboardAreaChart({ data }: DashboardAreaChartProps) {
                 );
               }}
             />
-            <Area
-              dataKey="CASH"
-              type="monotone"
-              fill="url(#colorCash)"
-              stroke={areaSeries[0].color}
-              strokeWidth={0}
-              fillOpacity={0.95}
-              stackId="a"
-              isAnimationActive={true}
-              animationDuration={800}
-            />
-            <Area
-              dataKey="INVESTMENT"
-              type="monotone"
-              fill="url(#colorInvestment)"
-              stroke={areaSeries[1].color}
-              strokeWidth={0}
-              fillOpacity={0.95}
-              stackId="a"
-              isAnimationActive={true}
-              animationDuration={800}
-            />
-            <Area
-              dataKey="CRYPTO"
-              type="monotone"
-              fill="url(#colorCrypto)"
-              stroke={areaSeries[2].color}
-              strokeWidth={0}
-              fillOpacity={0.95}
-              stackId="a"
-              isAnimationActive={true}
-              animationDuration={800}
-            />
-            <Area
-              dataKey="POINT"
-              type="monotone"
-              fill="url(#colorPoint)"
-              stroke={areaSeries[3].color}
-              strokeWidth={0}
-              fillOpacity={0.95}
-              stackId="a"
-              isAnimationActive={true}
-              animationDuration={800}
-            />
+            {activeSeries.map(item => (
+              <Area
+                key={item.key}
+                dataKey={item.key}
+                type="monotone"
+                fill={`url(#color${item.key.charAt(0)}${item.key.slice(1).toLowerCase()})`}
+                stroke={item.color}
+                strokeWidth={2}
+                fillOpacity={0.72}
+                stackId="a"
+                isAnimationActive={true}
+                animationDuration={800}
+              />
+            ))}
           </AreaChart>
         </ChartContainer>
       </div>
-      <div className="flex flex-wrap items-center justify-center gap-2 text-xs text-zinc-300">
-        {areaSeries.map(item => (
-          <div
-            key={item.key}
-            className="inline-flex items-center gap-1.5 rounded-md border border-zinc-800 bg-zinc-900/40 px-2 py-1"
-          >
-            <span
-              className="h-2 w-2 rounded-full"
-              style={{ backgroundColor: item.color }}
-            />
-            <span className="whitespace-nowrap">{item.label}</span>
-          </div>
-        ))}
-      </div>
+      {/* ガイドブック: 凡例をグラフ直下に隣接 */}
+      <SeriesLegend
+        visibleSeries={visibleSeries}
+        onToggle={(key) =>
+          setVisibleSeries(prev => ({ ...prev, [key]: !prev[key] }))
+        }
+      />
+    </div>
+  );
+}
+
+/**
+ * 凡例コンポーネント（エリアチャート / ドーナツチャート共通）
+ */
+function SeriesLegend({
+  visibleSeries,
+  onToggle,
+}: {
+  visibleSeries: Record<(typeof areaSeries)[number]["key"], boolean>;
+  onToggle: (key: (typeof areaSeries)[number]["key"]) => void;
+}) {
+  return (
+    <div className="flex flex-wrap items-center justify-center gap-2 text-sm text-zinc-300">
+      {areaSeries.map(item => (
+        <button
+          type="button"
+          key={item.key}
+          onClick={() => onToggle(item.key)}
+          className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 transition-colors ${
+            visibleSeries[item.key]
+              ? "border-zinc-700 bg-zinc-800/60 text-zinc-100"
+              : "border-zinc-800 bg-zinc-900/30 text-zinc-500"
+          }`}
+        >
+          <span
+            className="h-2.5 w-2.5 rounded-full"
+            style={{
+              backgroundColor: item.color,
+              opacity: visibleSeries[item.key] ? 1 : 0.35,
+            }}
+          />
+          <span className="whitespace-nowrap">{item.label}</span>
+        </button>
+      ))}
     </div>
   );
 }
@@ -321,6 +301,10 @@ interface DashboardDonutChartProps {
 
 /**
  * 資産構成比を表示するドーナツチャートコンポーネントである．
+ * ガイドブック:
+ *   - 構成比（%）を凡例に数値表記
+ *   - 中央に合計金額を表示
+ *   - 色数を4色に制限
  */
 export function DashboardDonutChart({ data }: DashboardDonutChartProps) {
   const [mounted, setMounted] = useState(false);
@@ -340,66 +324,102 @@ export function DashboardDonutChart({ data }: DashboardDonutChartProps) {
     .filter(item => item.value > 0);
 
   const hasData = pieData.some(d => d.value > 0);
+  const totalValue = useMemo(
+    () => pieData.reduce((sum, d) => sum + d.value, 0),
+    [pieData],
+  );
 
   if (!mounted) {
     return <div className="mx-auto aspect-square max-h-[250px] pb-0 min-w-0" />;
   }
 
-  // 有効なデータ (値が 0 より大きい要素) がない場合の表示である．
   if (!hasData) {
     return (
-      <div className="flex h-[250px] w-full items-center justify-center text-sm text-zinc-500 border border-dashed rounded-md mx-auto">
-        表示するデータがありません．
+      <div className="flex h-[250px] w-full items-center justify-center text-sm text-zinc-500 border border-dashed border-zinc-800 rounded-md mx-auto">
+        表示するデータがありません
       </div>
     );
   }
 
   return (
     <div className="w-full">
-      <ChartContainer
-        config={chartConfig}
-        className="mx-auto aspect-square max-h-[250px] min-w-0 [&_.recharts-pie-label-text]:fill-foreground"
-        style={{ width: "100%" }}
-      >
-        <PieChart>
-          <ChartTooltip
-            content={({ active, payload }) => {
-              if (!active || !payload?.length) return null;
-              const item = payload[0];
-              return (
-                <div className={tooltipCardClassName}>
-                  <div className="mb-1 text-[10px] text-zinc-400">
-                    {String(item.name ?? "")}
+      {/* ドーナツチャート + 中央に合計金額 */}
+      <div className="relative">
+        <ChartContainer
+          config={chartConfig}
+          className="mx-auto aspect-square max-h-[220px] min-w-0 [&_.recharts-pie-label-text]:fill-foreground"
+          style={{ width: "100%" }}
+        >
+          <PieChart>
+            <ChartTooltip
+              content={({ active, payload }) => {
+                if (!active || !payload?.length) return null;
+                const item = payload[0];
+                const pct = totalValue > 0
+                  ? ((Number(item.value ?? 0) / totalValue) * 100).toFixed(1)
+                  : "0";
+                return (
+                  <div className={tooltipCardClassName}>
+                    <div className="mb-1 text-[10px] text-zinc-400">
+                      {String(item.name ?? "")}
+                    </div>
+                    <div className="font-mono text-sm font-bold text-zinc-100">
+                      {valueFormatter(Number(item.value ?? 0))}
+                    </div>
+                    <div className="text-[10px] text-zinc-500 mt-0.5">
+                      {pct}%
+                    </div>
                   </div>
-                  <div className="font-mono text-sm font-bold text-zinc-100">
-                    {valueFormatter(Number(item.value ?? 0))}
-                  </div>
-                </div>
-              );
-            }}
-          />
-          <Pie
-            data={pieData}
-            dataKey="value"
-            nameKey="name"
-            innerRadius={60}
-            strokeWidth={5}
-          />
-        </PieChart>
-      </ChartContainer>
-      <div className="mt-3 grid w-full grid-cols-1 gap-2 text-xs text-zinc-300 sm:grid-cols-2">
-        {areaSeries.map(item => (
-          <div
-            key={item.key}
-            className="inline-flex min-w-0 items-center justify-center gap-1.5 rounded-md border border-zinc-800 bg-zinc-900/40 px-2 py-1"
-          >
-            <span
-              className="h-2 w-2 rounded-full"
-              style={{ backgroundColor: item.color }}
+                );
+              }}
             />
-            <span className="truncate">{item.label}</span>
+            <Pie
+              data={pieData}
+              dataKey="value"
+              nameKey="name"
+              innerRadius={55}
+              outerRadius={80}
+              strokeWidth={3}
+              stroke="oklch(0.19 0.01 285)"
+            >
+              {pieData.map(entry => (
+                <Cell key={entry.name} fill={entry.fill} />
+              ))}
+            </Pie>
+          </PieChart>
+        </ChartContainer>
+        {/* ガイドブック: 円グラフ中央に合計値を表示 */}
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+          <div className="text-center">
+            <div className="text-xs text-zinc-500">合計</div>
+            <div className="text-base font-bold text-zinc-100 font-mono">
+              {formatCurrency(totalValue)}
+            </div>
           </div>
-        ))}
+        </div>
+      </div>
+
+      {/* ガイドブック: 凡例に構成比（%）を併記 */}
+      <div className="mt-3 grid w-full grid-cols-1 gap-1.5 text-sm text-zinc-300">
+        {areaSeries.map(item => {
+          const val = Number(sourceMap.get(item.label) ?? 0);
+          const pct = totalValue > 0 ? ((val / totalValue) * 100).toFixed(1) : "0";
+          return (
+            <div
+              key={item.key}
+              className="flex items-center gap-2 rounded-md border border-zinc-800 bg-zinc-900/40 px-2.5 py-1.5"
+            >
+              <span
+                className="h-2.5 w-2.5 rounded-full shrink-0"
+                style={{ backgroundColor: item.color }}
+              />
+              <span>{item.label}</span>
+              <span className="ml-auto text-zinc-500 shrink-0 font-mono text-xs">
+                {pct}%
+              </span>
+            </div>
+          );
+        })}
       </div>
     </div>
   );

@@ -1,4 +1,13 @@
 import dayjs, { type Dayjs } from "dayjs";
+import timezone from "dayjs/plugin/timezone";
+import utc from "dayjs/plugin/utc";
+
+// dayjs に UTC とタイムゾーンプラグインを追加
+dayjs.extend(utc);
+dayjs.extend(timezone);
+
+// デフォルトのタイムゾーンを JST に設定
+dayjs.tz.setDefault("Asia/Tokyo");
 
 export type UnifiedTimeRange = "1W" | "1M" | "3M" | "1Y" | "ALL";
 
@@ -24,9 +33,9 @@ function getRangeStart(range: UnifiedTimeRange, now: Dayjs): Dayjs | null {
 export function isInUnifiedTimeRange(
   date: string | Date,
   range: UnifiedTimeRange,
-  now = dayjs(),
+  now = dayjs().tz("Asia/Tokyo"),
 ): boolean {
-  const target = dayjs(date);
+  const target = dayjs(date).tz("Asia/Tokyo");
   if (!target.isValid()) return false;
 
   const start = getRangeStart(range, now);
@@ -38,7 +47,7 @@ export function filterByUnifiedTimeRange<T>(
   data: T[],
   range: UnifiedTimeRange,
   getDate: (item: T) => string | Date,
-  now = dayjs(),
+  now = dayjs().tz("Asia/Tokyo"),
 ): T[] {
   if (range === "ALL") return data;
   return data.filter(item => isInUnifiedTimeRange(getDate(item), range, now));

@@ -8,6 +8,25 @@ import { prisma } from "@/lib/prisma";
  */
 export async function getLastSyncInfo() {
   console.log("🕒 Fetching last sync info from providers...");
+  const syncingProvider = await prisma.provider.findFirst({
+    where: { lastSyncAt: { not: null }, lastSyncSuccess: null, isActive: true },
+    orderBy: { lastSyncAt: "desc" },
+    select: {
+      lastSyncAt: true,
+      lastSyncSuccess: true,
+      name: true,
+    },
+  });
+
+  if (syncingProvider?.lastSyncAt) {
+    return {
+      date: syncingProvider.lastSyncAt,
+      success: null,
+      status: "syncing" as const,
+      providerName: syncingProvider.name,
+    };
+  }
+
   const provider = await prisma.provider.findFirst({
     where: { lastSyncAt: { not: null } },
     orderBy: { lastSyncAt: "desc" },
@@ -25,6 +44,9 @@ export async function getLastSyncInfo() {
   return {
     date: provider.lastSyncAt,
     success: provider.lastSyncSuccess ?? false,
+    status: provider.lastSyncSuccess
+      ? ("success" as const)
+      : ("error" as const),
     providerName: provider.name,
   };
 }

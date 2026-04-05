@@ -1,18 +1,19 @@
 "use client";
 
 import {
-  ArrowDown,
-  ArrowUp,
   BookOpen,
   CheckCircle2,
   ChevronDown,
   ChevronRight,
   CreditCard,
+  GripVertical,
+  Loader2,
   Minus,
   Plus,
   RefreshCw,
   Search,
   SlidersHorizontal,
+  Square,
   Trash2,
   TrendingDown,
   TrendingUp,
@@ -30,10 +31,11 @@ import {
   deleteSubCategory,
   getCategories,
   getCategoryRules,
-  reorderMainCategory,
-  reorderSubCategory,
+  reorderMainCategories,
+  reorderSubCategories,
 } from "@/actions/categories";
 import {
+  abortSyncProvider,
   createProvider,
   deleteProvider,
   getProviders,
@@ -110,11 +112,16 @@ function getProviderTypeLabel(type: string): string {
 
 /**
  * 日時をフォーマットするヘルパー関数である．
+ * @deprecated formatJSTDateTime を使用してください．
  */
 function formatDateTime(date: Date | string | null): string {
   if (!date) return "—";
   const d = new Date(date);
-  return `${d.getFullYear()}/${(d.getMonth() + 1).toString().padStart(2, "0")}/${d.getDate().toString().padStart(2, "0")} ${d.getHours().toString().padStart(2, "0")}:${d.getMinutes().toString().padStart(2, "0")}`;
+  // JST オフセット (UTC+9)
+  const jstOffset = 9 * 60 * 60 * 1000;
+  const utc = d.getTime() + d.getTimezoneOffset() * 60 * 1000;
+  const jst = new Date(utc + jstOffset);
+  return `${jst.getFullYear()}/${(jst.getMonth() + 1).toString().padStart(2, "0")}/${jst.getDate().toString().padStart(2, "0")} ${jst.getHours().toString().padStart(2, "0")}:${jst.getMinutes().toString().padStart(2, "0")}`;
 }
 
 /**
@@ -135,7 +142,16 @@ export function SettingsContent() {
   const [providers, setProviders] = useState<Provider[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [expenseCategoryItems, setExpenseCategoryItems] = useState<Category[]>(
+    [],
+  );
+  const [incomeCategoryItems, setIncomeCategoryItems] = useState<Category[]>(
+    [],
+  );
   const [rules, setRules] = useState<CategoryRule[]>([]);
+  const [syncingProviderIds, setSyncingProviderIds] = useState<Set<string>>(
+    new Set(),
+  );
   const [, startTransition] = useTransition();
 
   // Provider Form State
@@ -154,6 +170,14 @@ export function SettingsContent() {
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(
     new Set(),
   );
+  const [draggedMainIndex, setDraggedMainIndex] = useState<number | null>(null);
+  const [draggedMainType, setDraggedMainType] = useState<
+    "INCOME" | "EXPENSE" | null
+  >(null);
+  const [draggedSubContext, setDraggedSubContext] = useState<{
+    mainCategoryId: string;
+    index: number;
+  } | null>(null);
 
   // Rule Form State
   const [ruleKeywords, setRuleKeywords] = useState("");
@@ -174,6 +198,16 @@ export function SettingsContent() {
         setProviders(p);
         setAccounts(a);
         setCategories(c);
+        setExpenseCategoryItems(
+          c.filter(
+            cat => (cat as Category & { type: string }).type === "EXPENSE",
+          ),
+        );
+        setIncomeCategoryItems(
+          c.filter(
+            cat => (cat as Category & { type: string }).type === "INCOME",
+          ),
+        );
         setRules(r);
       } catch (error) {
         console.error("Failed to fetch settings data:", error);
@@ -231,14 +265,63 @@ export function SettingsContent() {
 
   const handleSyncProvider = async (id: string) => {
     toast.info("同期を開始しました．");
+    window.dispatchEvent(
+      new CustomEvent("provider-sync-status", {
+        detail: { providerId: id, status: "syncing" },
+      }),
+    );
+    setSyncingProviderIds(prev => new Set(prev).add(id));
     try {
       await syncProvider(id);
+      window.dispatchEvent(
+        new CustomEvent("provider-sync-status", {
+          detail: { providerId: id, status: "success" },
+        }),
+      );
       toast.success("同期が完了しました．");
       fetchData();
     } catch (error) {
       console.error("Failed to sync provider:", error);
-      toast.error("同期に失敗しました．");
+      window.dispatchEvent(
+        new CustomEvent("provider-sync-status", {
+          detail: { providerId: id, status: "error" },
+        }),
+      );
+      // 中止された場合は別のメッセージを表示
+      const errorMessage = error instanceof Error && error.message.includes("aborted")
+        ? "同期を中止しました．"
+        : "同期に失敗しました．";
+      toast.error(errorMessage);
       fetchData();
+    } finally {
+      setSyncingProviderIds(prev => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+    }
+  };
+
+  const handleAbortSyncProvider = async (id: string) => {
+    toast.info("同期を中止しています...");
+    try {
+      await abortSyncProvider(id);
+      window.dispatchEvent(
+        new CustomEvent("provider-sync-status", {
+          detail: { providerId: id, status: "error" },
+        }),
+      );
+      toast.success("同期を中止しました．");
+      fetchData();
+    } catch (error) {
+      console.error("Failed to abort sync:", error);
+      toast.error("同期の中止に失敗しました．");
+    } finally {
+      setSyncingProviderIds(prev => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
     }
   };
 
@@ -308,11 +391,11 @@ export function SettingsContent() {
   };
 
   const handleReorderCategory = async (
-    id: string,
-    direction: "up" | "down",
+    type: "INCOME" | "EXPENSE",
+    orderedIds: string[],
   ) => {
     try {
-      await reorderMainCategory(id, direction);
+      await reorderMainCategories(type, orderedIds);
       fetchData();
     } catch (error) {
       console.error("Failed to reorder category:", error);
@@ -321,16 +404,142 @@ export function SettingsContent() {
   };
 
   const handleReorderSubCategory = async (
-    id: string,
-    direction: "up" | "down",
+    mainCategoryId: string,
+    orderedIds: string[],
   ) => {
     try {
-      await reorderSubCategory(id, direction);
+      await reorderSubCategories(mainCategoryId, orderedIds);
       fetchData();
     } catch (error) {
       console.error("Failed to reorder sub category:", error);
       toast.error("サブカテゴリーの並べ替えに失敗しました．");
     }
+  };
+
+  const handleMainDragStart = (
+    e: React.DragEvent,
+    type: "INCOME" | "EXPENSE",
+    index: number,
+  ) => {
+    e.dataTransfer.effectAllowed = "move";
+    setDraggedMainType(type);
+    setDraggedMainIndex(index);
+  };
+
+  const handleMainDragOver = (
+    e: React.DragEvent,
+    type: "INCOME" | "EXPENSE",
+    index: number,
+  ) => {
+    e.preventDefault();
+    if (
+      draggedMainType !== type ||
+      draggedMainIndex === null ||
+      draggedMainIndex === index
+    ) {
+      return;
+    }
+
+    const source =
+      type === "EXPENSE" ? [...expenseCategoryItems] : [...incomeCategoryItems];
+    const [dragged] = source.splice(draggedMainIndex, 1);
+    source.splice(index, 0, dragged);
+
+    if (type === "EXPENSE") {
+      setExpenseCategoryItems(source);
+    } else {
+      setIncomeCategoryItems(source);
+    }
+    setDraggedMainIndex(index);
+  };
+
+  const handleMainDragEnd = () => {
+    if (draggedMainType === null || draggedMainIndex === null) return;
+
+    const currentType = draggedMainType;
+    const targetItems =
+      currentType === "EXPENSE" ? expenseCategoryItems : incomeCategoryItems;
+    const orderedIds = targetItems.map(item => item.id);
+
+    setDraggedMainType(null);
+    setDraggedMainIndex(null);
+
+    startTransition(async () => {
+      try {
+        await handleReorderCategory(currentType, orderedIds);
+        toast.success("並び順を更新しました．");
+      } catch (error) {
+        console.error("Failed to reorder category:", error);
+        toast.error("カテゴリーの並べ替えに失敗しました．");
+      }
+    });
+  };
+
+  const handleSubDragStart = (
+    e: React.DragEvent,
+    mainCategoryId: string,
+    index: number,
+  ) => {
+    e.dataTransfer.effectAllowed = "move";
+    setDraggedSubContext({ mainCategoryId, index });
+  };
+
+  const handleSubDragOver = (
+    e: React.DragEvent,
+    parentType: "INCOME" | "EXPENSE",
+    mainCategoryId: string,
+    index: number,
+  ) => {
+    e.preventDefault();
+    if (
+      !draggedSubContext ||
+      draggedSubContext.mainCategoryId !== mainCategoryId ||
+      draggedSubContext.index === index
+    ) {
+      return;
+    }
+
+    const items =
+      parentType === "EXPENSE"
+        ? [...expenseCategoryItems]
+        : [...incomeCategoryItems];
+    const parentIndex = items.findIndex(item => item.id === mainCategoryId);
+    if (parentIndex < 0) return;
+
+    const subItems = [...items[parentIndex].subCategories];
+    const [dragged] = subItems.splice(draggedSubContext.index, 1);
+    subItems.splice(index, 0, dragged);
+    items[parentIndex] = { ...items[parentIndex], subCategories: subItems };
+
+    if (parentType === "EXPENSE") {
+      setExpenseCategoryItems(items);
+    } else {
+      setIncomeCategoryItems(items);
+    }
+    setDraggedSubContext({ mainCategoryId, index });
+  };
+
+  const handleSubDragEnd = (parentType: "INCOME" | "EXPENSE") => {
+    if (!draggedSubContext) return;
+    const { mainCategoryId } = draggedSubContext;
+
+    const items =
+      parentType === "EXPENSE" ? expenseCategoryItems : incomeCategoryItems;
+    const parent = items.find(item => item.id === mainCategoryId);
+    const orderedIds = parent?.subCategories.map(sc => sc.id) ?? [];
+
+    setDraggedSubContext(null);
+    if (orderedIds.length === 0) return;
+
+    startTransition(async () => {
+      try {
+        await handleReorderSubCategory(mainCategoryId, orderedIds);
+        toast.success("並び順を更新しました．");
+      } catch (error) {
+        console.error("Failed to reorder sub category:", error);
+        toast.error("サブカテゴリーの並べ替えに失敗しました．");
+      }
+    });
   };
 
   const handleAddRule = async () => {
@@ -363,17 +572,13 @@ export function SettingsContent() {
   };
 
   // --- カテゴリーを収入・支出に分類する ---
-  const expenseCategories = categories.filter(
-    c => (c as Category & { type: string }).type === "EXPENSE",
-  );
-  const incomeCategories = categories.filter(
-    c => (c as Category & { type: string }).type === "INCOME",
-  );
+  const expenseCategories = expenseCategoryItems;
+  const incomeCategories = incomeCategoryItems;
 
   /**
    * カテゴリー一覧のレンダリングヘルパー
    */
-  const renderCategoryList = (cats: Category[]) => (
+  const renderCategoryList = (cats: Category[], type: "INCOME" | "EXPENSE") => (
     <div className="space-y-1">
       {cats.map((mc, index) => (
         <Collapsible
@@ -382,8 +587,20 @@ export function SettingsContent() {
           onOpenChange={() => toggleCategory(mc.id)}
           className="w-full"
         >
-          <div className="flex w-full items-center justify-between rounded-md px-2 py-2 hover:bg-zinc-800/50">
+          {/* biome-ignore lint/a11y/noStaticElementInteractions: Drag and drop requires these handlers */}
+          <div
+            draggable
+            onDragStart={e => handleMainDragStart(e, type, index)}
+            onDragOver={e => handleMainDragOver(e, type, index)}
+            onDragEnd={handleMainDragEnd}
+            className={`flex w-full items-center justify-between rounded-md px-2 py-2 hover:bg-zinc-800/50 cursor-grab active:cursor-grabbing transition-opacity ${
+              draggedMainType === type && draggedMainIndex === index
+                ? "opacity-50 scale-[0.98]"
+                : ""
+            }`}
+          >
             <div className="flex flex-1 items-center gap-2 min-w-0 mr-2">
+              <GripVertical className="h-4 w-4 shrink-0 text-zinc-500" />
               <CollapsibleTrigger asChild>
                 <Button
                   variant="ghost"
@@ -405,31 +622,6 @@ export function SettingsContent() {
               </Badge>
             </div>
             <div className="flex items-center gap-1 shrink-0">
-              {/* 並べ替えボタン */}
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-6 w-6 text-zinc-500 hover:text-zinc-300"
-                onClick={e => {
-                  e.stopPropagation();
-                  handleReorderCategory(mc.id, "up");
-                }}
-                disabled={index === 0}
-              >
-                <ArrowUp className="h-3 w-3" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-6 w-6 text-zinc-500 hover:text-zinc-300"
-                onClick={e => {
-                  e.stopPropagation();
-                  handleReorderCategory(mc.id, "down");
-                }}
-                disabled={index === cats.length - 1}
-              >
-                <ArrowDown className="h-3 w-3" />
-              </Button>
               <AlertDialog>
                 <AlertDialogTrigger asChild>
                   <Button
@@ -465,11 +657,22 @@ export function SettingsContent() {
           <CollapsibleContent>
             <div className="ml-6 space-y-0.5 border-l border-zinc-800 pl-3">
               {mc.subCategories.map((sc, scIndex) => (
+                // biome-ignore lint/a11y/noStaticElementInteractions: Drag and drop requires these handlers
                 <div
                   key={sc.id}
-                  className="flex items-center justify-between rounded-md px-2 py-1.5 hover:bg-zinc-800/30"
+                  draggable
+                  onDragStart={e => handleSubDragStart(e, mc.id, scIndex)}
+                  onDragOver={e => handleSubDragOver(e, type, mc.id, scIndex)}
+                  onDragEnd={() => handleSubDragEnd(type)}
+                  className={`flex items-center justify-between rounded-md px-2 py-1.5 hover:bg-zinc-800/30 cursor-grab active:cursor-grabbing transition-opacity ${
+                    draggedSubContext?.mainCategoryId === mc.id &&
+                    draggedSubContext?.index === scIndex
+                      ? "opacity-50 scale-[0.98]"
+                      : ""
+                  }`}
                 >
                   <div className="flex items-center gap-2 min-w-0 overflow-hidden">
+                    <GripVertical className="h-3 w-3 shrink-0 text-zinc-500" />
                     <span className="text-sm text-zinc-300 truncate">
                       {sc.name}
                     </span>
@@ -478,31 +681,6 @@ export function SettingsContent() {
                     </span>
                   </div>
                   <div className="flex items-center gap-1 shrink-0 ml-2">
-                    {/* サブカテゴリーの並べ替えボタン */}
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-5 w-5 text-zinc-500 hover:text-zinc-300"
-                      onClick={e => {
-                        e.stopPropagation();
-                        handleReorderSubCategory(sc.id, "up");
-                      }}
-                      disabled={scIndex === 0}
-                    >
-                      <ArrowUp className="h-2.5 w-2.5" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-5 w-5 text-zinc-500 hover:text-zinc-300"
-                      onClick={e => {
-                        e.stopPropagation();
-                        handleReorderSubCategory(sc.id, "down");
-                      }}
-                      disabled={scIndex === mc.subCategories.length - 1}
-                    >
-                      <ArrowDown className="h-2.5 w-2.5" />
-                    </Button>
                     <AlertDialog>
                       <AlertDialogTrigger asChild>
                         <Button
@@ -642,83 +820,118 @@ export function SettingsContent() {
               <div className="md:hidden divide-y divide-zinc-800">
                 {providers.map(provider => (
                   <div key={provider.id} className="p-4 bg-card min-w-0">
-                    <div className="flex items-center justify-between gap-2 mb-2 min-w-0">
-                      <span className="font-medium text-zinc-200 truncate flex-1">
-                        {provider.name}
-                      </span>
-                      <Badge
-                        variant="outline"
-                        className="bg-emerald-500/10 text-emerald-400 border-emerald-500/20 shrink-0"
-                      >
-                        稼働中
-                      </Badge>
-                    </div>
-                    <div className="text-sm text-zinc-400 mb-1 truncate">
-                      {getProviderTypeLabel(provider.type)}
-                    </div>
-                    <div className="text-xs text-zinc-500 mb-3 truncate">
-                      {provider.lastSyncAt ? (
-                        <span
-                          className={`flex items-center gap-1 ${provider.lastSyncSuccess ? "text-emerald-500" : "text-red-400"}`}
-                        >
-                          {provider.lastSyncSuccess ? (
-                            <CheckCircle2 className="h-3 w-3" />
-                          ) : (
-                            <XCircle className="h-3 w-3" />
-                          )}
-                          {formatDateTime(provider.lastSyncAt)}
-                        </span>
-                      ) : (
-                        <span className="flex items-center gap-1">
-                          <Minus className="h-3 w-3" />
-                          未同期
-                        </span>
-                      )}
-                    </div>
-                    <div className="flex justify-end gap-2">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleSyncProvider(provider.id)}
-                        className="h-8 text-blue-400"
-                      >
-                        <RefreshCw className="mr-2 h-3.5 w-3.5" />
-                        同期
-                      </Button>
-                      <AlertDialog>
-                        <AlertDialogTrigger asChild>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-8 text-zinc-500 hover:text-red-400"
-                          >
-                            <Trash2 className="mr-2 h-3.5 w-3.5" />
-                            削除
-                          </Button>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent>
-                          <AlertDialogHeader>
-                            <AlertDialogTitle>削除確認</AlertDialogTitle>
-                            <AlertDialogDescription>
-                              プロバイダー「{provider.name}
-                              」を削除しますか？
-                              関連する口座データも削除される可能性があります。
-                            </AlertDialogDescription>
-                          </AlertDialogHeader>
-                          <AlertDialogFooter>
-                            <AlertDialogCancel>キャンセル</AlertDialogCancel>
-                            <AlertDialogAction
-                              onClick={() =>
-                                handleDeleteProvider(provider.id, provider.name)
+                    {(() => {
+                      const isSyncing =
+                        syncingProviderIds.has(provider.id) ||
+                        provider.lastSyncSuccess === null;
+                      return (
+                        <>
+                          <div className="flex items-center justify-between gap-2 mb-2 min-w-0">
+                            <span className="font-medium text-zinc-200 truncate flex-1">
+                              {provider.name}
+                            </span>
+                            <Badge
+                              variant="outline"
+                              className={
+                                isSyncing
+                                  ? "bg-blue-500/10 text-blue-400 border-blue-500/20 shrink-0"
+                                  : "bg-emerald-500/10 text-emerald-400 border-emerald-500/20 shrink-0"
                               }
-                              className="bg-red-600"
                             >
-                              削除
-                            </AlertDialogAction>
-                          </AlertDialogFooter>
-                        </AlertDialogContent>
-                      </AlertDialog>
-                    </div>
+                              {isSyncing ? "同期中" : "稼働中"}
+                            </Badge>
+                          </div>
+                          <div className="text-sm text-zinc-400 mb-1 truncate">
+                            {getProviderTypeLabel(provider.type)}
+                          </div>
+                          <div className="text-xs text-zinc-500 mb-3 truncate">
+                            {isSyncing ? (
+                              <span className="flex items-center gap-1 text-blue-400">
+                                <Loader2 className="h-3 w-3 animate-spin" />
+                                同期中
+                              </span>
+                            ) : provider.lastSyncAt ? (
+                              <span
+                                className={`flex items-center gap-1 ${provider.lastSyncSuccess ? "text-emerald-500" : "text-red-400"}`}
+                              >
+                                {provider.lastSyncSuccess ? (
+                                  <CheckCircle2 className="h-3 w-3" />
+                                ) : (
+                                  <XCircle className="h-3 w-3" />
+                                )}
+                                {formatDateTime(provider.lastSyncAt)}
+                              </span>
+                            ) : (
+                              <span className="flex items-center gap-1">
+                                <Minus className="h-3 w-3" />
+                                未同期
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex justify-end gap-2">
+                            {isSyncing ? (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleAbortSyncProvider(provider.id)}
+                                className="h-8 text-red-400 hover:text-red-300"
+                              >
+                                <Square className="mr-2 h-3.5 w-3.5" />
+                                中止
+                              </Button>
+                            ) : (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleSyncProvider(provider.id)}
+                                className="h-8 text-blue-400"
+                              >
+                                <RefreshCw className="mr-2 h-3.5 w-3.5" />
+                                同期
+                              </Button>
+                            )}
+                            <AlertDialog>
+                              <AlertDialogTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-8 text-zinc-500 hover:text-red-400"
+                                >
+                                  <Trash2 className="mr-2 h-3.5 w-3.5" />
+                                  削除
+                                </Button>
+                              </AlertDialogTrigger>
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>削除確認</AlertDialogTitle>
+                                  <AlertDialogDescription>
+                                    プロバイダー「{provider.name}
+                                    」を削除しますか？
+                                    関連する口座データも削除される可能性があります。
+                                  </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel>
+                                    キャンセル
+                                  </AlertDialogCancel>
+                                  <AlertDialogAction
+                                    onClick={() =>
+                                      handleDeleteProvider(
+                                        provider.id,
+                                        provider.name,
+                                      )
+                                    }
+                                    className="bg-red-600"
+                                  >
+                                    削除
+                                  </AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
+                          </div>
+                        </>
+                      );
+                    })()}
                   </div>
                 ))}
                 {providers.length === 0 && (
@@ -735,9 +948,8 @@ export function SettingsContent() {
                     <TableRow>
                       <TableHead>名前</TableHead>
                       <TableHead>タイプ</TableHead>
-                      <TableHead>状態</TableHead>
                       <TableHead>最終同期</TableHead>
-                      <TableHead>結果</TableHead>
+                      <TableHead>ステータス</TableHead>
                       <TableHead className="text-right">操作</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -750,50 +962,82 @@ export function SettingsContent() {
                         <TableCell className="text-zinc-400">
                           {getProviderTypeLabel(provider.type)}
                         </TableCell>
-                        <TableCell>
-                          <Badge
-                            variant="outline"
-                            className="bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
-                          >
-                            稼働中
-                          </Badge>
-                        </TableCell>
                         <TableCell className="text-zinc-400 text-xs whitespace-nowrap">
                           {formatDateTime(provider.lastSyncAt)}
                         </TableCell>
                         <TableCell>
-                          {provider.lastSyncSuccess === true && (
-                            <Badge
-                              variant="outline"
-                              className="bg-emerald-500/10 text-emerald-400 border-emerald-500/20 text-[10px]"
-                            >
-                              <CheckCircle2 className="mr-1 h-3 w-3" />
-                              成功
-                            </Badge>
-                          )}
-                          {provider.lastSyncSuccess === false && (
-                            <Badge
-                              variant="outline"
-                              className="bg-red-500/10 text-red-400 border-red-500/20 text-[10px]"
-                            >
-                              <XCircle className="mr-1 h-3 w-3" />
-                              失敗
-                            </Badge>
-                          )}
-                          {provider.lastSyncSuccess === null && (
-                            <span className="text-xs text-zinc-500">—</span>
-                          )}
+                          {(() => {
+                            const isSyncing =
+                              syncingProviderIds.has(provider.id) ||
+                              provider.lastSyncSuccess === null;
+                            if (isSyncing) {
+                              return (
+                                <Badge
+                                  variant="outline"
+                                  className="bg-blue-500/10 text-blue-400 border-blue-500/20 text-[10px]"
+                                >
+                                  <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                                  同期中
+                                </Badge>
+                              );
+                            }
+                            if (provider.lastSyncSuccess === true) {
+                              return (
+                                <Badge
+                                  variant="outline"
+                                  className="bg-emerald-500/10 text-emerald-400 border-emerald-500/20 text-[10px]"
+                                >
+                                  <CheckCircle2 className="mr-1 h-3 w-3" />
+                                  成功
+                                </Badge>
+                              );
+                            }
+                            if (provider.lastSyncSuccess === false) {
+                              return (
+                                <Badge
+                                  variant="outline"
+                                  className="bg-red-500/10 text-red-400 border-red-500/20 text-[10px]"
+                                >
+                                  <XCircle className="mr-1 h-3 w-3" />
+                                  失敗
+                                </Badge>
+                              );
+                            }
+                            return (
+                              <span className="text-xs text-zinc-500">—</span>
+                            );
+                          })()}
                         </TableCell>
                         <TableCell className="text-right">
                           <div className="flex justify-end gap-2">
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => handleSyncProvider(provider.id)}
-                              title="同期"
-                            >
-                              <RefreshCw className="h-4 w-4 text-blue-400" />
-                            </Button>
+                            {(() => {
+                              const isSyncingDesktop =
+                                syncingProviderIds.has(provider.id) ||
+                                provider.lastSyncSuccess === null;
+                              if (isSyncingDesktop) {
+                                return (
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={() => handleAbortSyncProvider(provider.id)}
+                                    title="中止"
+                                    className="text-red-400 hover:text-red-300"
+                                  >
+                                    <Square className="h-4 w-4" />
+                                  </Button>
+                                );
+                              }
+                              return (
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => handleSyncProvider(provider.id)}
+                                  title="同期"
+                                >
+                                  <RefreshCw className="h-4 w-4 text-blue-400" />
+                                </Button>
+                              );
+                            })()}
                             <AlertDialog>
                               <AlertDialogTrigger asChild>
                                 <Button
@@ -1170,7 +1414,7 @@ export function SettingsContent() {
                 支出カテゴリー
               </h3>
               <div className="rounded-md border border-zinc-800 p-2">
-                {renderCategoryList(expenseCategories)}
+                {renderCategoryList(expenseCategories, "EXPENSE")}
               </div>
             </div>
 
@@ -1181,7 +1425,7 @@ export function SettingsContent() {
                 収入カテゴリー
               </h3>
               <div className="rounded-md border border-zinc-800 p-2">
-                {renderCategoryList(incomeCategories)}
+                {renderCategoryList(incomeCategories, "INCOME")}
               </div>
             </div>
           </CardContent>

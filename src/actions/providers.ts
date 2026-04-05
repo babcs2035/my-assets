@@ -2,6 +2,11 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
+import { nowJST } from "@/lib/utils";
+
+// アクティブな同期プロセスを管理するマップ
+// key: providerId, value: AbortController
+const activeSyncControllers = new Map<string, AbortController>();
 
 /**
  * すべてのプロバイダー情報を取得する関数である．
@@ -57,13 +62,54 @@ export async function createProvider(data: {
  */
 export async function deleteProvider(id: string) {
   console.log(`🗑️ Deleting provider: ${id}`);
-  await prisma.provider.delete({
-    where: { id },
+  await prisma.$transaction(async tx => {
+    const mainAccounts = await tx.mainAccount.findMany({
+      where: { providerId: id },
+      select: { id: true },
+    });
+    const mainAccountIds = mainAccounts.map(ma => ma.id);
+
+    if (mainAccountIds.length > 0) {
+      const subAccounts = await tx.subAccount.findMany({
+        where: { mainAccountId: { in: mainAccountIds } },
+        select: { id: true },
+      });
+      const subAccountIds = subAccounts.map(sa => sa.id);
+
+      if (subAccountIds.length > 0) {
+        await tx.balanceHistory.deleteMany({
+          where: { subAccountId: { in: subAccountIds } },
+        });
+        await tx.transaction.deleteMany({
+          where: { subAccountId: { in: subAccountIds } },
+        });
+        await tx.holding.deleteMany({
+          where: { subAccountId: { in: subAccountIds } },
+        });
+        await tx.cryptoAsset.deleteMany({
+          where: { subAccountId: { in: subAccountIds } },
+        });
+        await tx.pointDetail.deleteMany({
+          where: { subAccountId: { in: subAccountIds } },
+        });
+        await tx.subAccount.deleteMany({
+          where: { id: { in: subAccountIds } },
+        });
+      }
+
+      await tx.mainAccount.deleteMany({
+        where: { id: { in: mainAccountIds } },
+      });
+    }
+
+    await tx.provider.delete({
+      where: { id },
+    });
   });
   revalidatePath("/settings");
 }
 
-import { runMfScraper } from "@/scraper/mf-scraper";
+import { runMfScraper, abortMfScraper } from "@/scraper/mf-scraper";
 
 /**
  * 指定されたプロバイダーの同期処理を実行する関数である．
@@ -81,34 +127,97 @@ export async function syncProvider(id: string) {
     throw new Error(`Provider not found: ${id}`);
   }
 
+  // 既存の同期があれば中止
+  if (activeSyncControllers.has(id)) {
+    console.log(`⚠️ Previous sync for ${id} is still running. Aborting it.`);
+    activeSyncControllers.get(id)?.abort();
+    activeSyncControllers.delete(id);
+  }
+
+  const abortController = new AbortController();
+  activeSyncControllers.set(id, abortController);
+
   try {
+    await prisma.provider.update({
+      where: { id },
+      data: {
+        lastSyncAt: nowJST(),
+        lastSyncSuccess: null,
+      },
+    });
+
     console.log(`🚀 Executing scraper for provider: ${provider.name}`);
-    await runMfScraper(provider.name);
+    await runMfScraper(provider.name, abortController.signal);
     console.log(`✅ Sync completed for provider: ${provider.name}`);
 
     // 同期成功を記録する．
     await prisma.provider.update({
       where: { id },
       data: {
-        lastSyncAt: new Date(),
+        lastSyncAt: nowJST(),
         lastSyncSuccess: true,
       },
     });
   } catch (error) {
+    // 中止された場合は特別な処理
+    if (abortController.signal.aborted) {
+      console.log(`🛑 Sync aborted for provider: ${provider.name}`);
+      await prisma.provider.update({
+        where: { id },
+        data: {
+          lastSyncAt: nowJST(),
+          lastSyncSuccess: false,
+        },
+      });
+      throw new Error("Sync was aborted");
+    }
+
     console.error(`❌ Sync failed for provider: ${provider.name}`, error);
 
     // 同期失敗を記録する．
     await prisma.provider.update({
       where: { id },
       data: {
-        lastSyncAt: new Date(),
+        lastSyncAt: nowJST(),
         lastSyncSuccess: false,
       },
     });
 
     throw error;
+  } finally {
+    activeSyncControllers.delete(id);
   }
 
   revalidatePath("/settings");
   revalidatePath("/");
+}
+
+/**
+ * 指定されたプロバイダーの同期を強制終了する関数である．
+ */
+export async function abortSyncProvider(id: string) {
+  console.log(`🛑 Aborting sync for provider: ${id}`);
+
+  const controller = activeSyncControllers.get(id);
+  if (controller) {
+    controller.abort();
+    activeSyncControllers.delete(id);
+  }
+
+  // スクレイパー側でも中止処理を呼ぶ
+  await abortMfScraper(id);
+
+  // ステータスを失敗に更新
+  await prisma.provider.update({
+    where: { id },
+    data: {
+      lastSyncAt: nowJST(),
+      lastSyncSuccess: false,
+    },
+  });
+
+  revalidatePath("/settings");
+  revalidatePath("/");
+
+  return { success: true };
 }

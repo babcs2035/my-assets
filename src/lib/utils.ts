@@ -2,6 +2,85 @@ import { type ClassValue, clsx } from "clsx";
 import { twMerge } from "tailwind-merge";
 
 /**
+ * 日本標準時 (JST) のオフセット（ミリ秒）．UTC+9 時間．
+ */
+const JST_OFFSET_MS = 9 * 60 * 60 * 1000;
+
+/**
+ * 日本標準時 (JST) での現在時刻を取得する関数である．
+ * サーバーのタイムゾーンに依存せず，常に JST を返す．
+ */
+export function nowJST(): Date {
+  const now = new Date();
+  const utc = now.getTime() + now.getTimezoneOffset() * 60 * 1000;
+  return new Date(utc + JST_OFFSET_MS);
+}
+
+/**
+ * 任意の Date オブジェクトを JST として解釈した Date を返す関数である．
+ * 引数の Date が表すローカル時刻を JST の時刻として扱う．
+ */
+export function toJST(date: Date): Date {
+  const utc = date.getTime() + date.getTimezoneOffset() * 60 * 1000;
+  return new Date(utc + JST_OFFSET_MS);
+}
+
+/**
+ * JST の今日の日付を 00:00:00 にリセットした Date を返す関数である．
+ */
+export function todayJST(): Date {
+  const jst = nowJST();
+  jst.setHours(0, 0, 0, 0);
+  return jst;
+}
+
+/**
+ * JST の昨日の日付を 00:00:00 にリセットした Date を返す関数である．
+ */
+export function yesterdayJST(): Date {
+  const jst = todayJST();
+  jst.setDate(jst.getDate() - 1);
+  return jst;
+}
+
+/**
+ * YYYY-MM-DD 形式の文字列を JST の Date オブジェクトに変換する関数である．
+ * 時刻は 00:00:00 JST となる．
+ */
+export function parseJSTDate(dateStr: string): Date {
+  const [year, month, day] = dateStr.split("-").map(Number);
+  // JST での日付を作成（ローカルタイムを JST として扱う）
+  const date = new Date(year, month - 1, day, 0, 0, 0, 0);
+  return toJST(date);
+}
+
+/**
+ * Date オブジェクトを JST の YYYY-MM-DD 形式の文字列に変換する関数である．
+ */
+export function formatJSTDate(date: Date): string {
+  const jst = toJST(date);
+  const year = jst.getFullYear();
+  const month = String(jst.getMonth() + 1).padStart(2, "0");
+  const day = String(jst.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+/**
+ * Date オブジェクトを JST の YYYY/MM/DD HH:MM 形式の文字列に変換する関数である．
+ */
+export function formatJSTDateTime(date: Date | string | null): string {
+  if (!date) return "—";
+  const d = typeof date === "string" ? new Date(date) : date;
+  const jst = toJST(d);
+  const year = jst.getFullYear();
+  const month = String(jst.getMonth() + 1).padStart(2, "0");
+  const day = String(jst.getDate()).padStart(2, "0");
+  const hours = String(jst.getHours()).padStart(2, "0");
+  const minutes = String(jst.getMinutes()).padStart(2, "0");
+  return `${year}/${month}/${day} ${hours}:${minutes}`;
+}
+
+/**
  * Tailwind CSS のクラス名を結合するためのユーティリティ関数である．
  * clsx でクラス名の条件付き結合を行い，twMerge で重複するクラスを統合する．
  */
@@ -66,4 +145,12 @@ export function assetTypeColor(
     POINT: "#10b981", // Emerald
   };
   return colors[type] ?? "#94a3b8";
+}
+
+/**
+ * @deprecated formatJSTDate を使用してください．
+ * Date オブジェクトをローカルタイムゾーンの YYYY-MM-DD 形式の文字列に変換する関数である．
+ */
+export function toLocalDateString(date: Date): string {
+  return formatJSTDate(date);
 }

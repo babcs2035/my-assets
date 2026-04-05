@@ -1,6 +1,8 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
+import { formatJSTDate } from "@/lib/utils";
 import {
   type TransactionCategoryUpdateInput,
   transactionCategoryUpdateSchema,
@@ -47,7 +49,9 @@ export async function getTransactions(params: {
       const end = new Date(start);
       end.setDate(end.getDate() + 1);
       where.date = { gte: start, lt: end };
-      console.log(`📅 Filtering by date: ${dateStr} (${start.toISOString()} to ${end.toISOString()})`);
+      console.log(
+        `📅 Filtering by date: ${dateStr} (${formatJSTDate(start)} to ${formatJSTDate(end)})`,
+      );
     } else {
       // 月全体を取得
       const start = new Date(year, month - 1, 1);
@@ -60,7 +64,19 @@ export async function getTransactions(params: {
     where.isTransfer = false;
   }
 
-  const [transactions, total] = await Promise.all([
+  // 振替ペアの重複を排除するため，同じ transferId の入金側を除外する
+  // (出金側 = amount < 0 のみ残す)
+  // まず振替ペアの重複数をカウントして total を補正する
+  const transferDuplicateCount = await prisma.transaction.count({
+    where: {
+      ...where,
+      isTransfer: true,
+      amount: { gt: 0 },
+      transferId: { not: null },
+    },
+  });
+
+  const [rawTransactions, rawTotal] = await Promise.all([
     prisma.transaction.findMany({
       where,
       include: {
@@ -76,11 +92,71 @@ export async function getTransactions(params: {
         },
       },
       orderBy: { date: "desc" },
-      skip: (page - 1) * pageSize,
-      take: pageSize,
+      // ページネーション用に多めに取得し，後でフィルタリングする
+      skip: 0,
+      take: Number.MAX_SAFE_INTEGER,
     }),
     prisma.transaction.count({ where }),
   ]);
+
+  // 振替ペアの重複排除: 同じ transferId の入金側 (amount > 0) を除外する
+  const deduplicatedTransactions = rawTransactions.filter(tx => {
+    if (!tx.isTransfer || !tx.transferId) return true;
+    // 出金側 (amount < 0) のみ残す
+    return tx.amount < 0;
+  });
+
+  // ページネーション適用
+  const total = rawTotal - transferDuplicateCount;
+  const paginatedTransactions = deduplicatedTransactions.slice(
+    (page - 1) * pageSize,
+    page * pageSize,
+  );
+
+  // 振替トランザクションの相手方口座情報を取得する
+  const linkedTransIds = paginatedTransactions
+    .filter(tx => tx.isTransfer && tx.linkedTransId)
+    .map(tx => tx.linkedTransId as string);
+
+  // 相手方トランザクションの口座情報を一括取得
+  const linkedTransactions =
+    linkedTransIds.length > 0
+      ? await prisma.transaction.findMany({
+          where: { id: { in: linkedTransIds } },
+          select: {
+            id: true,
+            subAccount: {
+              select: {
+                currentName: true,
+                mainAccount: {
+                  select: {
+                    label: true,
+                  },
+                },
+              },
+            },
+          },
+        })
+      : [];
+
+  // 相手方トランザクション ID → 口座情報のマップを作成
+  const linkedTransMap = new Map(
+    linkedTransactions.map(lt => [
+      lt.id,
+      {
+        mainAccountLabel: lt.subAccount.mainAccount.label,
+        subAccountName: lt.subAccount.currentName,
+      },
+    ]),
+  );
+
+  // 各トランザクションに相手方の口座情報を付与する
+  const transactions = paginatedTransactions.map(tx => ({
+    ...tx,
+    linkedAccount: tx.linkedTransId
+      ? (linkedTransMap.get(tx.linkedTransId) ?? null)
+      : null,
+  }));
 
   return {
     transactions,
@@ -113,12 +189,9 @@ export async function getMonthlyCalendarData(year: number, month: number) {
 
   const dailyData: Record<string, { income: number; expense: number }> = {};
   for (const t of transactions) {
-    // toISOString() は UTC で変換されるため、ローカル日付で文字列化
-    const year = t.date.getFullYear();
-    const month = String(t.date.getMonth() + 1).padStart(2, "0");
-    const day = String(t.date.getDate()).padStart(2, "0");
-    const key = `${year}-${month}-${day}`;
-    
+    // JST の日付文字列を取得
+    const key = formatJSTDate(t.date);
+
     if (!dailyData[key]) {
       dailyData[key] = { income: 0, expense: 0 };
     }
@@ -173,6 +246,7 @@ export async function updateTransactionCategory(
     console.log(`✅ Rule applied to ${result.count} transactions.`);
   }
 
+  revalidatePath("/transactions");
   return transaction;
 }
 
@@ -198,27 +272,33 @@ export async function detectTransfers() {
       const b = unmatched[j];
 
       if (
-        a.date.getTime() === b.date.getTime() &&
+        formatJSTDate(a.date) === formatJSTDate(b.date) &&
         Math.abs(a.amount) === Math.abs(b.amount) &&
         a.amount !== 0 &&
         a.amount + b.amount === 0
       ) {
         const transferId = `tf_${a.id.slice(0, 8)}_${b.id.slice(0, 8)}`;
-        await prisma.transaction.updateMany({
-          where: { id: { in: [a.id, b.id] } },
-          data: {
-            isTransfer: true,
-            transferId,
-          },
-        });
-        await prisma.transaction.update({
-          where: { id: a.id },
-          data: { linkedTransId: b.id },
-        });
-        await prisma.transaction.update({
-          where: { id: b.id },
-          data: { linkedTransId: a.id },
-        });
+        
+        // アトミックにトランザクションを更新
+        await prisma.$transaction([
+          prisma.transaction.update({
+            where: { id: a.id },
+            data: {
+              isTransfer: true,
+              transferId,
+              linkedTransId: b.id,
+            },
+          }),
+          prisma.transaction.update({
+            where: { id: b.id },
+            data: {
+              isTransfer: true,
+              transferId,
+              linkedTransId: a.id,
+            },
+          }),
+        ]);
+        
         matched++;
         break;
       }
@@ -226,5 +306,6 @@ export async function detectTransfers() {
   }
 
   console.log(`✅ Detected and linked ${matched} transfer pairs.`);
+  revalidatePath("/transactions");
   return { matched };
 }

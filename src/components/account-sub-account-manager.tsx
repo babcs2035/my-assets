@@ -1,8 +1,14 @@
 "use client";
 
 import type { AssetType, SubAccount } from "@prisma/client";
+import { GripVertical } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { useState, useTransition } from "react";
 import { toast } from "sonner";
-import { updateSubAccountAssetType } from "@/actions/accounts";
+import {
+  reorderSubAccounts,
+  updateSubAccountAssetType,
+} from "@/actions/accounts";
 import {
   Select,
   SelectContent,
@@ -31,6 +37,11 @@ export function AccountSubAccountManager({
   subAccounts: SubAccountWithRelations[];
   mainAccountId: string;
 }) {
+  const router = useRouter();
+  const [isPending, startTransition] = useTransition();
+  const [items, setItems] = useState(subAccounts);
+  const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
+
   /**
    * 子口座の資産区分を変更した際に実行されるハンドラである。
    * @param subAccountId - 資産区分を変更する子口座のID。
@@ -47,24 +58,69 @@ export function AccountSubAccountManager({
       await updateSubAccountAssetType(subAccountId, newType);
       toast.success("資産区分を更新しました。");
       console.log("✅ Asset type updated successfully.");
+      // Server Component を再フェッチしてグラフの色を即座に更新する
+      router.refresh();
     } catch (error) {
       console.error("❌ Failed to update asset type:", error);
       toast.error("資産区分の更新に失敗しました。");
     }
   };
 
+  const handleDragStart = (index: number) => {
+    setDraggedIndex(index);
+  };
+
+  const handleDragOver = (e: React.DragEvent, index: number) => {
+    e.preventDefault();
+    if (draggedIndex === null || draggedIndex === index) return;
+
+    const newItems = [...items];
+    const [draggedItem] = newItems.splice(draggedIndex, 1);
+    newItems.splice(index, 0, draggedItem);
+    setItems(newItems);
+    setDraggedIndex(index);
+  };
+
+  const handleDragEnd = () => {
+    if (draggedIndex === null) return;
+    setDraggedIndex(null);
+
+    const orderedIds = items.map(item => item.id);
+    startTransition(async () => {
+      try {
+        await reorderSubAccounts(orderedIds);
+        toast.success("並び順を更新しました。");
+        router.refresh();
+      } catch (error) {
+        console.error("❌ Failed to reorder:", error);
+        toast.error("並び順の更新に失敗しました。");
+        setItems(subAccounts);
+      }
+    });
+  };
+
   return (
     <div className="space-y-2">
       {/* 子口座リスト */}
-      {subAccounts.map(sa => (
+      {items.map((sa, index) => (
+        // biome-ignore lint/a11y/noStaticElementInteractions: Drag and drop requires these handlers
         <div
           key={sa.id}
-          className="flex items-center justify-between gap-3 rounded-lg border border-zinc-800 px-4 py-3"
+          draggable
+          onDragStart={() => handleDragStart(index)}
+          onDragOver={e => handleDragOver(e, index)}
+          onDragEnd={handleDragEnd}
+          className={`flex items-center justify-between gap-3 rounded-lg border border-zinc-800 px-4 py-3 cursor-grab active:cursor-grabbing transition-opacity ${
+            isPending ? "opacity-50" : ""
+          } ${draggedIndex === index ? "opacity-50 scale-[0.98]" : ""}`}
           style={{
             background: `linear-gradient(to right, ${assetTypeColor(sa.assetType)}15 0%, transparent 100%)`,
             borderLeft: `3px solid ${assetTypeColor(sa.assetType)}`,
           }}
         >
+          {/* ドラッグハンドル */}
+          <GripVertical className="h-4 w-4 text-zinc-500 shrink-0" />
+
           <div className="flex-1 min-w-0">
             <p className="text-sm font-medium text-zinc-200 truncate">
               {sa.currentName}

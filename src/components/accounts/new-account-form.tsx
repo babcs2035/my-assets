@@ -23,7 +23,6 @@ export function NewAccountForm({ providers }: { providers: Provider[] }) {
   const router = useRouter();
   const [providerId, setProviderId] = useState<string>("");
   const [accountLabel, setAccountLabel] = useState("");
-  const [mfUrlId, setMfUrlId] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleCreateAccount = async () => {
@@ -32,7 +31,6 @@ export function NewAccountForm({ providers }: { providers: Provider[] }) {
       await createMainAccount({
         label: accountLabel,
         providerId,
-        mfUrlId: mfUrlId || undefined,
       });
       toast.success("口座を作成しました", {
         description: accountLabel,
@@ -103,15 +101,9 @@ export function NewAccountForm({ providers }: { providers: Provider[] }) {
               value={accountLabel}
               onChange={e => setAccountLabel(e.target.value)}
             />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="mf-url-id">MF URL ID（オプション）</Label>
-            <Input
-              id="mf-url-id"
-              placeholder="URLから抽出した内部ID"
-              value={mfUrlId}
-              onChange={e => setMfUrlId(e.target.value)}
-            />
+            <p className="text-xs text-zinc-500 mt-1">
+              ※ MoneyForward に表示される金融機関名と一致させてください
+            </p>
           </div>
           <Button
             onClick={handleCreateAccount}

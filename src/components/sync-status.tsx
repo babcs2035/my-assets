@@ -10,7 +10,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { cn } from "@/lib/utils";
+import { cn, nowJST, toJST } from "@/lib/utils";
 
 /**
  * 同期状態の型定義である．
@@ -33,7 +33,7 @@ export function SyncStatus() {
     const checkSync = async () => {
       try {
         const info = await getLastSyncInfo();
-        const now = new Date();
+        const now = nowJST();
 
         if (!info) {
           setStatus("idle");
@@ -41,7 +41,13 @@ export function SyncStatus() {
           return;
         }
 
-        const last = new Date(info.date);
+        if (info.success === null) {
+          setStatus("syncing");
+          setLastSyncText("同期中");
+          return;
+        }
+
+        const last = toJST(new Date(info.date));
         const isToday =
           now.getFullYear() === last.getFullYear() &&
           now.getMonth() === last.getMonth() &&
@@ -56,14 +62,14 @@ export function SyncStatus() {
               .padStart(2, "0")} ${info.success ? "完了" : "失敗"}`,
           );
         } else {
-          // 現在同期実行中かどうかを判定する (例: 08:00 - 08:10)．
+          // 現在同期実行中かどうかを判定する (例: 08:00 - 08:10 JST)．
           const hour = now.getHours();
           const minute = now.getMinutes();
 
           if (hour === 8 && minute < 10) {
             setStatus("syncing");
             setLastSyncText("実行中...");
-          } else if (hour >= 8 || (hour === 7 && minute > 55)) {
+          } else if ((hour === 8 && minute >= 10) || hour > 8) {
             setStatus(info.success ? "idle" : "error");
             setLastSyncText("未実行");
           } else {
@@ -79,9 +85,38 @@ export function SyncStatus() {
     };
 
     checkSync();
+
+    const handleProviderSyncStatus = (event: Event) => {
+      const customEvent = event as CustomEvent<{ status?: SyncState }>;
+      if (customEvent.detail?.status === "syncing") {
+        setStatus("syncing");
+        setLastSyncText("同期中");
+        return;
+      }
+      if (customEvent.detail?.status === "success") {
+        setStatus("success");
+        setLastSyncText("完了");
+        void checkSync();
+        return;
+      }
+      if (customEvent.detail?.status === "error") {
+        setStatus("error");
+        setLastSyncText("失敗");
+        void checkSync();
+      }
+    };
+
+    window.addEventListener("provider-sync-status", handleProviderSyncStatus);
+
     // 1 分ごとに同期状態を再確認する．
     const interval = setInterval(checkSync, 60000);
-    return () => clearInterval(interval);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener(
+        "provider-sync-status",
+        handleProviderSyncStatus,
+      );
+    };
   }, []);
 
   /**

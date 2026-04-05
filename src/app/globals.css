@@ -5,59 +5,60 @@
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
-  /* モダンで深みのあるダークベース（Zinc系ベースによりリッチにしたもの） */
-  --color-background: oklch(0.18 0.01 285);
+  /* ── ベースカラー ─────────────────────────────── */
+  /* ガイドブック準拠: 背景は落ち着いたダーク、文字は高コントラスト */
+  --color-background: oklch(0.145 0.01 285);
   --color-foreground: oklch(0.98 0 0);
 
-  /* カード・ポップオーバーは背景よりわずかに浮き立たせる */
-  --color-card: oklch(0.22 0.01 285);
+  /* カード・ポップオーバーは背景よりわずかに明るく浮き立たせる */
+  --color-card: oklch(0.19 0.01 285);
   --color-card-foreground: oklch(0.98 0 0);
 
-  --color-popover: oklch(0.22 0.01 285);
+  --color-popover: oklch(0.19 0.01 285);
   --color-popover-foreground: oklch(0.98 0 0);
 
-  /* 主要アクセントカラー（ブルー～パープル系などグラデーションとも相性のいい青） */
-  --color-primary: oklch(0.65 0.15 250);
+  /* ── アクセントカラー ──────────────────────────── */
+  /* ガイドブック: Blue を主キーカラーとして採用 */
+  --color-primary: oklch(0.62 0.16 250);
   --color-primary-foreground: oklch(0.98 0 0);
 
-  /* セカンダリ（少し控えめなアクション） */
-  --color-secondary: oklch(0.28 0.02 285);
+  --color-secondary: oklch(0.24 0.015 285);
   --color-secondary-foreground: oklch(0.98 0 0);
 
-  /* ミュート（非強調用テキストや背景用） */
-  --color-muted: oklch(0.26 0.02 285);
-  --color-muted-foreground: oklch(0.7 0.02 285);
+  --color-muted: oklch(0.22 0.015 285);
+  --color-muted-foreground: oklch(0.65 0.015 285);
 
-  --color-accent: oklch(0.28 0.02 285);
+  --color-accent: oklch(0.24 0.015 285);
   --color-accent-foreground: oklch(0.98 0 0);
 
   --color-destructive: oklch(0.45 0.15 25);
   --color-destructive-foreground: oklch(0.95 0.05 25);
 
-  --color-border: oklch(0.28 0.02 285);
-  --color-input: oklch(0.28 0.02 285);
-  --color-ring: oklch(0.65 0.15 250);
+  --color-border: oklch(0.25 0.015 285);
+  --color-input: oklch(0.25 0.015 285);
+  --color-ring: oklch(0.62 0.16 250);
 
-  /* チャート用カラー（視認性が高く美しいパレット） */
-  --color-chart-1: oklch(0.65 0.15 250); /* Primary Blue */
-  --color-chart-2: oklch(0.7 0.15 160); /* Emerald Green */
-  --color-chart-3: oklch(0.75 0.15 70); /* Warm Amber */
-  --color-chart-4: oklch(0.65 0.18 310); /* Deep Purple */
-  --color-chart-5: oklch(0.6 0.18 20); /* Vivid Red/Orange */
+  /* ── チャートカラー (ガイドブック: 色数 1〜5 に制限) ── */
+  --color-chart-1: oklch(0.62 0.16 250);  /* Blue   - 預金・現金 */
+  --color-chart-2: oklch(0.62 0.18 300);  /* Violet - 投資信託 */
+  --color-chart-3: oklch(0.72 0.16 70);   /* Amber  - 暗号資産 */
+  --color-chart-4: oklch(0.68 0.16 160);  /* Green  - ポイント */
+  --color-chart-5: oklch(0.55 0.18 20);   /* Red    - 負債 */
 
-  /* サイドバーは背景と一体化するか少しだけ暗くする */
-  --color-sidebar: oklch(0.16 0.01 285);
-  --color-sidebar-foreground: oklch(0.85 0.01 285);
-  --color-sidebar-primary: oklch(0.65 0.15 250);
+  /* ── サイドバー ─────────────────────────────── */
+  --color-sidebar: oklch(0.13 0.01 285);
+  --color-sidebar-foreground: oklch(0.82 0.01 285);
+  --color-sidebar-primary: oklch(0.62 0.16 250);
   --color-sidebar-primary-foreground: oklch(0.98 0 0);
-  --color-sidebar-accent: oklch(0.22 0.01 285);
+  --color-sidebar-accent: oklch(0.19 0.01 285);
   --color-sidebar-accent-foreground: oklch(0.98 0 0);
-  --color-sidebar-border: oklch(0.22 0.01 285);
-  --color-sidebar-ring: oklch(0.65 0.15 250);
+  --color-sidebar-border: oklch(0.19 0.01 285);
+  --color-sidebar-ring: oklch(0.62 0.16 250);
 
-  --radius-lg: 0.75rem;
-  --radius-md: calc(0.75rem - 2px);
-  --radius-sm: calc(0.75rem - 4px);
+  /* ── 角丸 ───────────────────────────────── */
+  --radius-lg: 0.625rem;
+  --radius-md: calc(0.625rem - 2px);
+  --radius-sm: calc(0.625rem - 4px);
 }
 
 @layer base {
@@ -66,8 +67,8 @@
   }
   body {
     @apply bg-background text-foreground antialiased;
-    /* PWA などアプリライクなスクロール感 */
     -webkit-tap-highlight-color: transparent;
+    font-feature-settings: "palt";
   }
 }
 
@@ -77,7 +78,7 @@
   --sidebar-width-icon: 3rem;
 }
 
-/* Global clickable cursor */
+/* ── インタラクティブ要素のカーソル ───────────── */
 button,
 a,
 input[type="submit"],
@@ -88,81 +89,124 @@ input[type="radio"],
   cursor: pointer;
 }
 
-/* 常にダークモードを適用 */
+/* ── ダークモード固定 ──────────────────────── */
 .dark body {
   background-color: var(--color-background);
   color: var(--color-foreground);
 }
 
-/* Sonner Toast カスタムスタイル */
+/* ── ページ遷移アニメーション (シンプル) ─────── */
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fade-in {
+  animation: fade-in 0.3s ease-out both;
+}
+
+/* ── KPI カード入場アニメーション ─────────────── */
+@keyframes kpi-enter {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.kpi-card {
+  animation: kpi-enter 0.35s ease-out both;
+}
+
+/* ── データテーブル共通スタイル ─────────────── */
+/* ガイドブック: グリッド・枠線を最小限に、数値はフォントを揃える */
+.data-table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+.data-table th {
+  padding: 0.625rem 0.75rem;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: oklch(0.6 0.015 285);
+  text-transform: none;
+  letter-spacing: 0;
+  border-bottom: 1px solid oklch(0.25 0.015 285);
+  white-space: nowrap;
+}
+
+.data-table td {
+  padding: 0.625rem 0.75rem;
+  font-size: 0.875rem;
+  border-bottom: 1px solid oklch(0.2 0.01 285);
+  white-space: nowrap;
+}
+
+.data-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.data-table tbody tr:hover {
+  background-color: oklch(0.2 0.01 285 / 0.5);
+}
+
+/* ── 値の正負表現 ──────────────────────────── */
+.text-success { color: oklch(0.72 0.18 155); }
+.text-warning { color: oklch(0.78 0.16 70); }
+
+/* ── Sonner Toast カスタムスタイル ──────────── */
 @layer base {
-  /* 成功トースト（緑色） */
   [data-sonner-toast][data-type="success"] {
     background-color: hsl(158 64% 12%) !important;
     border-color: hsl(158 64% 28%) !important;
     color: hsl(158 64% 95%) !important;
   }
-
   [data-sonner-toast][data-type="success"] [data-icon] {
     color: hsl(158 64% 52%) !important;
   }
-
   [data-sonner-toast][data-type="success"] [data-description] {
     color: hsl(158 64% 75%) !important;
   }
 
-  /* エラートースト（赤色） */
   [data-sonner-toast][data-type="error"] {
     background-color: hsl(0 72% 15%) !important;
     border-color: hsl(0 72% 35%) !important;
     color: hsl(0 72% 95%) !important;
   }
-
   [data-sonner-toast][data-type="error"] [data-icon] {
     color: hsl(0 72% 60%) !important;
   }
-
   [data-sonner-toast][data-type="error"] [data-description] {
     color: hsl(0 72% 80%) !important;
   }
 
-  /* 警告トースト（琥珀色） */
   [data-sonner-toast][data-type="warning"] {
     background-color: hsl(35 92% 15%) !important;
     border-color: hsl(35 92% 35%) !important;
     color: hsl(35 92% 95%) !important;
   }
-
   [data-sonner-toast][data-type="warning"] [data-icon] {
     color: hsl(35 92% 55%) !important;
   }
-
   [data-sonner-toast][data-type="warning"] [data-description] {
     color: hsl(35 92% 80%) !important;
   }
 
-  /* 情報トースト（青色） */
   [data-sonner-toast][data-type="info"] {
     background-color: hsl(215 70% 15%) !important;
     border-color: hsl(215 70% 35%) !important;
     color: hsl(215 70% 95%) !important;
   }
-
   [data-sonner-toast][data-type="info"] [data-icon] {
     color: hsl(215 70% 60%) !important;
   }
-
   [data-sonner-toast][data-type="info"] [data-description] {
     color: hsl(215 70% 80%) !important;
   }
 
-  /* 読み込み中トースト */
   [data-sonner-toast][data-type="loading"] {
     background-color: hsl(215 20% 20%) !important;
     border-color: hsl(215 20% 35%) !important;
     color: hsl(215 20% 95%) !important;
   }
-
   [data-sonner-toast][data-type="loading"] [data-icon] {
     color: hsl(215 70% 60%) !important;
   }

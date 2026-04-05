@@ -1,5 +1,6 @@
 "use client";
 
+import type { AssetType } from "@prisma/client";
 import { useState } from "react";
 import {
   Area,
@@ -30,20 +31,31 @@ import {
   filterByUnifiedTimeRange,
   type UnifiedTimeRange,
 } from "@/lib/chart-time-range";
-import { formatCurrency } from "@/lib/utils";
+import { assetTypeColor, formatCurrency } from "@/lib/utils";
 
 export type ChartDataSerie = {
   id: string; // "total" | subAccountId
   name: string;
   currentBalance: number;
   data: { date: string; balance: number }[];
+  assetType?: AssetType;
 };
 
-export function AccountBalanceChart({ series }: { series: ChartDataSerie[] }) {
+export function AccountBalanceChart({
+  series,
+  defaultAssetType = "CASH",
+}: {
+  series: ChartDataSerie[];
+  defaultAssetType?: AssetType;
+}) {
   const [selectedId, setSelectedId] = useState<string>("total");
   const [timeRange, setTimeRange] = useState<UnifiedTimeRange>("1M");
 
   const selectedSeries = series.find(s => s.id === selectedId) || series[0];
+
+  // 選択中のシリーズの assetType を取得（なければデフォルト）
+  const currentAssetType = selectedSeries?.assetType ?? defaultAssetType;
+  const chartColor = assetTypeColor(currentAssetType);
 
   if (!selectedSeries || selectedSeries.data.length === 0) {
     return (
@@ -51,10 +63,10 @@ export function AccountBalanceChart({ series }: { series: ChartDataSerie[] }) {
         <CardHeader>
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
-              <CardTitle className="text-base text-zinc-100">
-                資産推移
+              <CardTitle className="text-base font-medium text-zinc-200">
+                残高推移（日次）
               </CardTitle>
-              <CardDescription>推移データがまだありません</CardDescription>
+              <CardDescription className="text-sm">推移データがまだありません</CardDescription>
             </div>
           </div>
         </CardHeader>
@@ -77,7 +89,7 @@ export function AccountBalanceChart({ series }: { series: ChartDataSerie[] }) {
 
   // Y軸の最小・最大を少しゆとり持たせるため
   const balances = chartData.map(d => d.balance);
-  const [minVal, maxVal] = getNiceChartDomain(balances);
+  const [, maxVal] = getNiceChartDomain(balances);
 
   // 選択された時間範囲における最新の残高（通常は全期間の最新と同じだが安全に取る）
   const currentBalance =
@@ -88,13 +100,13 @@ export function AccountBalanceChart({ series }: { series: ChartDataSerie[] }) {
       <CardHeader>
         <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
           <div>
-            <CardTitle className="text-base text-zinc-100 mb-1">
-              資産推移
+            <CardTitle className="text-base font-medium text-zinc-200 mb-1">
+              残高推移（日次）
             </CardTitle>
             <div className="text-3xl font-bold tracking-tight text-zinc-50 font-mono mt-2 mb-1">
               {formatCurrency(currentBalance)}
             </div>
-            <CardDescription>{selectedSeries.name} の残高推移</CardDescription>
+            <CardDescription className="text-sm">{selectedSeries.name} の残高推移</CardDescription>
           </div>
           <div className="flex w-full flex-col gap-3 lg:w-auto">
             <Select value={selectedId} onValueChange={setSelectedId}>
@@ -124,9 +136,15 @@ export function AccountBalanceChart({ series }: { series: ChartDataSerie[] }) {
             margin={{ top: 10, right: 10, left: 30, bottom: 0 }}
           >
             <defs>
-              <linearGradient id="colorBalance" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.4} />
-                <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
+              <linearGradient
+                id={`colorBalance-${selectedId}`}
+                x1="0"
+                y1="0"
+                x2="0"
+                y2="1"
+              >
+                <stop offset="5%" stopColor={chartColor} stopOpacity={0.4} />
+                <stop offset="95%" stopColor={chartColor} stopOpacity={0} />
               </linearGradient>
             </defs>
             <CartesianGrid
@@ -153,7 +171,7 @@ export function AccountBalanceChart({ series }: { series: ChartDataSerie[] }) {
               tickLine={false}
               axisLine={false}
               tickFormatter={value => formatYAxisCurrency(Number(value))}
-              domain={[minVal, maxVal]}
+              domain={[0, maxVal]}
               tickCount={6}
               width={70}
             />
@@ -178,10 +196,10 @@ export function AccountBalanceChart({ series }: { series: ChartDataSerie[] }) {
               key={selectedId}
               type="monotone"
               dataKey="balance"
-              stroke="#3b82f6"
+              stroke={chartColor}
               strokeWidth={2}
               fillOpacity={1}
-              fill="url(#colorBalance)"
+              fill={`url(#colorBalance-${selectedId})`}
               isAnimationActive={true}
               animationDuration={800}
             />

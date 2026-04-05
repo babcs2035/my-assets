@@ -1,6 +1,7 @@
 "use server";
 
 import type { AssetType } from "@prisma/client";
+import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import {
   type MainAccountCreateInput,
@@ -24,15 +25,16 @@ export async function getAccounts() {
           cryptos: true,
           pointDetail: true,
         },
+        orderBy: { sortOrder: "asc" },
       },
     },
-    orderBy: { label: "asc" },
+    orderBy: { sortOrder: "asc" },
   });
 }
 
 /**
  * 指定された ID のメイン口座の詳細情報を取得する関数である．
- * 過去 90 日間の残高推移履歴も併せて取得する．
+ * 残高推移履歴も併せて取得する．
  */
 export async function getAccountDetail(id: string) {
   console.log(`🔍 Fetching details for account: ${id}`);
@@ -53,6 +55,7 @@ export async function getAccountDetail(id: string) {
             orderBy: { date: "desc" },
           },
         },
+        orderBy: { sortOrder: "asc" },
       },
     },
   });
@@ -74,7 +77,10 @@ export async function getProviders() {
 export async function createProvider(input: ProviderCreateInput) {
   const data = providerCreateSchema.parse(input);
   console.log(`➕ Creating new provider: ${data.name}`);
-  return prisma.provider.create({ data });
+  const result = await prisma.provider.create({ data });
+  revalidatePath("/settings");
+  revalidatePath("/accounts");
+  return result;
 }
 
 /**
@@ -83,7 +89,15 @@ export async function createProvider(input: ProviderCreateInput) {
 export async function createMainAccount(input: MainAccountCreateInput) {
   const data = mainAccountCreateSchema.parse(input);
   console.log(`🏦 Creating new main account: ${data.label}`);
-  return prisma.mainAccount.create({ data });
+  const result = await prisma.mainAccount.create({
+    data: {
+      ...data,
+      mfUrlId: data.mfUrlId?.trim() || null,
+    },
+  });
+  revalidatePath("/accounts");
+  revalidatePath("/");
+  return result;
 }
 
 /**
@@ -94,10 +108,13 @@ export async function updateMainAccount(
   data: { label?: string; mfUrlId?: string },
 ) {
   console.log(`📝 Updating main account: ${id}`);
-  return prisma.mainAccount.update({
+  const result = await prisma.mainAccount.update({
     where: { id },
     data,
   });
+  revalidatePath("/accounts");
+  revalidatePath(`/accounts/${id}`);
+  return result;
 }
 
 /**
@@ -105,9 +122,41 @@ export async function updateMainAccount(
  */
 export async function deleteMainAccount(id: string) {
   console.log(`🗑️ Deleting main account: ${id}`);
-  return prisma.mainAccount.delete({
-    where: { id },
+  const result = await prisma.$transaction(async tx => {
+    const subAccounts = await tx.subAccount.findMany({
+      where: { mainAccountId: id },
+      select: { id: true },
+    });
+    const subAccountIds = subAccounts.map(sa => sa.id);
+
+    if (subAccountIds.length > 0) {
+      await tx.balanceHistory.deleteMany({
+        where: { subAccountId: { in: subAccountIds } },
+      });
+      await tx.transaction.deleteMany({
+        where: { subAccountId: { in: subAccountIds } },
+      });
+      await tx.holding.deleteMany({
+        where: { subAccountId: { in: subAccountIds } },
+      });
+      await tx.cryptoAsset.deleteMany({
+        where: { subAccountId: { in: subAccountIds } },
+      });
+      await tx.pointDetail.deleteMany({
+        where: { subAccountId: { in: subAccountIds } },
+      });
+      await tx.subAccount.deleteMany({
+        where: { id: { in: subAccountIds } },
+      });
+    }
+
+    return tx.mainAccount.delete({
+      where: { id },
+    });
   });
+  revalidatePath("/accounts");
+  revalidatePath("/");
+  return result;
 }
 
 /**
@@ -118,10 +167,13 @@ export async function updateSubAccountAssetType(
   assetType: AssetType,
 ) {
   console.log(`🏷️ Updating asset type for sub account ${id} to ${assetType}`);
-  return prisma.subAccount.update({
+  const result = await prisma.subAccount.update({
     where: { id },
     data: { assetType },
   });
+  revalidatePath("/accounts");
+  revalidatePath("/");
+  return result;
 }
 
 /**
@@ -134,10 +186,12 @@ export async function remapSubAccount(
   console.log(
     `🔗 Remapping sub account ${subAccountId} to main account ${newMainAccountId}`,
   );
-  return prisma.subAccount.update({
+  const result = await prisma.subAccount.update({
     where: { id: subAccountId },
     data: { mainAccountId: newMainAccountId },
   });
+  revalidatePath("/accounts");
+  return result;
 }
 
 /**
@@ -158,18 +212,62 @@ export async function createManualAccount({
   assetType: AssetType;
 }) {
   console.log(`✍️ Creating manual account: ${label} (${subAccountName})`);
-  return prisma.mainAccount.create({
+
+  // 新規口座の sortOrder を最大値 + 1 に設定
+  const maxSortOrder = await prisma.mainAccount.aggregate({
+    _max: { sortOrder: true },
+  });
+  const nextSortOrder = (maxSortOrder._max.sortOrder ?? -1) + 1;
+
+  const result = await prisma.mainAccount.create({
     data: {
       providerId,
       label,
-      mfUrlId: `MANUAL_${Date.now()}`,
+      mfUrlId: `MANUAL_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      sortOrder: nextSortOrder,
       subAccounts: {
         create: {
           currentName: subAccountName,
           balance: initialBalance,
           assetType,
+          sortOrder: 0,
         },
       },
     },
   });
+  revalidatePath("/accounts");
+  revalidatePath("/");
+  return result;
+}
+
+/**
+ * メイン口座の並び順を更新する関数である．
+ * 引数には ID の配列を新しい順序で渡す．
+ */
+export async function reorderMainAccounts(orderedIds: string[]) {
+  console.log("🔀 Reordering main accounts...");
+  const updates = orderedIds.map((id, index) =>
+    prisma.mainAccount.update({
+      where: { id },
+      data: { sortOrder: index },
+    }),
+  );
+  await prisma.$transaction(updates);
+  revalidatePath("/accounts");
+}
+
+/**
+ * サブ口座の並び順を更新する関数である．
+ * 引数には ID の配列を新しい順序で渡す．
+ */
+export async function reorderSubAccounts(orderedIds: string[]) {
+  console.log("🔀 Reordering sub accounts...");
+  const updates = orderedIds.map((id, index) =>
+    prisma.subAccount.update({
+      where: { id },
+      data: { sortOrder: index },
+    }),
+  );
+  await prisma.$transaction(updates);
+  revalidatePath("/accounts");
 }
