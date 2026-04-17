@@ -34,6 +34,7 @@ const areaSeries = [
   { key: "INVESTMENT", label: "投資信託・証券", color: "#8b5cf6" },
   { key: "CRYPTO", label: "暗号資産", color: "#f59e0b" },
   { key: "POINT", label: "ポイント", color: "#10b981" },
+  { key: "LIABILITY", label: "負債", color: "#ef4444" },
 ] as const;
 
 /**
@@ -44,13 +45,14 @@ const chartConfig = {
   investment: { label: "投資信託・証券", color: areaSeries[1].color },
   crypto: { label: "暗号資産", color: areaSeries[2].color },
   point: { label: "ポイント", color: areaSeries[3].color },
+  liability: { label: "負債", color: areaSeries[4].color },
 } satisfies ChartConfig;
 
 const valueFormatter = (number: number) =>
   `¥ ${Intl.NumberFormat("ja-JP").format(number)}`;
 
 const tooltipCardClassName =
-  "rounded-lg border border-zinc-700 bg-zinc-900 p-2 shadow-sm";
+  "rounded-lg border border-zinc-700 bg-zinc-900 p-2 shadow-sm relative z-50";
 
 interface DashboardAreaChartProps {
   data: Array<{
@@ -60,6 +62,7 @@ interface DashboardAreaChartProps {
     INVESTMENT: number;
     CRYPTO: number;
     POINT: number;
+    LIABILITY: number;
   }>;
 }
 
@@ -81,6 +84,7 @@ export function DashboardAreaChart({ data }: DashboardAreaChartProps) {
     INVESTMENT: true,
     CRYPTO: true,
     POINT: true,
+    LIABILITY: true,
   });
 
   useEffect(() => {
@@ -93,7 +97,12 @@ export function DashboardAreaChart({ data }: DashboardAreaChartProps) {
 
   const filteredData = filterByUnifiedTimeRange(data, timeRange, d => d.date);
   const chartData = filteredData.length > 0 ? filteredData : data;
-  const activeSeries = areaSeries.filter(item => visibleSeries[item.key]);
+
+  // 全期間のデータが0の系列は非表示にする（線の重なり防止）
+  const activeSeries = areaSeries.filter(item => {
+    if (!visibleSeries[item.key]) return false;
+    return chartData.some(d => Number(d[item.key] ?? 0) !== 0);
+  });
   const hasVisibleSeries = activeSeries.length > 0;
 
   if (chartData.length === 0 || !hasVisibleSeries) {
@@ -115,10 +124,25 @@ export function DashboardAreaChart({ data }: DashboardAreaChartProps) {
     );
   }
 
+  // 資産系列（LIABILITY以外）の積み上げ合計を計算
+  const assetSeries = activeSeries.filter(item => item.key !== "LIABILITY");
+  const liabilitySeries = activeSeries.filter(item => item.key === "LIABILITY");
+
   const totals = chartData.map(d =>
-    activeSeries.reduce((sum, item) => sum + Number(d[item.key] ?? 0), 0),
+    assetSeries.reduce((sum, item) => sum + Number(d[item.key] ?? 0), 0),
   );
   const [, maxVal] = getNiceChartDomain(totals);
+
+  // 負債がある場合はY軸の下限を負の値に対応させる
+  let minVal = 0;
+  if (liabilitySeries.length > 0) {
+    const liabilityValues = chartData.map(d => Number(d.LIABILITY ?? 0));
+    const minLiability = Math.min(...liabilityValues);
+    if (minLiability < 0) {
+      // 負債の最小値に20%のマージンを追加
+      minVal = Math.floor(minLiability * 1.2);
+    }
+  }
 
   return (
     <div className="flex flex-col gap-3">
@@ -150,6 +174,10 @@ export function DashboardAreaChart({ data }: DashboardAreaChartProps) {
                 <stop offset="5%" stopColor={chartConfig.point.color} stopOpacity={0.35} />
                 <stop offset="95%" stopColor={chartConfig.point.color} stopOpacity={0.02} />
               </linearGradient>
+              <linearGradient id="colorLiability" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="5%" stopColor={chartConfig.liability.color} stopOpacity={0.35} />
+                <stop offset="95%" stopColor={chartConfig.liability.color} stopOpacity={0.02} />
+              </linearGradient>
             </defs>
             {/* ガイドブック: グリッド線は水平のみ、薄色 */}
             <CartesianGrid
@@ -173,11 +201,12 @@ export function DashboardAreaChart({ data }: DashboardAreaChartProps) {
               tickLine={false}
               axisLine={false}
               tickFormatter={value => formatYAxisCurrency(Number(value))}
-              domain={[0, maxVal]}
+              domain={[minVal, maxVal]}
               tickCount={6}
               width={60}
             />
             <ChartTooltip
+              wrapperStyle={{ zIndex: 100 }}
               content={({ active, payload }) => {
                 if (!active || !payload?.length) return null;
                 const date = payload[0]?.payload?.date;
@@ -205,7 +234,9 @@ export function DashboardAreaChart({ data }: DashboardAreaChartProps) {
                                   ? "暗号資産"
                                   : item.name === "POINT"
                                     ? "ポイント"
-                                    : String(item.name ?? "");
+                                    : item.name === "LIABILITY"
+                                      ? "負債"
+                                      : String(item.name ?? "");
 
                           return (
                             <div
@@ -230,7 +261,8 @@ export function DashboardAreaChart({ data }: DashboardAreaChartProps) {
                 );
               }}
             />
-            {activeSeries.map(item => (
+            {/* 資産系列（積み上げ） */}
+            {assetSeries.map(item => (
               <Area
                 key={item.key}
                 dataKey={item.key}
@@ -240,6 +272,20 @@ export function DashboardAreaChart({ data }: DashboardAreaChartProps) {
                 strokeWidth={2}
                 fillOpacity={0.72}
                 stackId="a"
+                isAnimationActive={true}
+                animationDuration={800}
+              />
+            ))}
+            {/* 負債系列（独立・マイナス域） */}
+            {liabilitySeries.map(item => (
+              <Area
+                key={item.key}
+                dataKey={item.key}
+                type="monotone"
+                fill={`url(#color${item.key.charAt(0)}${item.key.slice(1).toLowerCase()})`}
+                stroke={item.color}
+                strokeWidth={2}
+                fillOpacity={0.72}
                 isAnimationActive={true}
                 animationDuration={800}
               />
@@ -315,7 +361,9 @@ export function DashboardDonutChart({ data }: DashboardDonutChartProps) {
 
   const source = data as { name: string; value: number }[];
   const sourceMap = new Map(source.map(item => [item.name, item.value]));
-  const pieData = areaSeries
+  // 負債は資産構成比から除外する
+  const assetOnlySeries = areaSeries.filter(item => item.key !== "LIABILITY");
+  const pieData = assetOnlySeries
     .map(item => ({
       name: item.label,
       value: Number(sourceMap.get(item.label) ?? 0),
@@ -352,6 +400,7 @@ export function DashboardDonutChart({ data }: DashboardDonutChartProps) {
         >
           <PieChart>
             <ChartTooltip
+              wrapperStyle={{ zIndex: 100 }}
               content={({ active, payload }) => {
                 if (!active || !payload?.length) return null;
                 const item = payload[0];
@@ -399,9 +448,9 @@ export function DashboardDonutChart({ data }: DashboardDonutChartProps) {
         </div>
       </div>
 
-      {/* ガイドブック: 凡例に構成比（%）を併記 */}
+      {/* ガイドブック: 凡例に構成比（%）を併記（負債は除外） */}
       <div className="mt-3 grid w-full grid-cols-1 gap-1.5 text-sm text-zinc-300">
-        {areaSeries.map(item => {
+        {assetOnlySeries.map(item => {
           const val = Number(sourceMap.get(item.label) ?? 0);
           const pct = totalValue > 0 ? ((val / totalValue) * 100).toFixed(1) : "0";
           return (

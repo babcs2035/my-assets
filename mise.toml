@@ -1,6 +1,6 @@
 [tools]
-node = "25.6.1"
-pnpm = "10.29.3"
+node = "latest"
+pnpm = "latest"
 
 [tasks.install]
 description = "Install dependencies"

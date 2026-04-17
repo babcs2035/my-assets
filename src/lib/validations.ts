@@ -24,7 +24,7 @@ export type MainAccountCreateInput = z.infer<typeof mainAccountCreateSchema>;
  */
 export const subAccountUpdateSchema = z.object({
   id: z.string(),
-  assetType: z.enum(["CASH", "INVESTMENT", "CRYPTO", "POINT"]),
+  assetType: z.enum(["CASH", "INVESTMENT", "CRYPTO", "POINT", "LIABILITY"]),
   mainAccountId: z.string().optional(),
 });
 export type SubAccountUpdateInput = z.infer<typeof subAccountUpdateSchema>;

@@ -74,7 +74,7 @@ async function runAllProvidersSync() {
         });
 
         if (provider.type === "mf") {
-          await runMfScraper(provider.name);
+          await runMfScraper(provider.name, undefined, { mode: "scheduled" });
         } else {
           console.warn(
             `⏰ [Scheduler] Unknown provider type: ${provider.type}. Skipping.`,

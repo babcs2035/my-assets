@@ -19,7 +19,7 @@ type AssetHistoryEntry = {
   [key: string]: string | number;
 };
 
-const assetTypes = ["CASH", "INVESTMENT", "CRYPTO", "POINT"] as const;
+const assetTypes = ["CASH", "INVESTMENT", "CRYPTO", "POINT", "LIABILITY"] as const;
 
 function CustomTooltip({
   active,

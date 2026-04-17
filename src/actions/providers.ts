@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { nowJST } from "@/lib/utils";
+import { abortMfScraper, runMfScraper } from "@/scraper/mf-scraper";
 
 // アクティブな同期プロセスを管理するマップ
 // key: providerId, value: AbortController
@@ -109,8 +110,6 @@ export async function deleteProvider(id: string) {
   revalidatePath("/settings");
 }
 
-import { runMfScraper, abortMfScraper } from "@/scraper/mf-scraper";
-
 /**
  * 指定されたプロバイダーの同期処理を実行する関数である．
  * 同期結果（成功/失敗，日時）を Provider レコードに記録する．
@@ -147,7 +146,9 @@ export async function syncProvider(id: string) {
     });
 
     console.log(`🚀 Executing scraper for provider: ${provider.name}`);
-    await runMfScraper(provider.name, abortController.signal);
+    await runMfScraper(provider.name, abortController.signal, {
+      mode: "manual",
+    });
     console.log(`✅ Sync completed for provider: ${provider.name}`);
 
     // 同期成功を記録する．

@@ -14,6 +14,7 @@ enum AssetType {
   INVESTMENT // 投資信託・証券
   CRYPTO // 暗号資産
   POINT // ポイント
+  LIABILITY // 負債・クレジットカード等
 }
 
 // カテゴリーの収支区分
@@ -54,6 +55,7 @@ model SubAccount {
   assetType   AssetType @default(CASH)
   balance     Int // 最新の日本円換算残高
   sortOrder   Int       @default(0) // 表示順序
+  isHidden    Boolean   @default(false) // UI 上で非表示にするか
 
   transactions Transaction[]
   histories    BalanceHistory[]

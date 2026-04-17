@@ -2,18 +2,15 @@ import { type ClassValue, clsx } from "clsx";
 import { twMerge } from "tailwind-merge";
 
 /**
- * 日本標準時 (JST) のオフセット（ミリ秒）．UTC+9 時間．
- */
-const JST_OFFSET_MS = 9 * 60 * 60 * 1000;
-
-/**
  * 日本標準時 (JST) での現在時刻を取得する関数である．
  * サーバーのタイムゾーンに依存せず，常に JST を返す．
  */
 export function nowJST(): Date {
   const now = new Date();
-  const utc = now.getTime() + now.getTimezoneOffset() * 60 * 1000;
-  return new Date(utc + JST_OFFSET_MS);
+  // ローカル時間表示をしたときに「UTC+9の時刻の文字列」になるように、強引に new Date() で作り直すハックではなく、
+  // 日本時間の文字列から new Date() を作るのが最も安全。
+  const jpString = now.toLocaleString("en-US", { timeZone: "Asia/Tokyo" });
+  return new Date(jpString);
 }
 
 /**
@@ -21,8 +18,8 @@ export function nowJST(): Date {
  * 引数の Date が表すローカル時刻を JST の時刻として扱う．
  */
 export function toJST(date: Date): Date {
-  const utc = date.getTime() + date.getTimezoneOffset() * 60 * 1000;
-  return new Date(utc + JST_OFFSET_MS);
+  const jpString = date.toLocaleString("en-US", { timeZone: "Asia/Tokyo" });
+  return new Date(jpString);
 }
 
 /**
@@ -120,13 +117,14 @@ export function formatPercent(value: number): string {
  * 資産タイプ (AssetType) に対応する日本語の表示名を返す関数である．
  */
 export function assetTypeLabel(
-  type: "CASH" | "INVESTMENT" | "CRYPTO" | "POINT",
+  type: "CASH" | "INVESTMENT" | "CRYPTO" | "POINT" | "LIABILITY",
 ): string {
   const labels: Record<string, string> = {
     CASH: "預金・現金",
     INVESTMENT: "投資信託・証券",
     CRYPTO: "暗号資産",
     POINT: "ポイント",
+    LIABILITY: "負債",
   };
   return labels[type] ?? type;
 }
@@ -136,13 +134,14 @@ export function assetTypeLabel(
  * グラフなどの UI 要素での色分けに使用することを想定している．
  */
 export function assetTypeColor(
-  type: "CASH" | "INVESTMENT" | "CRYPTO" | "POINT",
+  type: "CASH" | "INVESTMENT" | "CRYPTO" | "POINT" | "LIABILITY",
 ): string {
   const colors: Record<string, string> = {
     CASH: "#3b82f6", // Blue
     INVESTMENT: "#8b5cf6", // Violet
     CRYPTO: "#f59e0b", // Amber
     POINT: "#10b981", // Emerald
+    LIABILITY: "#ef4444", // Red
   };
   return colors[type] ?? "#94a3b8";
 }

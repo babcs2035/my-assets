@@ -11,6 +11,7 @@ import { formatJSTDate, nowJST, todayJST, yesterdayJST } from "@/lib/utils";
 export async function getDashboardKPI() {
   console.log("📊 Calculating dashboard KPIs...");
   const subAccounts = await prisma.subAccount.findMany({
+    where: { isHidden: false },
     select: {
       id: true,
       balance: true,
@@ -19,11 +20,11 @@ export async function getDashboardKPI() {
   });
 
   const totalAssets = subAccounts
-    .filter(sa => sa.balance > 0)
+    .filter(sa => sa.assetType !== "LIABILITY" && sa.balance > 0)
     .reduce((sum, sa) => sum + sa.balance, 0);
 
   const totalLiabilities = subAccounts
-    .filter(sa => sa.balance < 0)
+    .filter(sa => sa.assetType === "LIABILITY")
     .reduce((sum, sa) => sum + sa.balance, 0);
 
   const netWorth = totalAssets + totalLiabilities;
@@ -38,6 +39,7 @@ export async function getDashboardKPI() {
 
   const yesterdayHistories = await prisma.balanceHistory.findMany({
     where: {
+      subAccount: { isHidden: false },
       date: {
         gte: yesterday,
         lt: today,
@@ -104,6 +106,7 @@ export async function getAssetHistory(days?: number) {
 
   // 全 SubAccount の資産タイプを取得
   const subAccounts = await prisma.subAccount.findMany({
+    where: { isHidden: false },
     select: {
       id: true,
       assetType: true,
@@ -118,6 +121,7 @@ export async function getAssetHistory(days?: number) {
   // 対象期間の balanceHistory を取得
   const histories = await prisma.balanceHistory.findMany({
     where: {
+      subAccount: { isHidden: false },
       date: { gte: since },
     },
     select: {
@@ -134,7 +138,7 @@ export async function getAssetHistory(days?: number) {
   for (const h of histories) {
     const dateKey = formatJSTDate(h.date);
     if (!grouped[dateKey]) {
-      grouped[dateKey] = { CASH: 0, INVESTMENT: 0, CRYPTO: 0, POINT: 0 };
+      grouped[dateKey] = { CASH: 0, INVESTMENT: 0, CRYPTO: 0, POINT: 0, LIABILITY: 0 };
     }
     const assetType = assetTypeMap.get(h.subAccountId) ?? "CASH";
     grouped[dateKey][assetType] += h.balance;
@@ -148,7 +152,8 @@ export async function getAssetHistory(days?: number) {
         (values.CASH ?? 0) +
         (values.INVESTMENT ?? 0) +
         (values.CRYPTO ?? 0) +
-        (values.POINT ?? 0),
+        (values.POINT ?? 0) +
+        (values.LIABILITY ?? 0),
     }))
     .sort((a, b) => a.date.localeCompare(b.date)) as Array<{
     date: string;
@@ -157,6 +162,7 @@ export async function getAssetHistory(days?: number) {
     INVESTMENT: number;
     CRYPTO: number;
     POINT: number;
+    LIABILITY: number;
   }>;
 }
 
@@ -171,6 +177,7 @@ export async function getExpiringPoints() {
 
   return prisma.pointDetail.findMany({
     where: {
+      subAccount: { isHidden: false },
       expirationDate: {
         lte: oneMonthLater,
         gt: now,

@@ -7,6 +7,7 @@ import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import {
   reorderSubAccounts,
+  updateSubAccountHidden,
   updateSubAccountAssetType,
 } from "@/actions/accounts";
 import {
@@ -16,6 +17,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { assetTypeColor, formatCurrency } from "@/lib/utils";
 
 /**
@@ -99,6 +101,22 @@ export function AccountSubAccountManager({
     });
   };
 
+  const handleHiddenChange = async (subAccountId: string, isHidden: boolean) => {
+    try {
+      await updateSubAccountHidden(subAccountId, isHidden);
+      setItems(prev =>
+        prev.map(item =>
+          item.id === subAccountId ? { ...item, isHidden } : item,
+        ),
+      );
+      toast.success(isHidden ? "子口座を非表示にしました。" : "子口座を表示にしました。");
+      router.refresh();
+    } catch (error) {
+      console.error("❌ Failed to update hidden state:", error);
+      toast.error("表示設定の更新に失敗しました。");
+    }
+  };
+
   return (
     <div className="space-y-2">
       {/* 子口座リスト */}
@@ -130,23 +148,34 @@ export function AccountSubAccountManager({
             </p>
           </div>
 
-          {/* 区分変更用のセレクトボックス */}
-          <Select
-            defaultValue={sa.assetType}
-            onValueChange={(val: string) =>
-              handleAssetTypeChange(sa.id, val as AssetType)
-            }
-          >
-            <SelectTrigger className="h-8 w-[140px] text-xs shrink-0">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="CASH">預金・現金</SelectItem>
-              <SelectItem value="INVESTMENT">投資信託・証券</SelectItem>
-              <SelectItem value="CRYPTO">暗号資産</SelectItem>
-              <SelectItem value="POINT">ポイント</SelectItem>
-            </SelectContent>
-          </Select>
+          <div className="flex items-center gap-3 shrink-0">
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-zinc-500">非表示</span>
+              <Switch
+                checked={sa.isHidden}
+                onCheckedChange={checked => handleHiddenChange(sa.id, checked)}
+              />
+            </div>
+
+            {/* 区分変更用のセレクトボックス */}
+            <Select
+              defaultValue={sa.assetType}
+              onValueChange={(val: string) =>
+                handleAssetTypeChange(sa.id, val as AssetType)
+              }
+            >
+              <SelectTrigger className="h-8 w-[140px] text-xs shrink-0">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="CASH">預金・現金</SelectItem>
+                <SelectItem value="INVESTMENT">投資信託・証券</SelectItem>
+                <SelectItem value="CRYPTO">暗号資産</SelectItem>
+                <SelectItem value="POINT">ポイント</SelectItem>
+                <SelectItem value="LIABILITY">負債</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
         </div>
       ))}
     </div>

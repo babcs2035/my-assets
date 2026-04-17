@@ -148,7 +148,7 @@ export function AccountList({
 
                   {/* 資産タイプ別の内訳 */}
                   <div className="mt-3 space-y-1">
-                    {(["CASH", "INVESTMENT", "CRYPTO", "POINT"] as const).map(
+                    {(["CASH", "INVESTMENT", "CRYPTO", "POINT", "LIABILITY"] as const).map(
                       type => {
                         const typeBalance = account.subAccounts
                           .filter(sa => sa.assetType === type)

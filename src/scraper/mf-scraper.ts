@@ -3,10 +3,15 @@ import { execSync } from "node:child_process";
 import { chromium, type Page } from "playwright";
 import { generateTransactionId } from "../lib/hash";
 import { prisma } from "../lib/prisma";
-import { todayJST } from "../lib/utils";
+import { formatJSTDate, todayJST } from "../lib/utils";
 
 const normalizeInstitutionName = (name: string) =>
-  name.split("(")[0].replace(/\s+/g, " ").trim();
+  name
+    .split(/[（(]/)[0]
+    .replace(/\s+/g, " ")
+    .trim();
+
+const MF_BACKFILL_START_DATE = "2023-01-01";
 
 const normalizeLoose = (value: string) =>
   value
@@ -51,42 +56,149 @@ function getCredentials(itemName: string) {
   }
 }
 
-/**
- * アカウント一覧ページから金融機関のリンク情報を取得するヘルパー関数
- */
-async function getAccountLinks(page: Page) {
-  // 詳細ページ（/accounts/show/xxx）にいる場合も includes("/accounts") がヒットしてしまうので、
-  // 厳密なURL比較または要素の存在確認を行う。
-  const isAccountsPage =
-    page.url().replace(/\/$/, "") === "https://moneyforward.com/accounts";
-  const hasTable = (await page.locator("#account-table").count()) > 0;
+type MfSubAccountSummary = {
+  sub_account_id_hash: string;
+  sub_name: string;
+  sub_type: string;
+  sub_number: string;
+  is_point?: boolean;
+  includes_liability?: boolean;
+  user_asset_det_summaries?: Array<{
+    value?: number;
+    jpyvalue?: number;
+  }>;
+};
 
-  if (!isAccountsPage || !hasTable) {
-    await page.goto("https://moneyforward.com/accounts");
-  }
+type MfAccountSummary = {
+  name: string;
+  account_id_hash: string;
+  show_path: string;
+  service_category_id?: string | number;
+  sub_accounts?: MfSubAccountSummary[];
+};
 
-  try {
-    await page.waitForSelector("#account-table", { timeout: 30000 });
-  } catch {
-    console.warn(`⚠️ Account table not found. Current URL: ${page.url()}`);
-    return [];
-  }
+function buildSubAccountMergeName(subType: string, subName: string): string {
+  const normalizedType = subType?.trim();
+  if (normalizedType) return normalizedType;
+  const normalizedName = subName?.trim();
+  if (normalizedName) return normalizedName;
+  return "メイン";
+}
 
-  return await page.evaluate(() => {
-    return Array.from(document.querySelectorAll("#account-table tbody tr"))
-      .map(row => {
-        const serviceLink = row.querySelector("td.service a");
-        let name = serviceLink?.textContent?.trim() ?? "Unknown";
-        // "(本サイト)" などを除去
-        name = name.split("(")[0].trim();
-        return {
-          hash: row.id,
-          name,
-          href: (serviceLink as HTMLAnchorElement)?.href ?? null,
-        };
-      })
-      .filter(acc => acc.name && acc.href);
+function extractShowAccountId(showPath: string): string | null {
+  const match = showPath.match(/\/sp2\/accounts\/([^/?#]+)/);
+  return match?.[1] ?? null;
+}
+
+async function fetchJson<T>(page: Page, url: string): Promise<T> {
+  const res = await page.request.get(url, {
+    headers: {
+      accept: "application/json, text/plain, */*",
+      "x-requested-with": "XMLHttpRequest",
+    },
   });
+  if (!res.ok()) {
+    const body = await res.text();
+    throw new Error(
+      `API request failed (${res.status()}): ${url}\n${body.slice(0, 300)}`,
+    );
+  }
+  return (await res.json()) as T;
+}
+
+async function fetchAccountSummaries(page: Page): Promise<MfAccountSummary[]> {
+  const payload = await fetchJson<{ accounts?: MfAccountSummary[] }>(
+    page,
+    "https://moneyforward.com/sp2/account_summaries",
+  );
+  return payload.accounts ?? [];
+}
+
+async function fetchTermDataBySubAccount(
+  page: Page,
+  subAccountIdHash: string,
+  from: string,
+  to: string,
+) {
+  const params = new URLSearchParams({
+    sub_account_id_hash: subAccountIdHash,
+    from,
+    to,
+  });
+  return await fetchJson<{
+    result?: string;
+    user_asset_acts?: Array<{
+      user_asset_act: {
+        id: number;
+        content: string;
+        amount: number;
+        recognized_at: string;
+        is_transfer: boolean;
+        transfer_type?: string;
+        sub_account_id_hash?: string;
+        partner_act_id?: number;
+        partner_account?: {
+          partner_account?: {
+            account_id_hash?: string;
+            display_name?: string | null;
+          };
+        } | null;
+        partner_sub_account?: {
+          partner_sub_account?: {
+            sub_name?: string;
+            sub_type?: string;
+          };
+        } | null;
+        account?: {
+          account?: {
+            service?: {
+              service?: {
+                service_name?: string;
+              };
+            };
+          };
+        } | null;
+        sub_account?: {
+          sub_account?: {
+            sub_name?: string;
+            sub_type?: string;
+          };
+        } | null;
+        partner_act?: {
+          sub_account_id_hash?: string;
+          partner_sub_account_id_hash?: string;
+        } | null;
+      };
+    }>;
+  }>(
+    page,
+    `https://moneyforward.com/sp/cf_term_data_by_sub_account?${params.toString()}`,
+  );
+}
+
+type MfServiceDetailResponse = {
+  result?: string;
+  account_detail?: {
+    from_date?: string;
+    to_date?: string;
+    disp_sum_history?: Record<string, number[]>;
+  };
+};
+
+async function fetchServiceDetailBySubAccount(
+  page: Page,
+  accountIdHash: string,
+  subAccountIdHash: string,
+  range: number,
+) {
+  const params = new URLSearchParams({
+    sub_account_id_hash: subAccountIdHash,
+    range: String(range),
+  });
+  return await fetchJson<MfServiceDetailResponse>(
+    page,
+    `https://moneyforward.com/sp/service_detail/${accountIdHash}?${params.toString()}`,
+  );
 }
 
 /**
@@ -156,8 +268,8 @@ async function scrapeBalances(page: Page, providerId: string) {
     `📋 Target accounts (DB): ${Array.from(targetLabels).join(", ")}`,
   );
 
-  const accounts = await getAccountLinks(page);
-  const targetAccounts = accounts.filter(acc =>
+  const accountSummaries = await fetchAccountSummaries(page);
+  const targetAccounts = accountSummaries.filter(acc =>
     targetLabels.has(normalizeInstitutionName(acc.name)),
   );
 
@@ -170,143 +282,56 @@ async function scrapeBalances(page: Page, providerId: string) {
     subAccountName: string;
     balance: number;
     mfUrlId: string | null;
+    subAccountIdHash?: string;
+    accountIdHash?: string;
   }> = [];
 
   for (const account of targetAccounts) {
-    if (!account.href) continue;
-
-    try {
-      await page.waitForTimeout(1000 + Math.random() * 1000);
-      await page.goto(account.href, { timeout: 45000 });
-
-      // 詳細ページからサブアカウント情報を抽出
-      const subAccounts = await page.evaluate(() => {
-        const subResults: Array<{ subName: string; amount: number }> = [];
-
-        // 詳細セクション (#portfolio_det_...) 内のテーブルを優先
-        let tables = Array.from(
-          document.querySelectorAll("section[id^='portfolio_det_'] table"),
-        );
-        if (tables.length === 0) {
-          tables = Array.from(
-            document.querySelectorAll("section.accounts-form table.table-bordered, #accounts-show .span16 table.table-bordered"),
-          );
-        }
-
-        for (const table of tables) {
-          const headers = Array.from(table.querySelectorAll("thead th")).map(
-            th => th.textContent?.trim() || "",
-          );
-          const amountIdx = headers.findIndex(h =>
-            ["残高", "評価額", "資産"].some(k => h.includes(k)),
-          );
-          const nameIndices = headers
-            .map((h, i) =>
-              ["種類", "名称", "銘柄"].some(k => h.includes(k)) ? i : -1,
-            )
-            .filter(i => i !== -1);
-
-          const rows = Array.from(table.querySelectorAll("tbody tr"));
-          for (const row of rows) {
-            const cells = Array.from(row.querySelectorAll("td"));
-            if (cells.length < 2) continue;
-
-            let amountCandidate: number | null = null;
-            let subNameCandidate = "";
-
-            // 1. ヘッダーから特定
-            if (amountIdx !== -1 && cells[amountIdx]) {
-              const rawText = cells[amountIdx].textContent?.trim() ?? "";
-              const numStr = rawText.replace(/[^-\d]/g, "");
-              // 「-」のみ (ハイフン) や空文字、数字を含まない場合は 0 とする
-              if (numStr && /\d/.test(numStr)) {
-                amountCandidate = Number.parseInt(numStr, 10);
-              } else {
-                // 残高が「-」や空欄の金融機関 (例: 三井住友銀行) に対応
-                amountCandidate = 0;
-              }
-            }
-
-            if (nameIndices.length > 0) {
-              const parts = nameIndices
-                .map(i => cells[i]?.textContent?.trim())
-                .filter(s => s && s.length > 0);
-              if (parts.length > 0) subNameCandidate = parts.join(" ");
-            }
-
-            // 2. フォールバック
-            if (amountCandidate === null) {
-              const nameParts: string[] = [];
-              for (let i = cells.length - 1; i >= 0; i--) {
-                const text = cells[i].innerText.trim();
-                const cleanText = text.replace(/,/g, "");
-
-                if (amountCandidate === null) {
-                  const isCurrency =
-                    (text.includes("円") ||
-                      text.includes("pt") ||
-                      text.includes("USD")) &&
-                    /[0-9]/.test(cleanText);
-
-                  if (isCurrency) {
-                    const numStr = cleanText.replace(/[^-\d]/g, "");
-                    if (numStr) {
-                      amountCandidate = Number.parseInt(numStr, 10);
-                      continue;
-                    }
-                  }
-                }
-                if (text && subNameCandidate === "") {
-                  nameParts.unshift(text);
-                }
-              }
-              if (subNameCandidate === "" && nameParts.length > 0) {
-                subNameCandidate = nameParts.join(" ");
-              }
-            }
-
-            // 数値が "-" や空欄の場合は 0 として扱う（NaN 保存防止）
-            if (amountCandidate === null || !Number.isFinite(amountCandidate)) {
-              amountCandidate = 0;
-            }
-
-            if (subNameCandidate === "" && amountIdx !== -1) {
-              const other = cells.find(
-                (c, i) => i !== amountIdx && c.textContent?.trim(),
-              );
-              if (other)
-                subNameCandidate = other.textContent?.trim() || "メイン";
-            }
-
-            if (amountCandidate !== null && Number.isFinite(amountCandidate)) {
-              subResults.push({
-                subName:
-                  subNameCandidate.replace(/\s+/g, " ").trim() || "メイン",
-                amount: amountCandidate,
-              });
-            }
-          }
-        }
-        return subResults;
-      });
-
-      if (subAccounts.length > 0) {
-        for (const sa of subAccounts) {
-          results.push({
-            institutionName: account.name,
-            subAccountName: sa.subName,
-            balance: sa.amount,
-            mfUrlId: account.hash,
-          });
-        }
-      } else {
-        console.warn(
-          `⚠️ No sub accounts detected from balance table for "${account.name}". Skipping synthetic fallback.`,
-        );
+    const showAccountId = extractShowAccountId(account.show_path);
+    const subAccounts = account.sub_accounts ?? [];
+    const seenSubHashes = new Set<string>();
+    const mergedBySubType = new Map<
+      string,
+      {
+        institutionName: string;
+        subAccountName: string;
+        balance: number;
+        mfUrlId: string | null;
+        subAccountIdHash?: string;
+        accountIdHash?: string;
       }
-    } catch (e) {
-      console.error(`❌ Failed to scrape balances for ${account.name}:`, e);
+    >();
+
+    for (const sa of subAccounts) {
+      const subHash = sa.sub_account_id_hash;
+      if (!subHash || seenSubHashes.has(subHash)) continue;
+      seenSubHashes.add(subHash);
+
+      const subAccountName = buildSubAccountMergeName(sa.sub_type, sa.sub_name);
+      const summaries = sa.user_asset_det_summaries ?? [];
+      const balance = Math.trunc(
+        summaries.reduce((sum, item) => {
+          const value = item.jpyvalue ?? item.value ?? 0;
+          return sum + (Number.isFinite(value) ? value : 0);
+        }, 0),
+      );
+
+      const existing = mergedBySubType.get(subAccountName);
+      if (existing) {
+        existing.balance += balance;
+      } else {
+        mergedBySubType.set(subAccountName, {
+          institutionName: normalizeInstitutionName(account.name),
+          subAccountName,
+          balance,
+          mfUrlId: showAccountId,
+          subAccountIdHash: subHash,
+          accountIdHash: account.account_id_hash,
+        });
+      }
     }
+
+    results.push(...mergedBySubType.values());
   }
 
   console.log(`✅ Collected ${results.length} balances.`);
@@ -319,12 +344,12 @@ async function scrapeBalances(page: Page, providerId: string) {
 async function scrapeTransactions(
   page: Page,
   providerId: string,
-  balances: Awaited<ReturnType<typeof scrapeBalances>>,
-  allSubAccountNames: Map<string, string[]>, // 全金融機関の子口座名（振替解析用）
+  _balances: Awaited<ReturnType<typeof scrapeBalances>>,
+  _allSubAccountNames: Map<string, string[]>, // 全金融機関の子口座名（将来のフォールバック用）
+  options: MfScraperOptions,
 ) {
-  console.log("📝 Scraping transactions (Current & Previous month)...");
+  console.log("📝 Scraping transactions via MF APIs...");
 
-  // DB情報の取得
   const mainAccounts = await prisma.mainAccount.findMany({
     where: { providerId },
     select: {
@@ -334,342 +359,202 @@ async function scrapeTransactions(
     },
   });
 
-  const accountConfigMap = new Map<
-    string,
-    { subAccountNames: string[]; hasExistingTransactions: boolean }
-  >();
-
-  const balanceSubNamesByInstitution = new Map<string, Set<string>>();
-  for (const b of balances) {
-    const key = normalizeInstitutionName(b.institutionName);
-    if (!balanceSubNamesByInstitution.has(key)) {
-      balanceSubNamesByInstitution.set(key, new Set());
-    }
-    const bucket = balanceSubNamesByInstitution.get(key)!;
-    if (!isPlaceholderSubAccountName(b.subAccountName)) {
-      bucket.add(b.subAccountName);
-    }
-  }
-
-  for (const ma of mainAccounts) {
-    const txCount = await prisma.transaction.count({
-      where: {
-        subAccount: {
-          mainAccountId: ma.id,
-        },
-      },
-    });
-    // allSubAccountNames からも子口座名を取得して統合
-    const instKey = normalizeInstitutionName(ma.label);
-    const fromAllDb = allSubAccountNames.get(instKey) ?? [];
-    accountConfigMap.set(
-      instKey,
-      {
-        subAccountNames: Array.from(
-          new Set([
-            ...ma.subAccounts.map(s => s.currentName),
-            ...(balanceSubNamesByInstitution.get(instKey) ?? []),
-            ...fromAllDb,
-          ]),
-        ),
-        hasExistingTransactions: txCount > 0,
-      },
-    );
-  }
-  const hasAnyNewAccount = Array.from(accountConfigMap.values()).some(
-    config => !config.hasExistingTransactions,
+  const targetInstitutionNames = new Set(
+    mainAccounts.map(ma => normalizeInstitutionName(ma.label)),
   );
 
-  if (accountConfigMap.size === 0) {
+  if (targetInstitutionNames.size === 0) {
     console.log("⚠️ No registered accounts found for transactions.");
     return [];
   }
 
-  // リンク取得
-  const accounts = await getAccountLinks(page);
-  const targetAccounts = accounts.filter(acc =>
-    accountConfigMap.has(normalizeInstitutionName(acc.name)),
+  const allAccounts = await fetchAccountSummaries(page);
+  const targetAccounts = allAccounts.filter(acc =>
+    targetInstitutionNames.has(normalizeInstitutionName(acc.name)),
+  );
+  const accountNameByIdHash = new Map(
+    allAccounts.map(acc => [acc.account_id_hash, acc.name]),
   );
 
-  const allTransactions = [];
+  const globalSubAccountNameByHash = new Map<string, string>();
+  for (const account of targetAccounts) {
+    for (const sa of account.sub_accounts ?? []) {
+      if (!sa.sub_account_id_hash) continue;
+      globalSubAccountNameByHash.set(
+        sa.sub_account_id_hash,
+        buildSubAccountMergeName(sa.sub_type, sa.sub_name),
+      );
+    }
+  }
+
+  const allTransactions: Array<{
+    date: string;
+    desc: string;
+    amount: number;
+    institutionName: string;
+    subAccountName: string;
+    msgUrlId: string;
+    rawInfo: string;
+    isTransfer: boolean;
+    transferFromSubAccount?: string;
+    transferToSubAccount?: string;
+    subAccountIdHash?: string;
+    partnerSubAccountIdHash?: string;
+    partnerInstitutionName?: string;
+    partnerSubAccountName?: string;
+  }> = [];
+  const seenActIds = new Set<number>();
+
+  const currentMonthStart = new Date();
+  currentMonthStart.setDate(1);
+  currentMonthStart.setHours(0, 0, 0, 0);
 
   for (const account of targetAccounts) {
-    const accountConfig = accountConfigMap.get(
-      normalizeInstitutionName(account.name),
-    );
-    if (!accountConfig) continue;
+    const isIncrementalSync = options.mode === "scheduled";
+    const minSyncMonth = MF_BACKFILL_START_DATE.slice(0, 7);
 
-    const knownSubNames = accountConfig.subAccountNames;
-    knownSubNames.sort((a, b) => b.length - a.length);
-    
-    // 振替解析用に全金融機関の子口座名を統合（長い順でソート）
-    const allSubNames = Array.from(
-      new Set([
-        ...knownSubNames,
-        ...Array.from(allSubAccountNames.values()).flat(),
-      ]),
-    ).sort((a, b) => b.length - a.length);
-    
-    // 新規口座が1つでもあれば全金融機関をバックフィル対象にする
-    const isIncrementalSync =
-      accountConfig.hasExistingTransactions && !hasAnyNewAccount;
+    const accountSubAccounts = (account.sub_accounts ?? [])
+      .filter(sa => sa.sub_account_id_hash)
+      .map(sa => ({
+        hash: sa.sub_account_id_hash,
+        name: buildSubAccountMergeName(sa.sub_type, sa.sub_name),
+      }));
+    const localSubNameByHash = new Map(
+      accountSubAccounts.map(sa => [sa.hash, sa.name]),
+    );
+
+    if (accountSubAccounts.length === 0) {
+      console.warn(
+        `⚠️ No sub accounts for ${account.name}. Skipping transactions.`,
+      );
+      continue;
+    }
 
     console.log(
-      `Processing transactions for ${account.name}... (${isIncrementalSync ? "incremental: 2 months" : "backfill to 2023-01"})`,
+      `Processing transactions for ${account.name}... (${isIncrementalSync ? "incremental: 2 months" : `backfill to ${minSyncMonth}`})`,
     );
-    await page.waitForTimeout(1000 + Math.random() * 1000);
-    await page.goto(account.href);
 
-    const scrapeCurrentPage = async () => {
-      try {
-        await page.waitForSelector("#cf-detail-table tbody.list_body", {
-          timeout: 10000,
-        });
-      } catch {
-        return [];
-      }
-
-      return await page.evaluate(
-        ({ institutionName, subAccountNames, allSubAccountNamesForTransfer }) => {
-          const normalize = (value: string) =>
-            value
-              .normalize("NFKC")
-              .replace(/\s+/g, "")
-              .replace(/[()（）「」『』【】\-ー―‐\/・.,]/g, "")
-              .toLowerCase();
-
-          const rows = Array.from(
-            document.querySelectorAll(
-              "#cf-detail-table tbody.list_body tr.transaction_list",
-            ),
-          );
-          const res: Array<{
-            date: string;
-            desc: string;
-            amount: number;
-            institutionName: string;
-            subAccountName: string;
-            msgUrlId: string;
-            rawInfo: string;
-            isTransfer: boolean;
-            transferFromSubAccount?: string;
-            transferToSubAccount?: string;
-          }> = [];
-
-          for (const row of rows) {
-            const dateCell = row.querySelector("td.date");
-            const dateRaw =
-              dateCell?.getAttribute("data-table-sortable-value") ?? "";
-            // dateRaw format: "2024/01/15-0" or "2024-01-15-0"
-            // Extract date part (YYYY/MM/DD or YYYY-MM-DD) and normalize to YYYY-MM-DD
-            const dateMatch = dateRaw.match(/(\d{4})[\/\-](\d{2})[\/\-](\d{2})/);
-            const date = dateMatch ? `${dateMatch[1]}-${dateMatch[2]}-${dateMatch[3]}` : "";
-
-            const contentCell = row.querySelector("td.content");
-            const desc = contentCell?.textContent?.trim() ?? "";
-
-            const amountCell = row.querySelector("td.amount");
-            const amountText =
-              amountCell?.querySelector("span.offset")?.textContent?.trim() ??
-              "0";
-            const amount = parseInt(amountText.replace(/,/g, ""), 10);
-            if (!Number.isFinite(amount)) continue;
-
-            // 振替かどうかをチェック
-            let isTransfer = amountCell?.textContent?.includes("(振替)") ?? false;
-
-            const idAttr = row.getAttribute("id");
-            const msgUrlId = idAttr
-              ? idAttr.replace("js-transaction-", "")
-              : "";
-
-            const accountCell = row.querySelectorAll("td")[4];
-            const accText = accountCell?.textContent?.trim() ?? "";
-            const accTitle = accountCell?.getAttribute("title") ?? "";
-            const accDataTitle =
-              accountCell?.getAttribute("data-original-title") ?? "";
-
-            // 振替の場合、元と先の子口座名をパース
-            // 例: "住信SBIネット銀行 109 代表口座 - 円普通 7089114から住信SBIネット銀行 109 SBIハイブリッド預金 7089114への振替"
-            let transferFromSubAccount: string | undefined;
-            let transferToSubAccount: string | undefined;
-
-            if (accDataTitle) {
-              const transferMatch =
-                accDataTitle.match(/(.+?)から(.+?)への振替/);
-              if (transferMatch) {
-                isTransfer = true;
-                const fromPart = transferMatch[1];
-                const toPart = transferMatch[2];
-                const normalizedFromPart = normalize(fromPart);
-                const normalizedToPart = normalize(toPart);
-
-                // 振替の子口座名を抽出（全金融機関の子口座名を使用、長い順でマッチング）
-                for (const name of allSubAccountNamesForTransfer) {
-                  const normalizedName = normalize(name);
-                  if (
-                    !transferFromSubAccount &&
-                    (fromPart.includes(name) ||
-                      normalizedFromPart.includes(normalizedName))
-                  ) {
-                    transferFromSubAccount = name;
-                  }
-                  if (
-                    !transferToSubAccount &&
-                    (toPart.includes(name) ||
-                      normalizedToPart.includes(normalizedName))
-                  ) {
-                    transferToSubAccount = name;
-                  }
-                }
-
-                // 片側しか特定できない場合は、現在の金融機関の子口座から補完を試みる
-                if (
-                  (!transferFromSubAccount || !transferToSubAccount) &&
-                  subAccountNames.length >= 2
-                ) {
-                  const remaining = subAccountNames.filter(
-                    name =>
-                      name !== transferFromSubAccount &&
-                      name !== transferToSubAccount,
-                  );
-                  if (!transferFromSubAccount && remaining.length === 1) {
-                    transferFromSubAccount = remaining[0];
-                  }
-                  if (!transferToSubAccount && remaining.length === 1) {
-                    transferToSubAccount = remaining[0];
-                  }
-                }
-              }
-            }
-
-            // すべての情報を統合して判定に使用
-            // 振替でない明細では td.content に子口座名が入るケースがあるため desc も含める。
-            const info = (
-              desc +
-              " " +
-              accText +
-              " " +
-              accTitle +
-              " " +
-              accDataTitle
-            ).replace(/\s+/g, " ");
-            const normalizedInfo = normalize(info);
-            const normalizedDesc = normalize(desc);
-
-            let subAccountName = "";
-            for (const name of subAccountNames) {
-              const normalizedName = normalize(name);
-              if (
-                info.includes(name) ||
-                normalizedInfo.includes(normalizedName) ||
-                normalizedDesc.includes(normalizedName)
-              ) {
-                subAccountName = name;
-                break;
-              }
-            }
-            // 完全一致でも補完
-            if (!subAccountName) {
-              for (const name of subAccountNames) {
-                if (desc === name || desc.includes(name) || name.includes(desc)) {
-                  subAccountName = name;
-                  break;
-                }
-              }
-            }
-            if (!subAccountName) {
-              if (subAccountNames.length === 1) {
-                subAccountName = subAccountNames[0];
-              } else if (isTransfer && transferFromSubAccount && transferToSubAccount) {
-                const candidate = amount < 0 ? transferFromSubAccount : transferToSubAccount;
-                // candidate が現在の金融機関の子口座として存在する場合のみ採用する
-                if (subAccountNames.includes(candidate)) {
-                  subAccountName = candidate;
-                } else {
-                  subAccountName = "";
-                }
-              } else {
-                subAccountName = "";
-              }
-            }
-
-            if (date && subAccountName) {
-              res.push({
-                date,
-                desc,
-                amount,
-                institutionName,
-                subAccountName,
-                msgUrlId,
-                rawInfo: info,
-                isTransfer,
-                transferFromSubAccount,
-                transferToSubAccount,
-              });
-            }
-          }
-          return res;
-        },
-        {
-          institutionName: account.name,
-          subAccountNames: knownSubNames,
-          allSubAccountNamesForTransfer: allSubNames,
-        },
-      );
-    };
-
-    // 月次明細の取得ループ
-    // - 既存データあり: 過去2ヶ月を取得・更新
-    // - データなし(初回): 2023年1月まで遡って取得
     const maxMonths = isIncrementalSync
       ? 2
       : Number(process.env.MF_MAX_SYNC_MONTHS ?? 240);
-    const minSyncMonth = "2023-01";
-    let monthsCount = 0;
 
-    while (monthsCount < maxMonths) {
-      monthsCount++;
-      const currentTransactions = await scrapeCurrentPage();
-      allTransactions.push(...currentTransactions);
+    const cursor = new Date(currentMonthStart);
+    let processedMonths = 0;
 
-      if (!isIncrementalSync) {
-        const reachedMinMonth = currentTransactions.some(tx => {
-          const month = tx.date.slice(0, 7);
-          return month <= minSyncMonth;
-        });
-        if (reachedMinMonth) {
-          console.log(
-            `  ⏹ Reached minimum sync month (${minSyncMonth}) for ${account.name}`,
-          );
-          break;
-        }
-      }
+    while (processedMonths < maxMonths) {
+      const yyyy = cursor.getFullYear();
+      const mm = String(cursor.getMonth() + 1).padStart(2, "0");
+      const monthKey = `${yyyy}-${mm}`;
 
-      const prevBtn = page.locator("button.fc-button-prev");
-      if ((await prevBtn.count()) > 0 && (await prevBtn.isVisible())) {
-        const headerTitle = page.locator(".fc-header-title h2");
-        const currentTitle = await headerTitle.textContent();
-
-        // 前月ボタンをクリックして遷移を待機
-        await prevBtn.click();
-        try {
-          await page.waitForFunction(
-            old => {
-              const el = document.querySelector(".fc-header-title h2");
-              return el && el.textContent !== old;
-            },
-            currentTitle,
-            { timeout: 10000 },
-          );
-          await page.waitForTimeout(1000);
-        } catch {
-          console.warn(`  ℹ️ Cannot navigate further back for ${account.name}`);
-          break;
-        }
-      } else {
+      if (!isIncrementalSync && monthKey < minSyncMonth) {
         break;
       }
+
+      const from = `${monthKey}-01`;
+      const monthEnd = new Date(yyyy, cursor.getMonth() + 1, 0);
+      const to = `${monthKey}-${String(monthEnd.getDate()).padStart(2, "0")}`;
+
+      for (const sa of accountSubAccounts) {
+        try {
+          const payload = await fetchTermDataBySubAccount(
+            page,
+            sa.hash,
+            from,
+            to,
+          );
+          const acts = payload.user_asset_acts ?? [];
+
+          for (const wrapper of acts) {
+            const act = wrapper.user_asset_act;
+            if (!act || seenActIds.has(act.id)) continue;
+            seenActIds.add(act.id);
+
+            const recognizedDate = act.recognized_at?.slice(0, 10);
+            const amount = Math.trunc(Number(act.amount));
+            if (!recognizedDate || !Number.isFinite(amount)) continue;
+
+            const subAccountIdHash = act.sub_account_id_hash ?? sa.hash;
+            const partnerSubAccountIdHash =
+              act.partner_act?.sub_account_id_hash ??
+              act.partner_act?.partner_sub_account_id_hash ??
+              undefined;
+            const partnerAccountIdHash =
+              act.partner_account?.partner_account?.account_id_hash;
+
+            const currentSubName =
+              localSubNameByHash.get(subAccountIdHash) ??
+              globalSubAccountNameByHash.get(subAccountIdHash) ??
+              sa.name;
+
+            const partnerSubFromPayload = buildSubAccountMergeName(
+              act.partner_sub_account?.partner_sub_account?.sub_type ?? "",
+              act.partner_sub_account?.partner_sub_account?.sub_name ?? "",
+            );
+            const currentSubFromPayload = buildSubAccountMergeName(
+              act.sub_account?.sub_account?.sub_type ?? "",
+              act.sub_account?.sub_account?.sub_name ?? "",
+            );
+            const partnerSubName = partnerSubAccountIdHash
+              ? globalSubAccountNameByHash.get(partnerSubAccountIdHash)
+              : partnerSubFromPayload !== "メイン"
+                ? partnerSubFromPayload
+                : undefined;
+            const partnerInstitutionName =
+              (partnerAccountIdHash
+                ? accountNameByIdHash.get(partnerAccountIdHash)
+                : undefined) ??
+              act.partner_account?.partner_account?.display_name ??
+              undefined;
+
+            let transferFromSubAccount: string | undefined;
+            let transferToSubAccount: string | undefined;
+            if (act.is_transfer && partnerSubName) {
+              if (amount < 0) {
+                transferFromSubAccount =
+                  currentSubName || currentSubFromPayload || sa.name;
+                transferToSubAccount = partnerSubName;
+              } else {
+                transferFromSubAccount = partnerSubName;
+                transferToSubAccount =
+                  currentSubName || currentSubFromPayload || sa.name;
+              }
+            }
+
+            allTransactions.push({
+              date: recognizedDate,
+              desc: (act.content || "").trim(),
+              amount,
+              institutionName: normalizeInstitutionName(account.name),
+              subAccountName: currentSubName,
+              msgUrlId: String(act.id),
+              rawInfo: JSON.stringify({
+                transferType: act.transfer_type,
+                subAccountIdHash,
+                partnerSubAccountIdHash,
+                partnerAccountIdHash,
+                partnerInstitutionName,
+                partnerSubName,
+                partnerActId: act.partner_act_id,
+              }),
+              isTransfer: Boolean(act.is_transfer),
+              transferFromSubAccount,
+              transferToSubAccount,
+              subAccountIdHash,
+              partnerSubAccountIdHash,
+              partnerInstitutionName: partnerInstitutionName ?? undefined,
+              partnerSubAccountName: partnerSubName ?? undefined,
+            });
+          }
+        } catch (error) {
+          console.warn(
+            `⚠️ Failed to fetch transactions: account=${account.name}, subHash=${sa.hash}, range=${from}..${to}`,
+            error,
+          );
+        }
+      }
+
+      processedMonths++;
+      cursor.setMonth(cursor.getMonth() - 1);
     }
   }
 
@@ -682,11 +567,86 @@ async function scrapeTransactions(
  * URL: https://moneyforward.com/bs/history/list/{YYYY-MM-DD}
  * 履歴ページには全金融機関のデータが含まれるため、一度のループで全口座を処理する。
  */
-async function scrapeBalanceHistory(page: Page) {
-  console.log("📊 Scraping balance history from history pages (all accounts)...");
+async function scrapeBalanceHistory(page: Page, options: MfScraperOptions) {
+  console.log("📊 Scraping balance history via service_detail API...");
 
-  // DB から全金融機関と子口座を取得
+  const toJstMidnight = (dateStr: string) =>
+    new Date(`${dateStr}T00:00:00+09:00`);
+  const formatYmd = (d: Date) => formatJSTDate(d);
+  const diffDaysInclusive = (from: Date, to: Date) =>
+    Math.floor((to.getTime() - from.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+  const buildHistoryFromTransactions = async (
+    subAccountId: string,
+    latestBalance: number,
+  ) => {
+    const txs = await prisma.transaction.findMany({
+      where: {
+        subAccountId,
+        date: { gte: minDate, lte: today },
+      },
+      select: {
+        date: true,
+        amount: true,
+      },
+    });
+
+    const dailyNetByDate = new Map<string, number>();
+    for (const tx of txs) {
+      const dateKey = formatJSTDate(tx.date);
+      dailyNetByDate.set(dateKey, (dailyNetByDate.get(dateKey) ?? 0) + tx.amount);
+    }
+
+    const inferredHistory = new Map<string, number>();
+    let runningBalance = Math.trunc(latestBalance);
+    for (
+      let cursor = new Date(today);
+      cursor.getTime() >= minDate.getTime();
+      cursor = new Date(cursor.getTime() - 24 * 60 * 60 * 1000)
+    ) {
+      const dateKey = formatYmd(cursor);
+      inferredHistory.set(dateKey, runningBalance);
+      runningBalance -= dailyNetByDate.get(dateKey) ?? 0;
+    }
+    return inferredHistory;
+  };
+  const parseMergedHistory = (
+    detail?: MfServiceDetailResponse["account_detail"],
+    options?: { preferLiabilitySeries?: boolean },
+  ) => {
+    const toDateStr = detail?.to_date;
+    const fromDateStr = detail?.from_date;
+    const histories = detail?.disp_sum_history ?? {};
+    const historyEntries = Object.entries(histories).filter(
+      (entry): entry is [string, number[]] =>
+        Array.isArray(entry[1]) && entry[1].length > 0,
+    );
+    const preferredSeriesByType = options?.preferLiabilitySeries
+      ? historyEntries
+          .filter(([key]) => key.toUpperCase().includes("LIA"))
+          .map(([, series]) => series)
+      : [];
+    const seriesByType =
+      preferredSeriesByType.length > 0
+        ? preferredSeriesByType
+        : historyEntries.map(([, series]) => series);
+    if (!toDateStr || seriesByType.length === 0) return null;
+
+    const seriesLen = Math.max(...seriesByType.map(arr => arr.length));
+    if (seriesLen <= 0) return null;
+
+    const mergedSeries = Array.from({ length: seriesLen }, (_, index) =>
+      Math.trunc(seriesByType.reduce((sum, arr) => sum + (arr[index] ?? 0), 0)),
+    );
+    return { toDateStr, fromDateStr, mergedSeries };
+  };
+
+  const providers = await prisma.provider.findMany({
+    where: { type: "mf", isActive: true },
+    select: { id: true },
+  });
+  const providerIds = providers.map(p => p.id);
   const mainAccounts = await prisma.mainAccount.findMany({
+    where: { providerId: { in: providerIds } },
     include: { subAccounts: true },
   });
 
@@ -695,120 +655,213 @@ async function scrapeBalanceHistory(page: Page) {
     return;
   }
 
-  const targetInstitutions = new Set(
-    mainAccounts.map(ma => normalizeInstitutionName(ma.label)),
-  );
-
-  // 各金融機関の子口座を残高でソートしたマップを作成（マッチング用）
-  // 同一金融機関で複数の子口座がある場合、残高の順序で対応付ける
-  const subAccountsByInstitution = new Map<
-    string,
-    Array<{ id: string; currentName: string; balance: number }>
-  >();
-  for (const ma of mainAccounts) {
-    const key = normalizeInstitutionName(ma.label);
-    // 同一金融機関名が複数プロバイダーに存在する可能性があるため、追加する
-    const existing = subAccountsByInstitution.get(key) ?? [];
-    const subs = ma.subAccounts.map(sa => ({
-      id: sa.id,
-      currentName: sa.currentName,
-      balance: sa.balance,
-    }));
-    subAccountsByInstitution.set(key, [...existing, ...subs]);
+  const accountSummaries = await fetchAccountSummaries(page);
+  const summaryByShowId = new Map<string, MfAccountSummary>();
+  for (const summary of accountSummaries) {
+    const showId = extractShowAccountId(summary.show_path);
+    if (showId) {
+      summaryByShowId.set(showId, summary);
+    }
   }
 
-  // 残高降順でソート
-  for (const [key, subs] of subAccountsByInstitution) {
-    subs.sort((a, b) => b.balance - a.balance);
-  }
-
-  // 日付範囲: 今日から 2023-01-01 まで
   const today = todayJST();
-  const minDate = new Date("2023-01-01T00:00:00+09:00");
-  const currentDate = new Date(today);
-  currentDate.setHours(8, 0, 0, 0);
+  today.setHours(0, 0, 0, 0);
+
+  let minDate = new Date(today);
+  if (options.mode === "manual") {
+    minDate = toJstMidnight(MF_BACKFILL_START_DATE);
+  } else {
+    minDate.setMonth(minDate.getMonth() - 2);
+  }
+  minDate.setHours(0, 0, 0, 0);
+
+  const maxRangeDays = Number(process.env.MF_HISTORY_RANGE_DAYS ?? 3650);
+  const neededDays = Math.max(1, diffDaysInclusive(minDate, today));
+  const baseRangeCandidates = [30, 60, 90, 180, 365, 730, 1095, 1825, 3650];
+  const rangeCandidates = Array.from(
+    new Set(
+      [neededDays, ...baseRangeCandidates]
+        .map(v => Math.max(1, Math.min(v, maxRangeDays)))
+        .filter(v => v > 0),
+    ),
+  ).sort((a, b) => a - b);
 
   let totalSaved = 0;
-  let daysProcessed = 0;
+  let totalSubAccounts = 0;
 
-  while (currentDate >= minDate) {
-    const dateStr = currentDate.toISOString().slice(0, 10);
-    const url = `https://moneyforward.com/bs/history/list/${dateStr}`;
-
-    try {
-      await page.goto(url, { timeout: 30000 });
-      await page.waitForTimeout(500 + Math.random() * 500);
-
-      // テーブルが存在するか確認
-      const tableExists = await page.locator("#history-list").count();
-      if (tableExists === 0) {
-        console.warn(`  ⚠️ No history table found for ${dateStr}`);
-        currentDate.setDate(currentDate.getDate() - 1);
-        continue;
-      }
-
-      // テーブルから残高データを抽出
-      const historyData = await page.evaluate(() => {
-        const rows = Array.from(
-          document.querySelectorAll("#history-list tbody tr"),
+  for (const mainAccount of mainAccounts) {
+    const summary = mainAccount.mfUrlId
+      ? summaryByShowId.get(mainAccount.mfUrlId)
+      : accountSummaries.find(
+          acc =>
+            normalizeInstitutionName(acc.name) ===
+            normalizeInstitutionName(mainAccount.label),
         );
-        return rows.map(row => {
-          const cells = row.querySelectorAll("td");
-          const institution = cells[0]?.textContent?.trim() ?? "";
-          const assetType = cells[1]?.textContent?.trim() ?? "";
-          const amountText = cells[2]?.textContent?.trim() ?? "0";
-          const amount = parseInt(amountText.replace(/[^-\d]/g, ""), 10) || 0;
-          return { institution, assetType, amount };
-        });
-      });
 
-      // 金融機関ごとにグループ化
-      const groupedByInstitution = new Map<
-        string,
-        Array<{ assetType: string; amount: number }>
-      >();
-      for (const row of historyData) {
-        const key = normalizeInstitutionName(row.institution);
-        if (!targetInstitutions.has(key)) continue;
+    if (!summary || !summary.account_id_hash) {
+      continue;
+    }
 
-        if (!groupedByInstitution.has(key)) {
-          groupedByInstitution.set(key, []);
-        }
-        groupedByInstitution.get(key)!.push({
-          assetType: row.assetType,
-          amount: row.amount,
+    const subSummaryByDisplayName = new Map<string, MfSubAccountSummary[]>();
+    const subSummaryByNormalizedDisplay = new Map<string, MfSubAccountSummary[]>();
+    for (const sa of summary.sub_accounts ?? []) {
+      const display = buildSubAccountMergeName(sa.sub_type, sa.sub_name);
+      const byDisplay = subSummaryByDisplayName.get(display) ?? [];
+      byDisplay.push(sa);
+      subSummaryByDisplayName.set(display, byDisplay);
+      const normalizedDisplay = normalizeLoose(display);
+      if (normalizedDisplay) {
+        const byNormalized =
+          subSummaryByNormalizedDisplay.get(normalizedDisplay) ?? [];
+        byNormalized.push(sa);
+        subSummaryByNormalizedDisplay.set(normalizedDisplay, byNormalized);
+      }
+    }
+
+    for (const subAccount of mainAccount.subAccounts) {
+      let candidateSubSummaries =
+        subSummaryByDisplayName.get(subAccount.currentName) ??
+        subSummaryByNormalizedDisplay.get(normalizeLoose(subAccount.currentName));
+      if (!candidateSubSummaries || candidateSubSummaries.length === 0) {
+        const normalizedSubName = normalizeLoose(subAccount.currentName);
+        candidateSubSummaries = (summary.sub_accounts ?? []).filter(sa => {
+          const display = buildSubAccountMergeName(sa.sub_type, sa.sub_name);
+          const normalizedDisplay = normalizeLoose(display);
+          return (
+            normalizedDisplay.includes(normalizedSubName) ||
+            normalizedSubName.includes(normalizedDisplay)
+          );
         });
       }
+      if (
+        (!candidateSubSummaries || candidateSubSummaries.length === 0) &&
+        subAccount.assetType === "LIABILITY"
+      ) {
+        const liabilityCandidates = (summary.sub_accounts ?? []).filter(
+          sa => sa.includes_liability,
+        );
+        if (liabilityCandidates.length > 0) {
+          candidateSubSummaries = liabilityCandidates;
+        }
+      }
+      if (
+        (!candidateSubSummaries || candidateSubSummaries.length === 0) &&
+        (summary.sub_accounts?.length ?? 0) === 1
+      ) {
+        candidateSubSummaries = summary.sub_accounts ?? [];
+      }
+      if (!candidateSubSummaries || candidateSubSummaries.length === 0) continue;
+      const uniqueCandidateSubSummaries = Array.from(
+        new Map(
+          candidateSubSummaries
+            .filter(sa => Boolean(sa.sub_account_id_hash))
+            .map(sa => [sa.sub_account_id_hash, sa]),
+        ).values(),
+      );
+      if (uniqueCandidateSubSummaries.length === 0) continue;
+      totalSubAccounts++;
 
-      // 子口座とマッチングして保存
-      const historyDate = new Date(dateStr + "T08:00:00+09:00");
+      try {
+        let mergedHistoryByDate = new Map<string, number>();
 
-      for (const [instKey, amounts] of groupedByInstitution) {
-        const subAccounts = subAccountsByInstitution.get(instKey);
-        if (!subAccounts) continue;
+        for (const subSummary of uniqueCandidateSubSummaries) {
+          let best: {
+            range: number;
+            toDateStr: string;
+            fromDateStr?: string;
+            mergedSeries: number[];
+          } | null = null;
 
-        // 同一金融機関の行を金額降順でソート（子口座の残高順と対応させる）
-        const sortedAmounts = [...amounts].sort((a, b) => b.amount - a.amount);
+          for (const range of rangeCandidates) {
+            const payload = await fetchServiceDetailBySubAccount(
+              page,
+              summary.account_id_hash,
+              subSummary.sub_account_id_hash,
+              range,
+            );
+            const parsed = parseMergedHistory(payload.account_detail, {
+              preferLiabilitySeries: subAccount.assetType === "LIABILITY",
+            });
+            if (!parsed) continue;
 
-        // 子口座数と行数の対応
-        const matchCount = Math.min(subAccounts.length, sortedAmounts.length);
+            if (
+              !best ||
+              parsed.mergedSeries.length > best.mergedSeries.length ||
+              (parsed.mergedSeries.length === best.mergedSeries.length &&
+                range > best.range)
+            ) {
+              best = {
+                range,
+                toDateStr: parsed.toDateStr,
+                fromDateStr: parsed.fromDateStr,
+                mergedSeries: parsed.mergedSeries,
+              };
+            }
+          }
 
-        for (let i = 0; i < matchCount; i++) {
-          const sa = subAccounts[i];
-          const balance = sortedAmounts[i].amount;
+          if (!best) continue;
+          const { toDateStr, fromDateStr, mergedSeries } = best;
 
-          // NaN チェック
-          if (!Number.isFinite(balance)) continue;
+          const toDate = toJstMidnight(toDateStr);
+          const inferredFromDate = new Date(toDate);
+          inferredFromDate.setDate(toDate.getDate() - (mergedSeries.length - 1));
 
+          console.log(
+            `  📈 History range selected: ${mainAccount.label}/${subAccount.currentName} (subHash=${subSummary.sub_account_id_hash}) range=${best.range}, points=${mergedSeries.length}, from=${formatYmd(inferredFromDate)}, to=${toDateStr}`,
+          );
+
+          if (fromDateStr) {
+            const reportedFromDate = toJstMidnight(fromDateStr);
+            const expectedDays = diffDaysInclusive(reportedFromDate, toDate);
+            if (expectedDays !== mergedSeries.length) {
+              console.warn(
+                `⚠️ disp_sum_history length mismatch for ${mainAccount.label}/${subAccount.currentName} (subHash=${subSummary.sub_account_id_hash}): from_date=${fromDateStr}, to_date=${toDateStr}, expected=${expectedDays}, actual=${mergedSeries.length}. Using inferred range ${formatYmd(inferredFromDate)}..${toDateStr}.`,
+              );
+            }
+          }
+
+          for (let i = 0; i < mergedSeries.length; i++) {
+            const day = new Date(
+              inferredFromDate.getTime() + i * 24 * 60 * 60 * 1000,
+            );
+            if (day < minDate || day > today) continue;
+
+            const dateKey = formatYmd(day);
+            const balance = mergedSeries[i];
+            if (!Number.isFinite(balance)) continue;
+            mergedHistoryByDate.set(
+              dateKey,
+              Math.trunc((mergedHistoryByDate.get(dateKey) ?? 0) + balance),
+            );
+          }
+        }
+
+        const isAllZeroHistory =
+          mergedHistoryByDate.size > 0 &&
+          Array.from(mergedHistoryByDate.values()).every(balance => balance === 0);
+        if (options.mode === "manual" && isAllZeroHistory) {
+          console.warn(
+            `⚠️ service_detail history is all zero for ${mainAccount.label}/${subAccount.currentName}. Rebuilding from transactions.`,
+          );
+          mergedHistoryByDate = await buildHistoryFromTransactions(
+            subAccount.id,
+            subAccount.balance,
+          );
+        }
+
+        for (const [dateKey, balance] of Array.from(mergedHistoryByDate.entries()).sort(
+          (a, b) => a[0].localeCompare(b[0]),
+        )) {
+          const historyDate = new Date(`${dateKey}T08:00:00+09:00`);
           await prisma.balanceHistory.upsert({
             where: {
               subAccountId_date: {
-                subAccountId: sa.id,
+                subAccountId: subAccount.id,
                 date: historyDate,
               },
             },
             create: {
-              subAccountId: sa.id,
+              subAccountId: subAccount.id,
               date: historyDate,
               balance,
             },
@@ -818,21 +871,17 @@ async function scrapeBalanceHistory(page: Page) {
           });
           totalSaved++;
         }
+      } catch (error) {
+        console.warn(
+          `⚠️ Failed to fetch history for ${mainAccount.label}/${subAccount.currentName}:`,
+          error,
+        );
       }
-
-      daysProcessed++;
-      if (daysProcessed % 30 === 0) {
-        console.log(`  📅 Processed ${daysProcessed} days (current: ${dateStr})...`);
-      }
-    } catch (e) {
-      console.warn(`  ⚠️ Failed to scrape history for ${dateStr}:`, e);
     }
-
-    currentDate.setDate(currentDate.getDate() - 1);
   }
 
   console.log(
-    `✅ Balance history scraping complete: ${totalSaved} records saved over ${daysProcessed} days.`,
+    `✅ Balance history scraping complete: ${totalSaved} records saved for ${totalSubAccounts} sub-accounts.`,
   );
 }
 
@@ -848,6 +897,10 @@ async function saveBalancesToDatabase(
 ) {
   console.log("💾 Saving balances to database...");
 
+  const allMainAccounts = await prisma.mainAccount.findMany({
+    where: { providerId },
+  });
+
   // 口座情報の保存
   for (const account of balances) {
     if (!Number.isFinite(account.balance)) {
@@ -859,23 +912,14 @@ async function saveBalancesToDatabase(
 
     let mainAccount = null;
 
-    // 既存口座への紐付けは、まず「プロバイダー + 金融機関名」で行う。
-    mainAccount = await prisma.mainAccount.findFirst({
-      where: {
-        providerId,
-        label: account.institutionName,
-      },
-    });
-
-    // 名称一致がない場合のみ mfUrlId でも探索
-    if (!mainAccount && account.mfUrlId) {
-      mainAccount = await prisma.mainAccount.findFirst({
-        where: {
-          providerId,
-          mfUrlId: account.mfUrlId,
-        },
-      });
-    }
+    // 既存口座への紐付けは「正規化された名称」または「mfUrlId」で行う
+    // account.institutionName は取得時にすでに normalizeInstitutionName 済みであるため、DB側の label も正規化して比較する
+    mainAccount =
+      allMainAccounts.find(
+        ma =>
+          normalizeInstitutionName(ma.label) === account.institutionName ||
+          (ma.mfUrlId && account.mfUrlId && ma.mfUrlId === account.mfUrlId),
+      ) || null;
 
     if (!mainAccount) {
       mainAccount = await prisma.mainAccount.create({
@@ -885,11 +929,18 @@ async function saveBalancesToDatabase(
           mfUrlId: account.mfUrlId,
         },
       });
+      allMainAccounts.push(mainAccount);
     } else if (!mainAccount.mfUrlId && account.mfUrlId) {
       mainAccount = await prisma.mainAccount.update({
         where: { id: mainAccount.id },
         data: { mfUrlId: account.mfUrlId },
       });
+      // 更新後の内容を配列にも反映
+      if (mainAccount) {
+        const updatedId = mainAccount.id;
+        const idx = allMainAccounts.findIndex(ma => ma.id === updatedId);
+        if (idx !== -1) allMainAccounts[idx] = mainAccount;
+      }
     }
 
     await prisma.subAccount.upsert({
@@ -953,15 +1004,31 @@ async function saveTransactionsToDatabase(
   console.log("💾 Saving transactions to database...");
   const normalize = normalizeLoose;
 
+  // 全 mainAccount を事前取得し、正規化名でマッチングするためのヘルパー
+  const allMainAccountsFromDb = await prisma.mainAccount.findMany({
+    where: { providerId },
+    include: { subAccounts: true },
+  });
+  const findMainAccountByNormalizedName = (instName: string) =>
+    allMainAccountsFromDb.find(
+      ma =>
+        normalizeInstitutionName(ma.label) ===
+        normalizeInstitutionName(instName),
+    ) || null;
+
   // 初回/追加時に備えて、取引明細から子口座候補を先に作成・更新する
   const candidateSubAccountsByInstitution = new Map<string, Set<string>>();
   for (const tx of transactions) {
     if (!candidateSubAccountsByInstitution.has(tx.institutionName)) {
       candidateSubAccountsByInstitution.set(tx.institutionName, new Set());
     }
-    const bucket = candidateSubAccountsByInstitution.get(tx.institutionName)!;
+    const bucket = candidateSubAccountsByInstitution.get(tx.institutionName);
 
-    if (tx.subAccountName && !isPlaceholderSubAccountName(tx.subAccountName)) {
+    if (
+      tx.subAccountName &&
+      !isPlaceholderSubAccountName(tx.subAccountName) &&
+      bucket
+    ) {
       bucket.add(tx.subAccountName);
     }
     // 注意: transferFromSubAccount や transferToSubAccount は他の金融機関の口座である可能性が高いため、
@@ -969,9 +1036,7 @@ async function saveTransactionsToDatabase(
   }
 
   for (const [institutionName, subNames] of candidateSubAccountsByInstitution) {
-    const mainAccount = await prisma.mainAccount.findFirst({
-      where: { providerId, label: institutionName },
-    });
+    const mainAccount = findMainAccountByNormalizedName(institutionName);
     if (!mainAccount) continue;
 
     for (const subName of subNames) {
@@ -1000,7 +1065,7 @@ async function saveTransactionsToDatabase(
       mainAccount: { select: { id: true, label: true, providerId: true } },
     },
   });
-  
+
   // 金融機関名から子口座リストへのマップを構築
   const subAccountsByInstitution = new Map<string, typeof allSubAccountsInDb>();
   for (const sa of allSubAccountsInDb) {
@@ -1008,7 +1073,7 @@ async function saveTransactionsToDatabase(
     if (!subAccountsByInstitution.has(key)) {
       subAccountsByInstitution.set(key, []);
     }
-    subAccountsByInstitution.get(key)!.push(sa);
+    subAccountsByInstitution.get(key)?.push(sa);
   }
 
   // 取引明細の保存
@@ -1029,7 +1094,7 @@ async function saveTransactionsToDatabase(
         create: {
           id: txId,
           subAccountId,
-          date: new Date(date + "T00:00:00+09:00"), // JST timezone
+          date: new Date(`${date}T00:00:00+09:00`), // JST timezone
           amount,
           desc,
           isTransfer,
@@ -1089,32 +1154,105 @@ async function saveTransactionsToDatabase(
 
   // 全金融機関の子口座から振替元・振替先を検索するヘルパー関数
   const findSubAccountByName = (name: string, rawInfo: string) => {
-    // 全子口座を長い名前順にソート（より具体的な名前を優先）
+    if (!name) return undefined;
+
+    const normalizedRawInfo = normalize(rawInfo);
+
+    // 1. 完全一致する子口座候補を抽出
+    const exactMatches = allSubAccountsInDb.filter(
+      sa => sa.currentName === name,
+    );
+    if (exactMatches.length > 0) {
+      // 候補の中で、金融機関名(label)がrawInfoに含まれているものを優先的に探す
+      const refined = exactMatches.find(sa =>
+        normalizedRawInfo.includes(normalize(sa.mainAccount.label)),
+      );
+      return refined || exactMatches[0];
+    }
+
+    // 2. 部分一致 (文字数の長い順)
     const sortedAll = [...allSubAccountsInDb].sort(
       (a, b) => b.currentName.length - a.currentName.length,
     );
-    
-    // 完全一致を優先
-    const exactMatch = sortedAll.find(sa => sa.currentName === name);
-    if (exactMatch) return exactMatch;
-    
-    // 正規化した名前での部分一致
     const normalizedName = normalize(name);
-    const normalizedRawInfo = normalize(rawInfo);
-    
+
     for (const sa of sortedAll) {
       const normalizedSaName = normalize(sa.currentName);
-      // rawInfo 内に子口座名が含まれているかチェック
       if (normalizedRawInfo.includes(normalizedSaName)) {
-        // さらに、渡された name 部分にも含まれているか確認
-        if (normalizedName.includes(normalizedSaName) || name.includes(sa.currentName)) {
-          return sa;
+        if (
+          normalizedName.includes(normalizedSaName) ||
+          name.includes(sa.currentName)
+        ) {
+          // 同名の子口座が複数ある場合に備え、該当する名前を持つ口座群から再絞り込み
+          const sameNameMatches = sortedAll.filter(
+            x => normalize(x.currentName) === normalizedSaName,
+          );
+          const refined = sameNameMatches.find(x =>
+            normalizedRawInfo.includes(normalize(x.mainAccount.label)),
+          );
+          return refined || sa;
         }
       }
     }
-    
+
     return undefined;
   };
+
+  // API 由来の sub_account_id_hash と DB の SubAccount を事前に対応付ける
+  const subAccountByHashHint = new Map<
+    string,
+    (typeof allSubAccountsInDb)[number]
+  >();
+  const findSubAccountByInstitutionAndName = (
+    institutionName: string,
+    subAccountName: string,
+  ) => {
+    if (!institutionName || !subAccountName) return undefined;
+    return allSubAccountsInDb.find(
+      sa =>
+        normalizeInstitutionName(sa.mainAccount.label) ===
+          normalizeInstitutionName(institutionName) &&
+        sa.currentName === subAccountName,
+    );
+  };
+
+  for (const tx of transactions) {
+    const hash = (tx as { subAccountIdHash?: string }).subAccountIdHash;
+    if (hash && !subAccountByHashHint.has(hash)) {
+      const matched = allSubAccountsInDb.find(
+        sa =>
+          sa.currentName === tx.subAccountName &&
+          normalizeInstitutionName(sa.mainAccount.label) ===
+            normalizeInstitutionName(tx.institutionName),
+      );
+      if (matched) {
+        subAccountByHashHint.set(hash, matched);
+      }
+    }
+    const partnerHash = (tx as { partnerSubAccountIdHash?: string })
+      .partnerSubAccountIdHash;
+    const partnerInstitutionName = (tx as { partnerInstitutionName?: string })
+      .partnerInstitutionName;
+    const partnerSubAccountName = (tx as { partnerSubAccountName?: string })
+      .partnerSubAccountName;
+    if (
+      partnerHash &&
+      !subAccountByHashHint.has(partnerHash) &&
+      partnerInstitutionName &&
+      partnerSubAccountName
+    ) {
+      const matchedPartner = findSubAccountByInstitutionAndName(
+        partnerInstitutionName,
+        partnerSubAccountName,
+      );
+      if (matchedPartner) {
+        subAccountByHashHint.set(partnerHash, matchedPartner);
+      }
+    }
+  }
+
+  const resolveSubAccountByHash = (hash?: string) =>
+    hash ? subAccountByHashHint.get(hash) : undefined;
 
   for (const tx of transactions) {
     // 振替取引の場合、両方の子口座に記録
@@ -1131,67 +1269,97 @@ async function saveTransactionsToDatabase(
 
       const rawInfo = (tx as { rawInfo?: string }).rawInfo ?? "";
       const transferMatch = rawInfo.match(/(.+?)から(.+?)への振替/);
-      
-      let fromSubAccount: typeof allSubAccountsInDb[number] | undefined;
-      let toSubAccount: typeof allSubAccountsInDb[number] | undefined;
-      
-      if (transferMatch) {
+
+      let fromSubAccount: (typeof allSubAccountsInDb)[number] | undefined;
+      let toSubAccount: (typeof allSubAccountsInDb)[number] | undefined;
+
+      // まずは API のハッシュ情報で解決する
+      const hashedCurrent = resolveSubAccountByHash(
+        (tx as { subAccountIdHash?: string }).subAccountIdHash,
+      );
+      const hashedPartner = resolveSubAccountByHash(
+        (tx as { partnerSubAccountIdHash?: string }).partnerSubAccountIdHash,
+      );
+      const hintedCurrent = findSubAccountByInstitutionAndName(
+        tx.institutionName,
+        tx.subAccountName,
+      );
+      const hintedPartner = findSubAccountByInstitutionAndName(
+        (tx as { partnerInstitutionName?: string }).partnerInstitutionName ??
+          "",
+        (tx as { partnerSubAccountName?: string }).partnerSubAccountName ?? "",
+      );
+
+      if (hashedCurrent && hashedPartner) {
+        if (tx.amount < 0) {
+          fromSubAccount = hashedCurrent;
+          toSubAccount = hashedPartner;
+        } else {
+          fromSubAccount = hashedPartner;
+          toSubAccount = hashedCurrent;
+        }
+      } else if (hashedCurrent && hintedPartner) {
+        if (tx.amount < 0) {
+          fromSubAccount = hashedCurrent;
+          toSubAccount = hintedPartner;
+        } else {
+          fromSubAccount = hintedPartner;
+          toSubAccount = hashedCurrent;
+        }
+      } else if (hintedCurrent && hintedPartner) {
+        if (tx.amount < 0) {
+          fromSubAccount = hintedCurrent;
+          toSubAccount = hintedPartner;
+        } else {
+          fromSubAccount = hintedPartner;
+          toSubAccount = hintedCurrent;
+        }
+      }
+
+      if ((!fromSubAccount || !toSubAccount) && transferMatch) {
         const fromPart = transferMatch[1];
         const toPart = transferMatch[2];
-        
+
         // 全金融機関の子口座から振替元・振替先を検索
-        fromSubAccount = findSubAccountByName(tx.transferFromSubAccount ?? "", fromPart);
-        toSubAccount = findSubAccountByName(tx.transferToSubAccount ?? "", toPart);
-        
+        fromSubAccount = findSubAccountByName(
+          tx.transferFromSubAccount ?? "",
+          fromPart,
+        );
+        toSubAccount = findSubAccountByName(
+          tx.transferToSubAccount ?? "",
+          toPart,
+        );
+
         // スクレイピング時に特定された名前でも再検索
         if (!fromSubAccount && tx.transferFromSubAccount) {
           fromSubAccount = allSubAccountsInDb.find(
-            sa => sa.currentName === tx.transferFromSubAccount
+            sa => sa.currentName === tx.transferFromSubAccount,
           );
         }
         if (!toSubAccount && tx.transferToSubAccount) {
           toSubAccount = allSubAccountsInDb.find(
-            sa => sa.currentName === tx.transferToSubAccount
+            sa => sa.currentName === tx.transferToSubAccount,
           );
         }
-      } else {
+      } else if (!fromSubAccount || !toSubAccount) {
         // rawInfo がない場合は、スクレイピング時の情報を使用
         if (tx.transferFromSubAccount) {
           fromSubAccount = allSubAccountsInDb.find(
-            sa => sa.currentName === tx.transferFromSubAccount
+            sa => sa.currentName === tx.transferFromSubAccount,
           );
         }
         if (tx.transferToSubAccount) {
           toSubAccount = allSubAccountsInDb.find(
-            sa => sa.currentName === tx.transferToSubAccount
+            sa => sa.currentName === tx.transferToSubAccount,
           );
         }
       }
 
-      // 振替先/元が解決できない場合、現在行として見えている側だけ通常明細として保存
+      // 振替先/元が解決できない場合は保存しない（不正確な単独明細を残さない）
       if (!fromSubAccount || !toSubAccount) {
-        // 見えている側の子口座を探す
-        const visibleSideAccount = allSubAccountsInDb.find(
-          sa => 
-            sa.currentName === tx.subAccountName &&
-            normalizeInstitutionName(sa.mainAccount.label) === normalizeInstitutionName(tx.institutionName)
+        console.warn(
+          `⚠️ Transfer unresolved and skipped: sub="${tx.subAccountName}", from="${tx.transferFromSubAccount ?? "?"}", to="${tx.transferToSubAccount ?? "?"}", msgId=${tx.msgUrlId}`,
         );
-        if (visibleSideAccount) {
-          console.warn(
-            `⚠️ Transfer counterpart unresolved. Saving visible side only: sub="${tx.subAccountName}", from="${tx.transferFromSubAccount ?? "?"}", to="${tx.transferToSubAccount ?? "?"}", msgId=${tx.msgUrlId}`,
-          );
-          await saveSingleTransaction(
-            visibleSideAccount.id,
-            tx.date,
-            tx.amount,
-            tx.desc,
-            false,
-          );
-        } else {
-          console.warn(
-            `⚠️ Transfer accounts unresolved and visible side not found: from="${tx.transferFromSubAccount ?? "?"}", to="${tx.transferToSubAccount ?? "?"}", visible="${tx.subAccountName}", msgId=${tx.msgUrlId}`,
-          );
-        }
         continue;
       }
 
@@ -1202,6 +1370,16 @@ async function saveTransactionsToDatabase(
 
       // 振替の両方の記録をアトミックに処理
       try {
+        const currentVisibleSideAccount = hintedCurrent ?? hashedCurrent;
+        const obsoleteVisibleTxId = currentVisibleSideAccount
+          ? await generateTransactionId(
+              currentVisibleSideAccount.id,
+              tx.date,
+              tx.amount,
+              tx.desc,
+            )
+          : null;
+
         const fromTxId = await generateTransactionId(
           fromSubAccount.id,
           tx.date,
@@ -1215,14 +1393,23 @@ async function saveTransactionsToDatabase(
           transferDesc,
         );
 
-        await prisma.$transaction(async (txPrisma) => {
+        await prisma.$transaction(async txPrisma => {
+          if (obsoleteVisibleTxId) {
+            await txPrisma.transaction.deleteMany({
+              where: {
+                id: obsoleteVisibleTxId,
+                isTransfer: false,
+              },
+            });
+          }
+
           // 振替元に出金を記録
           await txPrisma.transaction.upsert({
             where: { id: fromTxId },
             create: {
               id: fromTxId,
               subAccountId: fromSubAccount.id,
-              date: new Date(tx.date + "T00:00:00+09:00"),
+              date: new Date(`${tx.date}T00:00:00+09:00`),
               amount: -absAmount,
               desc: transferDesc,
               isTransfer: true,
@@ -1239,7 +1426,7 @@ async function saveTransactionsToDatabase(
             create: {
               id: toTxId,
               subAccountId: toSubAccount.id,
-              date: new Date(tx.date + "T00:00:00+09:00"),
+              date: new Date(`${tx.date}T00:00:00+09:00`),
               amount: absAmount,
               desc: transferDesc,
               isTransfer: true,
@@ -1256,36 +1443,44 @@ async function saveTransactionsToDatabase(
         // 金融機関が異なる場合は明示
         const fromInst = fromSubAccount.mainAccount.label;
         const toInst = toSubAccount.mainAccount.label;
-        const crossInstitution = fromInst !== toInst ? ` (${fromInst} → ${toInst})` : "";
+        const crossInstitution =
+          fromInst !== toInst ? ` (${fromInst} → ${toInst})` : "";
         console.log(
           `  ✅ Transfer recorded: ${fromName} → ${toName}${crossInstitution} (¥${absAmount.toLocaleString()})`,
         );
       } catch (error) {
-        console.error(`❌ Failed to save transfer: ${tx.date} ${fromName} → ${toName}`, error);
+        console.error(
+          `❌ Failed to save transfer: ${tx.date} ${fromName} → ${toName}`,
+          error,
+        );
       }
       continue;
     }
 
     // 通常の取引（振替でない、または振替情報が不完全な場合）
-    let subAccount = await prisma.subAccount.findFirst({
-      where: {
-        currentName: tx.subAccountName,
-        mainAccount: {
-          label: tx.institutionName,
-          providerId,
-        },
-      },
-    });
+    // 正規化名で mainAccount をマッチし、その子口座から subAccount を検索
+    const matchedMainAccount = findMainAccountByNormalizedName(
+      tx.institutionName,
+    );
+    let subAccount =
+      resolveSubAccountByHash(
+        (tx as { subAccountIdHash?: string }).subAccountIdHash,
+      ) ??
+      (matchedMainAccount
+        ? matchedMainAccount.subAccounts.find(
+            sa => sa.currentName === tx.subAccountName,
+          ) ??
+          matchedMainAccount.subAccounts.find(
+            sa => normalize(sa.currentName) === normalize(tx.subAccountName),
+          )
+        : null);
 
     if (!subAccount) {
       console.warn(
         `⚠️ Unmatched transaction: Inst="${tx.institutionName}", Sub="${tx.subAccountName}" not found in DB. MsgId: ${tx.msgUrlId}`,
       );
-      // Debug info
-      const ma = await prisma.mainAccount.findFirst({
-        where: { label: tx.institutionName, providerId },
-        include: { subAccounts: true },
-      });
+      // Debug info: 正規化名でマッチした mainAccount を使用
+      const ma = matchedMainAccount;
       if (ma) {
         console.warn(
           `   Available DB subAccounts: ${ma.subAccounts.map(s => `"${s.currentName}"`).join(", ")}`,
@@ -1339,7 +1534,9 @@ async function saveTransactionsToDatabase(
             (a, b) => b.currentName.length - a.currentName.length,
           );
           const rawInfo = (tx as { rawInfo?: string }).rawInfo ?? "";
-          const normalizedText = normalize(`${tx.subAccountName} ${tx.desc} ${rawInfo}`);
+          const normalizedText = normalize(
+            `${tx.subAccountName} ${tx.desc} ${rawInfo}`,
+          );
           const normalizedMatched = sortedCandidates.filter(sa =>
             normalizedText.includes(normalize(sa.currentName)),
           );
@@ -1361,8 +1558,8 @@ async function saveTransactionsToDatabase(
       // スキップされたトランザクションを詳細にログ出力
       console.warn(
         `⚠️ TRANSACTION SKIPPED: Could not match any account. ` +
-        `Institution="${tx.institutionName}", Sub="${tx.subAccountName}", ` +
-        `Date="${tx.date}", Desc="${tx.desc}", Amount=${tx.amount}, MsgId=${tx.msgUrlId}`,
+          `Institution="${tx.institutionName}", Sub="${tx.subAccountName}", ` +
+          `Date="${tx.date}", Desc="${tx.desc}", Amount=${tx.amount}, MsgId=${tx.msgUrlId}`,
       );
       continue;
     }
@@ -1408,14 +1605,24 @@ async function saveTransactionsToDatabase(
 }
 
 // アクティブなブラウザインスタンスを追跡（中止用）
-const activeBrowsers = new Map<string, { browser: ReturnType<typeof chromium.launch> extends Promise<infer T> ? T : never; providerId: string }>();
+const activeBrowsers = new Map<
+  string,
+  {
+    browser: ReturnType<typeof chromium.launch> extends Promise<infer T>
+      ? T
+      : never;
+    providerId: string;
+  }
+>();
 
 /**
  * 指定されたプロバイダーのスクレイパーを中止する
  */
 export async function abortMfScraper(providerId: string) {
   console.log(`🛑 Attempting to abort scraper for provider: ${providerId}`);
-  const entry = Array.from(activeBrowsers.values()).find(e => e.providerId === providerId);
+  const entry = Array.from(activeBrowsers.values()).find(
+    e => e.providerId === providerId,
+  );
   if (entry) {
     try {
       await entry.browser.close();
@@ -1426,10 +1633,18 @@ export async function abortMfScraper(providerId: string) {
   }
 }
 
+export interface MfScraperOptions {
+  mode: "scheduled" | "manual";
+}
+
 /**
  * スクレイパーのメイン処理
  */
-export async function runMfScraper(itemName: string, signal?: AbortSignal) {
+export async function runMfScraper(
+  itemName: string,
+  signal?: AbortSignal,
+  options: MfScraperOptions = { mode: "scheduled" },
+) {
   console.log("🚀 Starting MF Scraper...");
   console.log(`📦 Using 1Password item: ${itemName}`);
 
@@ -1450,17 +1665,17 @@ export async function runMfScraper(itemName: string, signal?: AbortSignal) {
   const { email, password } = getCredentials(itemName);
 
   const browser = await chromium.launch({ headless: true });
-  
+
   // ブラウザを追跡マップに登録
   activeBrowsers.set(provider.id, { browser, providerId: provider.id });
-  
+
   // シグナルが既に中止されていたらすぐに終了
   if (signal?.aborted) {
     await browser.close();
     activeBrowsers.delete(provider.id);
     throw new Error("Sync was aborted before starting");
   }
-  
+
   // 中止シグナルのリスナーを設定
   const abortHandler = async () => {
     console.log("🛑 Abort signal received, closing browser...");
@@ -1471,7 +1686,7 @@ export async function runMfScraper(itemName: string, signal?: AbortSignal) {
     }
   };
   signal?.addEventListener("abort", abortHandler);
-  
+
   const context = await browser.newContext({
     userAgent:
       "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
@@ -1565,9 +1780,11 @@ export async function runMfScraper(itemName: string, signal?: AbortSignal) {
     }
 
     // Phase 1: 全金融機関の残高をスクレイプし、子口座をDBに登録
-    console.log("📋 Phase 1: Scraping balances and registering sub-accounts...");
+    console.log(
+      "📋 Phase 1: Scraping balances and registering sub-accounts...",
+    );
     const balances = await scrapeBalances(page, provider.id);
-    
+
     // 残高データから子口座を先にDBに登録
     await saveBalancesToDatabase(balances, provider.id);
 
@@ -1583,19 +1800,29 @@ export async function runMfScraper(itemName: string, signal?: AbortSignal) {
       const names = ma.subAccounts.map(sa => sa.currentName);
       allSubAccountNames.set(key, [...new Set([...existing, ...names])]);
     }
-    console.log(`  ✅ Found ${allMainAccounts.length} institutions with ${Array.from(allSubAccountNames.values()).flat().length} sub-accounts total.`);
+    console.log(
+      `  ✅ Found ${allMainAccounts.length} institutions with ${Array.from(allSubAccountNames.values()).flat().length} sub-accounts total.`,
+    );
 
     // Phase 3: 入出金明細・振替をスクレイプ（全子口座情報を使用）
-    console.log("📋 Phase 3: Scraping transactions with full sub-account knowledge...");
-    const transactions = await scrapeTransactions(page, provider.id, balances, allSubAccountNames);
+    console.log(
+      "📋 Phase 3: Scraping transactions with full sub-account knowledge...",
+    );
+    const transactions = await scrapeTransactions(
+      page,
+      provider.id,
+      balances,
+      allSubAccountNames,
+      options,
+    );
 
     // Phase 4: 取引明細をDBに保存
     console.log("📋 Phase 4: Saving transactions to database...");
     await saveTransactionsToDatabase(transactions, provider.id);
 
-    // Phase 5: 残高履歴を過去から取得（2023-01-01 まで遡る、全金融機関対象）
+    // Phase 5: 残高履歴を過去から取得
     console.log("📋 Phase 5: Scraping balance history...");
-    await scrapeBalanceHistory(page);
+    await scrapeBalanceHistory(page, options);
 
     console.log("🎉 MF Scraping process completed successfully!");
   } catch (error) {

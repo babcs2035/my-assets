@@ -103,15 +103,17 @@ export default async function AccountDetailPage({ params }: Props) {
     notFound();
   }
 
-  const totalBalance = account.subAccounts.reduce(
+  const visibleSubAccounts = account.subAccounts.filter(sa => !sa.isHidden);
+
+  const totalBalance = visibleSubAccounts.reduce(
     (sum, sa) => sum + sa.balance,
     0,
   );
 
-  const allHoldings = account.subAccounts.flatMap(sa => sa.holdings);
-  const allCryptos = account.subAccounts.flatMap(sa => sa.cryptos);
+  const allHoldings = visibleSubAccounts.flatMap(sa => sa.holdings);
+  const allCryptos = visibleSubAccounts.flatMap(sa => sa.cryptos);
 
-  const subAccountChartData = account.subAccounts.map(sa => {
+  const subAccountChartData = visibleSubAccounts.map(sa => {
     const chartData = getBalanceHistoryData(sa.histories ?? []);
     return { id: sa.id, assetType: sa.assetType, data: chartData };
   });
@@ -119,23 +121,23 @@ export default async function AccountDetailPage({ params }: Props) {
   const totalChartData = computeTotalChartData(subAccountChartData);
 
   const chartSeries = [
-    {
-      id: "total",
-      name: "合計",
-      currentBalance: totalBalance,
-      data: totalChartData,
-      assetType: account.subAccounts[0]?.assetType,
-    },
-    ...account.subAccounts.map((sa, index) => ({
-      id: sa.id,
-      name: sa.currentName,
-      currentBalance: sa.balance,
-      data: subAccountChartData[index].data,
-      assetType: sa.assetType,
-    })),
-  ];
+      {
+        id: "total",
+        name: "合計",
+        currentBalance: totalBalance,
+        data: totalChartData,
+        assetType: visibleSubAccounts[0]?.assetType,
+      },
+      ...visibleSubAccounts.map((sa, index) => ({
+        id: sa.id,
+        name: sa.currentName,
+        currentBalance: sa.balance,
+        data: subAccountChartData[index].data,
+        assetType: sa.assetType,
+      })),
+    ];
 
-  const defaultAssetType = account.subAccounts[0]?.assetType ?? "CASH";
+  const defaultAssetType = visibleSubAccounts[0]?.assetType ?? "CASH";
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -151,7 +153,7 @@ export default async function AccountDetailPage({ params }: Props) {
             {account.label}
           </h1>
           <p className="text-sm text-zinc-500">
-            {account.provider.name} · {account.subAccounts.length} 子口座
+            {account.provider.name} · {visibleSubAccounts.length} 子口座
           </p>
         </div>
       </div>
@@ -309,14 +311,14 @@ export default async function AccountDetailPage({ params }: Props) {
       )}
 
       {/* ポイント詳細 */}
-      {account.subAccounts.filter(sa => sa.pointDetail).length > 0 && (
+      {visibleSubAccounts.filter(sa => sa.pointDetail).length > 0 && (
         <div className="space-y-3">
           <h3 className="text-lg font-bold tracking-tight text-zinc-200 flex items-center gap-2">
             <CreditCard className="h-4 w-4 text-emerald-400" />
             ポイント詳細
           </h3>
           <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
-            {account.subAccounts
+            {visibleSubAccounts
               .filter(sa => sa.pointDetail)
               .map(sa => (
                 <Card key={sa.id}>

@@ -152,6 +152,7 @@ export function SettingsContent() {
   const [syncingProviderIds, setSyncingProviderIds] = useState<Set<string>>(
     new Set(),
   );
+  const [syncDialogProviderId, setSyncDialogProviderId] = useState<string | null>(null);
   const [, startTransition] = useTransition();
 
   // Provider Form State
@@ -264,6 +265,7 @@ export function SettingsContent() {
   };
 
   const handleSyncProvider = async (id: string) => {
+    setSyncDialogProviderId(null);
     toast.info("同期を開始しました．");
     window.dispatchEvent(
       new CustomEvent("provider-sync-status", {
@@ -324,6 +326,8 @@ export function SettingsContent() {
       });
     }
   };
+
+
 
   const handleAddMainCategory = async () => {
     if (!newCategoryName) return;
@@ -880,15 +884,40 @@ export function SettingsContent() {
                                 中止
                               </Button>
                             ) : (
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => handleSyncProvider(provider.id)}
-                                className="h-8 text-blue-400"
+                              <Dialog
+                                open={syncDialogProviderId === provider.id}
+                                onOpenChange={(open) => {
+                                  if (open) {
+                                    setSyncDialogProviderId(provider.id);
+                                  } else {
+                                    setSyncDialogProviderId(null);
+                                  }
+                                }}
                               >
-                                <RefreshCw className="mr-2 h-3.5 w-3.5" />
-                                同期
-                              </Button>
+                                <DialogTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-8 text-blue-400"
+                                  >
+                                    <RefreshCw className="mr-2 h-3.5 w-3.5" />
+                                    同期
+                                  </Button>
+                                </DialogTrigger>
+                                <DialogContent>
+                                  <DialogHeader>
+                                    <DialogTitle>手動同期の実行</DialogTitle>
+                                    <DialogDescription>
+                                      手動同期では 2023-01-01 まで遡って、入出金明細と残高推移を全件取得します。
+                                    </DialogDescription>
+                                  </DialogHeader>
+                                  <DialogFooter>
+                                    <Button onClick={() => handleSyncProvider(provider.id)}>
+                                      実行
+                                    </Button>
+                                  </DialogFooter>
+                                </DialogContent>
+                              </Dialog>
                             )}
                             <AlertDialog>
                               <AlertDialogTrigger asChild>

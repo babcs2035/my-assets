@@ -20,6 +20,7 @@ export async function getAccounts() {
     include: {
       provider: true,
       subAccounts: {
+        where: { isHidden: false },
         include: {
           holdings: true,
           cryptos: true,
@@ -173,6 +174,27 @@ export async function updateSubAccountAssetType(
   });
   revalidatePath("/accounts");
   revalidatePath("/");
+  return result;
+}
+
+/**
+ * サブ口座の表示状態（非表示/表示）を更新する関数である．
+ */
+export async function updateSubAccountHidden(id: string, isHidden: boolean) {
+  console.log(`🙈 Updating hidden flag for sub account ${id} to ${isHidden}`);
+  const result = await prisma.subAccount.update({
+    where: { id },
+    data: { isHidden },
+    select: {
+      id: true,
+      mainAccountId: true,
+      isHidden: true,
+    },
+  });
+  revalidatePath("/accounts");
+  revalidatePath(`/accounts/${result.mainAccountId}`);
+  revalidatePath("/");
+  revalidatePath("/transactions");
   return result;
 }
 

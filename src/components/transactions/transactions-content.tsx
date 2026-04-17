@@ -2,7 +2,7 @@
 
 import { ja } from "date-fns/locale";
 import dayjs from "dayjs";
-import { ArrowLeftRight, ArrowRight, List } from "lucide-react";
+import { List } from "lucide-react";
 import { useEffect, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { getCategories } from "@/actions/categories";
@@ -285,7 +285,7 @@ export function TransactionsContent() {
             {transactions.length === 0 ? (
               // データがない場合の表示
               <div className="flex flex-col items-center justify-center py-16">
-                <ArrowLeftRight className="h-10 w-10 text-zinc-600" />
+                <List className="h-10 w-10 text-zinc-600" />
                 <p className="mt-3 text-sm text-zinc-500">
                   この月の明細はありません．
                 </p>
@@ -319,19 +319,21 @@ export function TransactionsContent() {
                             )}
                           </div>
                           {tx.isTransfer && tx.linkedAccount ? (
-                            <div className="flex items-center gap-1.5 text-xs text-blue-400 mt-0.5">
-                              <ArrowLeftRight className="h-3 w-3 shrink-0" />
-                              <span>
-                                {tx.amount < 0
-                                  ? tx.subAccount.mainAccount.label
-                                  : tx.linkedAccount.mainAccountLabel}
-                              </span>
-                              <ArrowRight className="h-3 w-3 shrink-0" />
-                              <span>
-                                {tx.amount < 0
-                                  ? tx.linkedAccount.mainAccountLabel
-                                  : tx.subAccount.mainAccount.label}
-                              </span>
+                            <div className="flex flex-col gap-1 text-xs text-blue-400 mt-0.5">
+                              <div className="flex items-center gap-1.5 truncate">
+                                <span className="truncate">
+                                  {tx.amount < 0
+                                    ? `${tx.subAccount.mainAccount.label}（${tx.subAccount.currentName}）`
+                                    : `${tx.linkedAccount.mainAccountLabel}（${tx.linkedAccount.subAccountName}）`}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-1.5 truncate">
+                                <span className="truncate">
+                                  {tx.amount < 0
+                                    ? `${tx.linkedAccount.mainAccountLabel}（${tx.linkedAccount.subAccountName}）`
+                                    : `${tx.subAccount.mainAccount.label}（${tx.subAccount.currentName}）`}
+                                </span>
+                              </div>
                             </div>
                           ) : (
                             <div className="text-xs text-zinc-500 truncate">
@@ -415,18 +417,27 @@ export function TransactionsContent() {
                           </TableCell>
                           <TableCell className="text-zinc-400 text-sm">
                             {tx.isTransfer && tx.linkedAccount ? (
-                              <div className="flex items-center gap-1.5 text-blue-400">
-                                <span className="whitespace-nowrap">
-                                  {tx.amount < 0
-                                    ? tx.subAccount.mainAccount.label
-                                    : tx.linkedAccount.mainAccountLabel}
-                                </span>
-                                <ArrowRight className="h-3.5 w-3.5 shrink-0" />
-                                <span className="whitespace-nowrap">
-                                  {tx.amount < 0
-                                    ? tx.linkedAccount.mainAccountLabel
-                                    : tx.subAccount.mainAccount.label}
-                                </span>
+                              <div className="flex flex-col gap-1 text-xs text-blue-400">
+                                <div className="flex items-center gap-1.5 truncate">
+                                  <Badge
+                                    variant="secondary"
+                                    className="text-[9px] px-1 py-0 h-4 bg-blue-500/10 text-blue-400 border-blue-500/30 shrink-0"
+                                  >
+                                    振替
+                                  </Badge>
+                                  <span className="truncate">
+                                    {tx.amount < 0
+                                      ? `${tx.subAccount.mainAccount.label}（${tx.subAccount.currentName}）`
+                                      : `${tx.linkedAccount.mainAccountLabel}（${tx.linkedAccount.subAccountName}）`}
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-1.5 truncate ml-[38px]">
+                                  <span className="truncate">
+                                    {tx.amount < 0
+                                      ? `${tx.linkedAccount.mainAccountLabel}（${tx.linkedAccount.subAccountName}）`
+                                      : `${tx.subAccount.mainAccount.label}（${tx.subAccount.currentName}）`}
+                                  </span>
+                                </div>
                               </div>
                             ) : (
                               <>

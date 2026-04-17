@@ -36,6 +36,7 @@ export async function getTransactions(params: {
     console.log(`📅 Date filter: ${year}-${month}-${day}`);
   }
   const where: Record<string, unknown> = {};
+  where.subAccount = { isHidden: false };
 
   if (subAccountId) where.subAccountId = subAccountId;
 
@@ -122,7 +123,7 @@ export async function getTransactions(params: {
   const linkedTransactions =
     linkedTransIds.length > 0
       ? await prisma.transaction.findMany({
-          where: { id: { in: linkedTransIds } },
+          where: { id: { in: linkedTransIds }, subAccount: { isHidden: false } },
           select: {
             id: true,
             subAccount: {
@@ -180,6 +181,7 @@ export async function getMonthlyCalendarData(year: number, month: number) {
     where: {
       date: { gte: start, lt: end },
       isTransfer: false,
+      subAccount: { isHidden: false },
     },
     select: {
       date: true,
@@ -260,6 +262,7 @@ export async function detectTransfers() {
     where: {
       isTransfer: false,
       transferId: null,
+      subAccount: { isHidden: false },
     },
     orderBy: { date: "asc" },
   });

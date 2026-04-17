@@ -2,7 +2,7 @@
 # Base Stage
 # -----------------------------------------------------------------------------
 FROM node:25.6.1-bookworm AS base
-RUN npm install -g pnpm@10.29.3
+RUN npm install -g pnpm@latest
 
 # -----------------------------------------------------------------------------
 # Dependency Stage

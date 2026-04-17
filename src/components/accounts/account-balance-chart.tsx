@@ -87,9 +87,27 @@ export function AccountBalanceChart({
   const chartData =
     filteredData.length > 0 ? filteredData : selectedSeries.data;
 
-  // Y軸の最小・最大を少しゆとり持たせるため
+  // Y軸の最小・最大を算出（負債のマイナス値にも対応）
   const balances = chartData.map(d => d.balance);
-  const [, maxVal] = getNiceChartDomain(balances);
+  const minBalance = Math.min(...balances);
+  const isLiability = currentAssetType === "LIABILITY";
+
+  let domainMin: number;
+  let domainMax: number;
+  if (isLiability) {
+    // 負債の場合: 下限は最小値にマージン、上限は0
+    domainMin = minBalance < 0 ? Math.floor(minBalance * 1.1) : minBalance;
+    domainMax = 0;
+  } else if (minBalance < 0) {
+    // 資産だがマイナスが含まれる場合
+    domainMin = Math.floor(minBalance * 1.1);
+    const [, maxVal] = getNiceChartDomain(balances);
+    domainMax = maxVal;
+  } else {
+    const [, maxVal] = getNiceChartDomain(balances);
+    domainMin = 0;
+    domainMax = maxVal;
+  }
 
   // 選択された時間範囲における最新の残高（通常は全期間の最新と同じだが安全に取る）
   const currentBalance =
@@ -171,7 +189,7 @@ export function AccountBalanceChart({
               tickLine={false}
               axisLine={false}
               tickFormatter={value => formatYAxisCurrency(Number(value))}
-              domain={[0, maxVal]}
+              domain={[domainMin, domainMax]}
               tickCount={6}
               width={70}
             />
