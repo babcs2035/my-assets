@@ -1,0 +1,45 @@
+services:
+  app:
+    image: ghcr.io/babcs2035/my-assets:latest
+    container_name: my-assets-app
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${APP_PORT:-3000}:3000"
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-my-assets_user}:${POSTGRES_PASSWORD:-my-assets_password}@db:${DB_PORT:-5432}/${POSTGRES_DB:-my-assets}
+      TZ: ${TZ:-Asia/Tokyo}
+      APP_PORT: ${APP_PORT:-3000}
+      BASIC_AUTH_USER: ${BASIC_AUTH_USER:-admin}
+      BASIC_AUTH_PASSWORD: ${BASIC_AUTH_PASSWORD:-changeme}
+      OP_SERVICE_ACCOUNT_TOKEN: ${OP_SERVICE_ACCOUNT_TOKEN:-}
+      OP_VAULT: ${OP_VAULT:-}
+    depends_on:
+      db:
+        condition: service_healthy
+
+  db:
+    image: postgres:16-alpine
+    container_name: my-assets-db
+    restart: unless-stopped
+    command: ["postgres", "-p", "${DB_PORT:-5432}"]
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-my-assets_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-my-assets_password}
+      POSTGRES_DB: ${POSTGRES_DB:-my-assets}
+      TZ: ${TZ:-Asia/Tokyo}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    expose:
+      - "${DB_PORT:-5432}"
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -h 127.0.0.1 -p ${DB_PORT:-5432} -U ${POSTGRES_USER:-my-assets_user} -d ${POSTGRES_DB:-my-assets}",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  postgres_data:

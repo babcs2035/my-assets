@@ -86,18 +86,55 @@
 
 ### 利用可能な主な mise タスク
 
-| コマンド             | 内容                                                                            |
-| :------------------- | :------------------------------------------------------------------------------ |
-| `mise run setup`     | 環境構築（`.env` 作成，依存関係インストール，DB起動，マイグレーション，シード） |
-| `mise dev`           | 開発サーバーの起動                                                              |
-| `mise run build`     | 本番用ビルドの実行                                                              |
-| `mise run check`     | 型チェックおよびリンターの実行                                                  |
-| `mise run sync`      | 各プロバイダーからのデータ同期（スクレイピング）を手動実行                      |
-| `mise run db:up`     | データベースコンテナの起動                                                      |
-| `mise run db:reset`  | データベースのリセットおよび再シード                                            |
-| `mise run db:studio` | Prisma Studio の起動                                                            |
+| コマンド                | 内容                                                                            |
+| :---------------------- | :------------------------------------------------------------------------------ |
+| `mise run setup`        | 環境構築（`.env` 作成，依存関係インストール，DB起動，マイグレーション，シード） |
+| `mise dev`              | 開発サーバーの起動                                                              |
+| `mise run build`        | 本番用ビルドの実行                                                              |
+| `mise run check`        | 型チェックおよびリンターの実行                                                  |
+| `mise run sync`         | 各プロバイダーからのデータ同期（スクレイピング）を手動実行                      |
+| `mise run db:up`        | データベースコンテナの起動                                                      |
+| `mise run db:reset`     | データベースのリセットおよび再シード                                            |
+| `mise run db:studio`    | Prisma Studio の起動                                                            |
+| `mise run docker:build` | Docker Compose でアプリケーションスタックをビルド                               |
+| `mise run docker:up`    | Docker Compose でアプリケーションスタックを起動（app + db）                     |
+| `mise run docker:down`  | Docker Compose のアプリケーションスタックを停止                                 |
+| `mise run docker:logs`  | Docker Compose のアプリケーションログを追従表示                                 |
 
 ---
 
-> [!TIP]
-> `mise` を使用しない場合は，`pnpm install`, `docker compose up -d`, `pnpm prisma db push`, `pnpm dev` などのコマンドを個別に実行してください．詳細は `mise.toml` の各タスク定義を参照してください．
+## 🚢 デプロイ (GitHub Actions)
+
+本リポジトリには `master` への push（または手動実行）で動くデプロイ workflow を用意している．
+
+- Workflow: `.github/workflows/deploy.yml`
+- 本番 compose: `docker-compose.production.yml`
+- イメージ: `ghcr.io/babcs2035/my-assets`（`latest` と commit SHA タグ）
+
+### 必要な GitHub Secrets
+
+- `TS_OAUTH_CLIENT_ID`
+- `TS_OAUTH_SECRET`
+- `DEPLOY_HOST`
+- `DEPLOY_USER`
+- `DEPLOY_KEY`
+- `DEPLOY_PORT`
+- `DEPLOY_TARGET`
+
+### デプロイ先 `.env` の必須項目
+
+少なくとも以下をデプロイ先の `${DEPLOY_TARGET}/.env` に設定すること．
+
+- `POSTGRES_PASSWORD`
+
+必要に応じて以下も設定すること（未設定時は既定値を使用）．
+
+- `POSTGRES_USER`
+- `POSTGRES_DB`
+- `DB_PORT`（`my-assets-app -> my-assets-db` の内部接続ポート）
+- `APP_PORT`
+- `TZ`
+- `OP_SERVICE_ACCOUNT_TOKEN`
+- `OP_VAULT`
+
+Workflow 実行時に `APP_IMAGE` と `IMAGE_TAG` は自動更新され，`docker compose pull && docker compose up -d` で反映される．
