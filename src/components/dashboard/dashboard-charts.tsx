@@ -116,7 +116,7 @@ export function DashboardAreaChart({ data }: DashboardAreaChartProps) {
         </div>
         <SeriesLegend
           visibleSeries={visibleSeries}
-          onToggle={(key) =>
+          onToggle={key =>
             setVisibleSeries(prev => ({ ...prev, [key]: !prev[key] }))
           }
         />
@@ -159,24 +159,64 @@ export function DashboardAreaChart({ data }: DashboardAreaChartProps) {
           >
             <defs>
               <linearGradient id="colorCash" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor={chartConfig.cash.color} stopOpacity={0.35} />
-                <stop offset="95%" stopColor={chartConfig.cash.color} stopOpacity={0.02} />
+                <stop
+                  offset="5%"
+                  stopColor={chartConfig.cash.color}
+                  stopOpacity={0.35}
+                />
+                <stop
+                  offset="95%"
+                  stopColor={chartConfig.cash.color}
+                  stopOpacity={0.02}
+                />
               </linearGradient>
               <linearGradient id="colorInvestment" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor={chartConfig.investment.color} stopOpacity={0.35} />
-                <stop offset="95%" stopColor={chartConfig.investment.color} stopOpacity={0.02} />
+                <stop
+                  offset="5%"
+                  stopColor={chartConfig.investment.color}
+                  stopOpacity={0.35}
+                />
+                <stop
+                  offset="95%"
+                  stopColor={chartConfig.investment.color}
+                  stopOpacity={0.02}
+                />
               </linearGradient>
               <linearGradient id="colorCrypto" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor={chartConfig.crypto.color} stopOpacity={0.35} />
-                <stop offset="95%" stopColor={chartConfig.crypto.color} stopOpacity={0.02} />
+                <stop
+                  offset="5%"
+                  stopColor={chartConfig.crypto.color}
+                  stopOpacity={0.35}
+                />
+                <stop
+                  offset="95%"
+                  stopColor={chartConfig.crypto.color}
+                  stopOpacity={0.02}
+                />
               </linearGradient>
               <linearGradient id="colorPoint" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor={chartConfig.point.color} stopOpacity={0.35} />
-                <stop offset="95%" stopColor={chartConfig.point.color} stopOpacity={0.02} />
+                <stop
+                  offset="5%"
+                  stopColor={chartConfig.point.color}
+                  stopOpacity={0.35}
+                />
+                <stop
+                  offset="95%"
+                  stopColor={chartConfig.point.color}
+                  stopOpacity={0.02}
+                />
               </linearGradient>
               <linearGradient id="colorLiability" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor={chartConfig.liability.color} stopOpacity={0.35} />
-                <stop offset="95%" stopColor={chartConfig.liability.color} stopOpacity={0.02} />
+                <stop
+                  offset="5%"
+                  stopColor={chartConfig.liability.color}
+                  stopOpacity={0.35}
+                />
+                <stop
+                  offset="95%"
+                  stopColor={chartConfig.liability.color}
+                  stopOpacity={0.02}
+                />
               </linearGradient>
             </defs>
             {/* ガイドブック: グリッド線は水平のみ、薄色 */}
@@ -296,7 +336,7 @@ export function DashboardAreaChart({ data }: DashboardAreaChartProps) {
       {/* ガイドブック: 凡例をグラフ直下に隣接 */}
       <SeriesLegend
         visibleSeries={visibleSeries}
-        onToggle={(key) =>
+        onToggle={key =>
           setVisibleSeries(prev => ({ ...prev, [key]: !prev[key] }))
         }
       />
@@ -363,30 +403,25 @@ export function DashboardDonutChart({ data }: DashboardDonutChartProps) {
   const sourceMap = new Map(source.map(item => [item.name, item.value]));
   // 負債は資産構成比から除外する
   const assetOnlySeries = areaSeries.filter(item => item.key !== "LIABILITY");
-  const pieData = assetOnlySeries
-    .map(item => ({
-      name: item.label,
-      value: Number(sourceMap.get(item.label) ?? 0),
-      fill: item.color,
-    }))
-    .filter(item => item.value > 0);
-
-  const hasData = pieData.some(d => d.value > 0);
+  const pieData = assetOnlySeries.map(item => ({
+    name: item.label,
+    value: Math.max(0, Number(sourceMap.get(item.label) ?? 0)),
+    fill: item.color,
+  }));
   const totalValue = useMemo(
     () => pieData.reduce((sum, d) => sum + d.value, 0),
     [pieData],
   );
+  const pieRenderData =
+    totalValue > 0
+      ? pieData
+      : pieData.map(item => ({
+          ...item,
+          value: 1,
+        }));
 
   if (!mounted) {
     return <div className="mx-auto aspect-square max-h-[250px] pb-0 min-w-0" />;
-  }
-
-  if (!hasData) {
-    return (
-      <div className="flex h-[250px] w-full items-center justify-center text-sm text-zinc-500 border border-dashed border-zinc-800 rounded-md mx-auto">
-        表示するデータがありません
-      </div>
-    );
   }
 
   return (
@@ -404,16 +439,20 @@ export function DashboardDonutChart({ data }: DashboardDonutChartProps) {
               content={({ active, payload }) => {
                 if (!active || !payload?.length) return null;
                 const item = payload[0];
-                const pct = totalValue > 0
-                  ? ((Number(item.value ?? 0) / totalValue) * 100).toFixed(1)
-                  : "0";
+                const actualValue = Number(
+                  sourceMap.get(String(item.name ?? "")) ?? 0,
+                );
+                const pct =
+                  totalValue > 0
+                    ? ((actualValue / totalValue) * 100).toFixed(1)
+                    : "0";
                 return (
                   <div className={tooltipCardClassName}>
                     <div className="mb-1 text-[10px] text-zinc-400">
                       {String(item.name ?? "")}
                     </div>
                     <div className="font-mono text-sm font-bold text-zinc-100">
-                      {valueFormatter(Number(item.value ?? 0))}
+                      {valueFormatter(actualValue)}
                     </div>
                     <div className="text-[10px] text-zinc-500 mt-0.5">
                       {pct}%
@@ -423,15 +462,16 @@ export function DashboardDonutChart({ data }: DashboardDonutChartProps) {
               }}
             />
             <Pie
-              data={pieData}
+              data={pieRenderData}
               dataKey="value"
               nameKey="name"
               innerRadius={55}
               outerRadius={80}
               strokeWidth={3}
               stroke="oklch(0.19 0.01 285)"
+              fillOpacity={totalValue > 0 ? 1 : 0.25}
             >
-              {pieData.map(entry => (
+              {pieRenderData.map(entry => (
                 <Cell key={entry.name} fill={entry.fill} />
               ))}
             </Pie>
@@ -452,7 +492,8 @@ export function DashboardDonutChart({ data }: DashboardDonutChartProps) {
       <div className="mt-3 grid w-full grid-cols-1 gap-1.5 text-sm text-zinc-300">
         {assetOnlySeries.map(item => {
           const val = Number(sourceMap.get(item.label) ?? 0);
-          const pct = totalValue > 0 ? ((val / totalValue) * 100).toFixed(1) : "0";
+          const pct =
+            totalValue > 0 ? ((val / totalValue) * 100).toFixed(1) : "0";
           return (
             <div
               key={item.key}

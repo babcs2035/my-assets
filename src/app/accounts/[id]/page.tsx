@@ -1,9 +1,4 @@
-import {
-  ArrowLeft,
-  Coins,
-  CreditCard,
-  TrendingUp,
-} from "lucide-react";
+import { ArrowLeft, Coins, CreditCard, TrendingUp } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getAccountDetail } from "@/actions/accounts";
@@ -30,11 +25,15 @@ type Props = {
  */
 function getBalanceHistoryData(
   histories: Array<{ date: Date; balance: number }>,
+  currentBalance: number,
 ): Array<{ date: string; balance: number }> {
   const historyMap = new Map<string, number>();
   for (const h of histories) {
     const dateStr = formatJSTDate(h.date);
     historyMap.set(dateStr, h.balance);
+  }
+  if (historyMap.size === 0) {
+    historyMap.set(formatJSTDate(new Date()), currentBalance);
   }
   return Array.from(historyMap.entries())
     .map(([date, balance]) => ({ date, balance }))
@@ -51,7 +50,12 @@ function computeTotalChartData(
     assetType: string;
     data: Array<{ date: string; balance: number }>;
   }>,
-): Array<{ date: string; balance: number }> {
+): Array<{
+  date: string;
+  balance: number;
+  assetTotal: number;
+  liabilityTotal: number;
+}> {
   const allDates = new Set<string>();
   for (const saData of subAccountChartData) {
     for (const d of saData.data) {
@@ -70,19 +74,34 @@ function computeTotalChartData(
     return map;
   });
 
-  const result: Array<{ date: string; balance: number }> = [];
+  const result: Array<{
+    date: string;
+    balance: number;
+    assetTotal: number;
+    liabilityTotal: number;
+  }> = [];
   const lastKnownBalances = new Array(subAccountChartData.length).fill(0);
 
   for (const date of sortedDates) {
-    let total = 0;
+    let assetTotal = 0;
+    let liabilityTotal = 0;
     for (let i = 0; i < balanceMaps.length; i++) {
       const balance = balanceMaps[i].get(date);
       if (balance !== undefined) {
         lastKnownBalances[i] = balance;
       }
-      total += lastKnownBalances[i];
+      if (subAccountChartData[i].assetType === "LIABILITY") {
+        liabilityTotal += lastKnownBalances[i];
+      } else {
+        assetTotal += lastKnownBalances[i];
+      }
     }
-    result.push({ date, balance: total });
+    result.push({
+      date,
+      balance: assetTotal + liabilityTotal,
+      assetTotal,
+      liabilityTotal,
+    });
   }
 
   return result;
@@ -114,28 +133,32 @@ export default async function AccountDetailPage({ params }: Props) {
   const allCryptos = visibleSubAccounts.flatMap(sa => sa.cryptos);
 
   const subAccountChartData = visibleSubAccounts.map(sa => {
-    const chartData = getBalanceHistoryData(sa.histories ?? []);
+    const chartData = getBalanceHistoryData(sa.histories ?? [], sa.balance);
     return { id: sa.id, assetType: sa.assetType, data: chartData };
   });
 
   const totalChartData = computeTotalChartData(subAccountChartData);
+  const hasLiabilitySubAccount = visibleSubAccounts.some(
+    sa => sa.assetType === "LIABILITY",
+  );
 
   const chartSeries = [
-      {
-        id: "total",
-        name: "合計",
-        currentBalance: totalBalance,
-        data: totalChartData,
-        assetType: visibleSubAccounts[0]?.assetType,
-      },
-      ...visibleSubAccounts.map((sa, index) => ({
-        id: sa.id,
-        name: sa.currentName,
-        currentBalance: sa.balance,
-        data: subAccountChartData[index].data,
-        assetType: sa.assetType,
-      })),
-    ];
+    {
+      id: "total",
+      name: "合計",
+      currentBalance: totalBalance,
+      data: totalChartData,
+      assetType: visibleSubAccounts[0]?.assetType,
+      hasLiabilitySeries: hasLiabilitySubAccount,
+    },
+    ...visibleSubAccounts.map((sa, index) => ({
+      id: sa.id,
+      name: sa.currentName,
+      currentBalance: sa.balance,
+      data: subAccountChartData[index].data,
+      assetType: sa.assetType,
+    })),
+  ];
 
   const defaultAssetType = visibleSubAccounts[0]?.assetType ?? "CASH";
 
@@ -193,7 +216,9 @@ export default async function AccountDetailPage({ params }: Props) {
                   <tr>
                     <th className="whitespace-nowrap">銘柄名</th>
                     <th className="text-right whitespace-nowrap">保有数</th>
-                    <th className="text-right whitespace-nowrap">平均取得単価</th>
+                    <th className="text-right whitespace-nowrap">
+                      平均取得単価
+                    </th>
                     <th className="text-right whitespace-nowrap">基準価額</th>
                     <th className="text-right whitespace-nowrap">評価額</th>
                     <th className="text-right whitespace-nowrap">前日比</th>
@@ -220,17 +245,23 @@ export default async function AccountDetailPage({ params }: Props) {
                       <td
                         className={`text-right font-mono ${h.dayBeforeRatio != null && h.dayBeforeRatio >= 0 ? "text-success" : "text-destructive"}`}
                       >
-                        {h.dayBeforeRatio != null ? formatSignedAmount(h.dayBeforeRatio) : "N/A"}
+                        {h.dayBeforeRatio != null
+                          ? formatSignedAmount(h.dayBeforeRatio)
+                          : "N/A"}
                       </td>
                       <td
                         className={`text-right font-mono ${h.gainLoss != null && h.gainLoss >= 0 ? "text-success" : "text-destructive"}`}
                       >
-                        {h.gainLoss != null ? formatSignedAmount(h.gainLoss) : "N/A"}
+                        {h.gainLoss != null
+                          ? formatSignedAmount(h.gainLoss)
+                          : "N/A"}
                       </td>
                       <td
                         className={`text-right font-mono ${h.gainLossRate != null && h.gainLossRate >= 0 ? "text-success" : "text-destructive"}`}
                       >
-                        {h.gainLossRate != null ? formatPercent(h.gainLossRate) : "N/A"}
+                        {h.gainLossRate != null
+                          ? formatPercent(h.gainLossRate)
+                          : "N/A"}
                       </td>
                     </tr>
                   ))}
@@ -262,9 +293,7 @@ export default async function AccountDetailPage({ params }: Props) {
                       <p className="text-base font-bold text-zinc-100 truncate">
                         {c.symbol}
                       </p>
-                      <p className="text-xs text-zinc-500 truncate">
-                        {c.name}
-                      </p>
+                      <p className="text-xs text-zinc-500 truncate">{c.name}</p>
                     </div>
                     <Badge
                       variant={

@@ -37,8 +37,14 @@ export type ChartDataSerie = {
   id: string; // "total" | subAccountId
   name: string;
   currentBalance: number;
-  data: { date: string; balance: number }[];
+  data: Array<{
+    date: string;
+    balance: number;
+    assetTotal?: number;
+    liabilityTotal?: number;
+  }>;
   assetType?: AssetType;
+  hasLiabilitySeries?: boolean;
 };
 
 export function AccountBalanceChart({
@@ -66,7 +72,9 @@ export function AccountBalanceChart({
               <CardTitle className="text-base font-medium text-zinc-200">
                 残高推移（日次）
               </CardTitle>
-              <CardDescription className="text-sm">推移データがまだありません</CardDescription>
+              <CardDescription className="text-sm">
+                推移データがまだありません
+              </CardDescription>
             </div>
           </div>
         </CardHeader>
@@ -86,6 +94,13 @@ export function AccountBalanceChart({
   // 万一データが空になってしまった場合のフォールバック（グラフが壊れないため）
   const chartData =
     filteredData.length > 0 ? filteredData : selectedSeries.data;
+  const isTotalSeries = selectedSeries.id === "total";
+  const hasSplitTotal =
+    isTotalSeries &&
+    Boolean(selectedSeries.hasLiabilitySeries) &&
+    chartData.some(
+      d => d.assetTotal !== undefined || d.liabilityTotal !== undefined,
+    );
 
   // Y軸の最小・最大を算出（負債のマイナス値にも対応）
   const balances = chartData.map(d => d.balance);
@@ -94,7 +109,15 @@ export function AccountBalanceChart({
 
   let domainMin: number;
   let domainMax: number;
-  if (isLiability) {
+  if (hasSplitTotal) {
+    const assetMax = Math.max(...chartData.map(d => d.assetTotal ?? 0), 0);
+    const liabilityMin = Math.min(
+      ...chartData.map(d => d.liabilityTotal ?? 0),
+      0,
+    );
+    domainMin = liabilityMin < 0 ? Math.floor(liabilityMin * 1.2) : 0;
+    domainMax = assetMax > 0 ? Math.ceil(assetMax * 1.1) : 0;
+  } else if (isLiability) {
     // 負債の場合: 下限は最小値にマージン、上限は0
     domainMin = minBalance < 0 ? Math.floor(minBalance * 1.1) : minBalance;
     domainMax = 0;
@@ -124,7 +147,9 @@ export function AccountBalanceChart({
             <div className="text-3xl font-bold tracking-tight text-zinc-50 font-mono mt-2 mb-1">
               {formatCurrency(currentBalance)}
             </div>
-            <CardDescription className="text-sm">{selectedSeries.name} の残高推移</CardDescription>
+            <CardDescription className="text-sm">
+              {selectedSeries.name} の残高推移
+            </CardDescription>
           </div>
           <div className="flex w-full flex-col gap-3 lg:w-auto">
             <Select value={selectedId} onValueChange={setSelectedId}>
@@ -164,6 +189,20 @@ export function AccountBalanceChart({
                 <stop offset="5%" stopColor={chartColor} stopOpacity={0.4} />
                 <stop offset="95%" stopColor={chartColor} stopOpacity={0} />
               </linearGradient>
+              <linearGradient id="colorAssetTotal" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.35} />
+                <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
+              </linearGradient>
+              <linearGradient
+                id="colorLiabilityTotal"
+                x1="0"
+                y1="0"
+                x2="0"
+                y2="1"
+              >
+                <stop offset="5%" stopColor="#ef4444" stopOpacity={0.35} />
+                <stop offset="95%" stopColor="#ef4444" stopOpacity={0} />
+              </linearGradient>
             </defs>
             <CartesianGrid
               strokeDasharray="3 3"
@@ -196,6 +235,41 @@ export function AccountBalanceChart({
             <Tooltip
               content={({ active, payload }) => {
                 if (active && payload && payload.length) {
+                  if (hasSplitTotal) {
+                    const p = payload[0].payload as {
+                      date: string;
+                      balance: number;
+                      assetTotal?: number;
+                      liabilityTotal?: number;
+                    };
+                    return (
+                      <div className="rounded-lg border border-zinc-700 bg-zinc-900 p-2 shadow-sm">
+                        <div className="mb-1 text-[10px] text-zinc-400">
+                          {String(p.date).replaceAll("-", "/")}
+                        </div>
+                        <div className="space-y-1 text-xs">
+                          <div className="flex items-center justify-between gap-4">
+                            <span className="text-zinc-300">資産</span>
+                            <span className="font-mono font-bold text-zinc-100">
+                              {formatCurrency(p.assetTotal ?? 0)}
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between gap-4">
+                            <span className="text-zinc-300">負債</span>
+                            <span className="font-mono font-bold text-zinc-100">
+                              {formatCurrency(p.liabilityTotal ?? 0)}
+                            </span>
+                          </div>
+                          <div className="mt-1 border-t border-zinc-700 pt-1 flex items-center justify-between gap-4">
+                            <span className="text-zinc-300">合計</span>
+                            <span className="font-mono font-bold text-zinc-100">
+                              {formatCurrency(p.balance)}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  }
                   return (
                     <div className="rounded-lg border border-zinc-700 bg-zinc-900 p-2 shadow-sm">
                       <div className="mb-1 text-[10px] text-zinc-400">
@@ -210,17 +284,42 @@ export function AccountBalanceChart({
                 return null;
               }}
             />
-            <Area
-              key={selectedId}
-              type="monotone"
-              dataKey="balance"
-              stroke={chartColor}
-              strokeWidth={2}
-              fillOpacity={1}
-              fill={`url(#colorBalance-${selectedId})`}
-              isAnimationActive={true}
-              animationDuration={800}
-            />
+            {hasSplitTotal ? (
+              <>
+                <Area
+                  type="monotone"
+                  dataKey="assetTotal"
+                  stroke="#3b82f6"
+                  strokeWidth={2}
+                  fillOpacity={1}
+                  fill="url(#colorAssetTotal)"
+                  isAnimationActive={true}
+                  animationDuration={800}
+                />
+                <Area
+                  type="monotone"
+                  dataKey="liabilityTotal"
+                  stroke="#ef4444"
+                  strokeWidth={2}
+                  fillOpacity={1}
+                  fill="url(#colorLiabilityTotal)"
+                  isAnimationActive={true}
+                  animationDuration={800}
+                />
+              </>
+            ) : (
+              <Area
+                key={selectedId}
+                type="monotone"
+                dataKey="balance"
+                stroke={chartColor}
+                strokeWidth={2}
+                fillOpacity={1}
+                fill={`url(#colorBalance-${selectedId})`}
+                isAnimationActive={true}
+                animationDuration={800}
+              />
+            )}
           </AreaChart>
         </ResponsiveContainer>
       </CardContent>

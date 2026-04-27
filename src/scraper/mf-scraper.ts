@@ -6,18 +6,20 @@ import { prisma } from "../lib/prisma";
 import { formatJSTDate, todayJST } from "../lib/utils";
 
 const normalizeInstitutionName = (name: string) =>
-  name
-    .split(/[（(]/)[0]
-    .replace(/\s+/g, " ")
-    .trim();
+  name.split(/[（(]/)[0].replace(/\s+/g, " ").trim();
 
 const MF_BACKFILL_START_DATE = "2023-01-01";
+
+const toUtcDateOnly = (ymd: string) => {
+  const [year, month, day] = ymd.split("-").map(Number);
+  return new Date(Date.UTC(year, month - 1, day, 0, 0, 0, 0));
+};
 
 const normalizeLoose = (value: string) =>
   value
     .normalize("NFKC")
     .replace(/\s+/g, "")
-    .replace(/[()（）「」『』【】\-ー―‐\/・.,]/g, "")
+    .replace(/[()（）「」『』【】\-ー―‐/・.,]/g, "")
     .toLowerCase();
 
 const isPlaceholderSubAccountName = (name: string) => {
@@ -191,10 +193,9 @@ async function fetchServiceDetailBySubAccount(
   subAccountIdHash: string,
   range: number,
 ) {
-  const params = new URLSearchParams({
-    sub_account_id_hash: subAccountIdHash,
-    range: String(range),
-  });
+  const params = new URLSearchParams();
+  params.set("sub_account_id_hash", subAccountIdHash);
+  params.set("range", String(range));
   return await fetchJson<MfServiceDetailResponse>(
     page,
     `https://moneyforward.com/sp/service_detail/${accountIdHash}?${params.toString()}`,
@@ -408,10 +409,14 @@ async function scrapeTransactions(
   const currentMonthStart = new Date();
   currentMonthStart.setDate(1);
   currentMonthStart.setHours(0, 0, 0, 0);
+  const minBackfillMonthStart = new Date(
+    `${MF_BACKFILL_START_DATE}T00:00:00+09:00`,
+  );
+  minBackfillMonthStart.setDate(1);
+  minBackfillMonthStart.setHours(0, 0, 0, 0);
 
   for (const account of targetAccounts) {
     const isIncrementalSync = options.mode === "scheduled";
-    const minSyncMonth = MF_BACKFILL_START_DATE.slice(0, 7);
 
     const accountSubAccounts = (account.sub_accounts ?? [])
       .filter(sa => sa.sub_account_id_hash)
@@ -431,29 +436,42 @@ async function scrapeTransactions(
     }
 
     console.log(
-      `Processing transactions for ${account.name}... (${isIncrementalSync ? "incremental: 2 months" : `backfill to ${minSyncMonth}`})`,
+      `Processing transactions for ${account.name}... (${isIncrementalSync ? "incremental: 2 months" : `backfill to ${MF_BACKFILL_START_DATE}`})`,
     );
 
-    const maxMonths = isIncrementalSync
-      ? 2
-      : Number(process.env.MF_MAX_SYNC_MONTHS ?? 240);
-
-    const cursor = new Date(currentMonthStart);
-    let processedMonths = 0;
-
-    while (processedMonths < maxMonths) {
-      const yyyy = cursor.getFullYear();
-      const mm = String(cursor.getMonth() + 1).padStart(2, "0");
-      const monthKey = `${yyyy}-${mm}`;
-
-      if (!isIncrementalSync && monthKey < minSyncMonth) {
-        break;
+    const windows: Array<{ from: string; to: string }> = [];
+    if (isIncrementalSync) {
+      const cursor = new Date(currentMonthStart);
+      for (let i = 0; i < 2; i++) {
+        const y = cursor.getFullYear();
+        const m = String(cursor.getMonth() + 1).padStart(2, "0");
+        const from = `${y}-${m}-01`;
+        const monthEnd = new Date(y, cursor.getMonth() + 1, 0);
+        const to = `${y}-${m}-${String(monthEnd.getDate()).padStart(2, "0")}`;
+        windows.push({ from, to });
+        cursor.setMonth(cursor.getMonth() - 1);
       }
+    } else {
+      // API の取得上限を 1 年に制限し、バックフィル時は 1 年単位で区切って遡及する
+      const chunkMonths = 12;
+      let chunkEnd = new Date(currentMonthStart);
+      while (chunkEnd.getTime() >= minBackfillMonthStart.getTime()) {
+        const chunkStart = new Date(chunkEnd);
+        chunkStart.setMonth(chunkStart.getMonth() - (chunkMonths - 1));
+        if (chunkStart.getTime() < minBackfillMonthStart.getTime()) {
+          chunkStart.setTime(minBackfillMonthStart.getTime());
+        }
 
-      const from = `${monthKey}-01`;
-      const monthEnd = new Date(yyyy, cursor.getMonth() + 1, 0);
-      const to = `${monthKey}-${String(monthEnd.getDate()).padStart(2, "0")}`;
+        const from = `${chunkStart.getFullYear()}-${String(chunkStart.getMonth() + 1).padStart(2, "0")}-01`;
+        const to = `${chunkEnd.getFullYear()}-${String(chunkEnd.getMonth() + 1).padStart(2, "0")}-${String(new Date(chunkEnd.getFullYear(), chunkEnd.getMonth() + 1, 0).getDate()).padStart(2, "0")}`;
+        windows.push({ from, to });
 
+        chunkEnd = new Date(chunkStart);
+        chunkEnd.setMonth(chunkEnd.getMonth() - 1);
+      }
+    }
+
+    for (const { from, to } of windows) {
       for (const sa of accountSubAccounts) {
         try {
           const payload = await fetchTermDataBySubAccount(
@@ -552,9 +570,6 @@ async function scrapeTransactions(
           );
         }
       }
-
-      processedMonths++;
-      cursor.setMonth(cursor.getMonth() - 1);
     }
   }
 
@@ -577,12 +592,18 @@ async function scrapeBalanceHistory(page: Page, options: MfScraperOptions) {
     Math.floor((to.getTime() - from.getTime()) / (1000 * 60 * 60 * 24)) + 1;
   const buildHistoryFromTransactions = async (
     subAccountId: string,
-    latestBalance: number,
+    endDateBalance: number,
+    startDate: Date,
+    endDate: Date,
+    options?: {
+      trimBeforeFirstTransaction?: boolean;
+      includeEndPointWhenNoTransactions?: boolean;
+    },
   ) => {
     const txs = await prisma.transaction.findMany({
       where: {
         subAccountId,
-        date: { gte: minDate, lte: today },
+        date: { gte: startDate, lte: endDate },
       },
       select: {
         date: true,
@@ -593,14 +614,32 @@ async function scrapeBalanceHistory(page: Page, options: MfScraperOptions) {
     const dailyNetByDate = new Map<string, number>();
     for (const tx of txs) {
       const dateKey = formatJSTDate(tx.date);
-      dailyNetByDate.set(dateKey, (dailyNetByDate.get(dateKey) ?? 0) + tx.amount);
+      dailyNetByDate.set(
+        dateKey,
+        (dailyNetByDate.get(dateKey) ?? 0) + tx.amount,
+      );
+    }
+
+    const txDateKeys = Array.from(dailyNetByDate.keys()).sort();
+    const effectiveStartDate =
+      options?.trimBeforeFirstTransaction && txDateKeys.length > 0
+        ? toJstMidnight(txDateKeys[0])
+        : startDate;
+
+    if (
+      txDateKeys.length === 0 &&
+      options?.includeEndPointWhenNoTransactions === true
+    ) {
+      return new Map<string, number>([
+        [formatYmd(endDate), Math.trunc(endDateBalance)],
+      ]);
     }
 
     const inferredHistory = new Map<string, number>();
-    let runningBalance = Math.trunc(latestBalance);
+    let runningBalance = Math.trunc(endDateBalance);
     for (
-      let cursor = new Date(today);
-      cursor.getTime() >= minDate.getTime();
+      let cursor = new Date(endDate);
+      cursor.getTime() >= effectiveStartDate.getTime();
       cursor = new Date(cursor.getTime() - 24 * 60 * 60 * 1000)
     ) {
       const dateKey = formatYmd(cursor);
@@ -675,16 +714,25 @@ async function scrapeBalanceHistory(page: Page, options: MfScraperOptions) {
   }
   minDate.setHours(0, 0, 0, 0);
 
-  const maxRangeDays = Number(process.env.MF_HISTORY_RANGE_DAYS ?? 3650);
-  const neededDays = Math.max(1, diffDaysInclusive(minDate, today));
-  const baseRangeCandidates = [30, 60, 90, 180, 365, 730, 1095, 1825, 3650];
-  const rangeCandidates = Array.from(
-    new Set(
-      [neededDays, ...baseRangeCandidates]
-        .map(v => Math.max(1, Math.min(v, maxRangeDays)))
-        .filter(v => v > 0),
-    ),
-  ).sort((a, b) => a - b);
+  const configuredMaxRange = Number(process.env.MF_HISTORY_RANGE_DAYS ?? 0);
+  const getRangeCandidates = (neededDays: number) =>
+    Array.from(
+      new Set(
+        [
+          30,
+          60,
+          90,
+          180,
+          365,
+          730,
+          1095,
+          1460,
+          1825,
+          neededDays,
+          configuredMaxRange > 0 ? configuredMaxRange : 0,
+        ].filter(v => Number.isFinite(v) && v > 0),
+      ),
+    ).sort((a, b) => a - b);
 
   let totalSaved = 0;
   let totalSubAccounts = 0;
@@ -703,7 +751,10 @@ async function scrapeBalanceHistory(page: Page, options: MfScraperOptions) {
     }
 
     const subSummaryByDisplayName = new Map<string, MfSubAccountSummary[]>();
-    const subSummaryByNormalizedDisplay = new Map<string, MfSubAccountSummary[]>();
+    const subSummaryByNormalizedDisplay = new Map<
+      string,
+      MfSubAccountSummary[]
+    >();
     for (const sa of summary.sub_accounts ?? []) {
       const display = buildSubAccountMergeName(sa.sub_type, sa.sub_name);
       const byDisplay = subSummaryByDisplayName.get(display) ?? [];
@@ -719,9 +770,12 @@ async function scrapeBalanceHistory(page: Page, options: MfScraperOptions) {
     }
 
     for (const subAccount of mainAccount.subAccounts) {
+      const isLiabilitySubAccount = subAccount.assetType === "LIABILITY";
       let candidateSubSummaries =
         subSummaryByDisplayName.get(subAccount.currentName) ??
-        subSummaryByNormalizedDisplay.get(normalizeLoose(subAccount.currentName));
+        subSummaryByNormalizedDisplay.get(
+          normalizeLoose(subAccount.currentName),
+        );
       if (!candidateSubSummaries || candidateSubSummaries.length === 0) {
         const normalizedSubName = normalizeLoose(subAccount.currentName);
         candidateSubSummaries = (summary.sub_accounts ?? []).filter(sa => {
@@ -750,108 +804,163 @@ async function scrapeBalanceHistory(page: Page, options: MfScraperOptions) {
       ) {
         candidateSubSummaries = summary.sub_accounts ?? [];
       }
-      if (!candidateSubSummaries || candidateSubSummaries.length === 0) continue;
       const uniqueCandidateSubSummaries = Array.from(
         new Map(
-          candidateSubSummaries
+          (candidateSubSummaries ?? [])
             .filter(sa => Boolean(sa.sub_account_id_hash))
             .map(sa => [sa.sub_account_id_hash, sa]),
         ).values(),
       );
-      if (uniqueCandidateSubSummaries.length === 0) continue;
+      if (!isLiabilitySubAccount && uniqueCandidateSubSummaries.length === 0)
+        continue;
       totalSubAccounts++;
 
       try {
         let mergedHistoryByDate = new Map<string, number>();
 
-        for (const subSummary of uniqueCandidateSubSummaries) {
-          let best: {
-            range: number;
-            toDateStr: string;
-            fromDateStr?: string;
-            mergedSeries: number[];
-          } | null = null;
-
-          for (const range of rangeCandidates) {
-            const payload = await fetchServiceDetailBySubAccount(
-              page,
-              summary.account_id_hash,
-              subSummary.sub_account_id_hash,
-              range,
-            );
-            const parsed = parseMergedHistory(payload.account_detail, {
-              preferLiabilitySeries: subAccount.assetType === "LIABILITY",
-            });
-            if (!parsed) continue;
-
-            if (
-              !best ||
-              parsed.mergedSeries.length > best.mergedSeries.length ||
-              (parsed.mergedSeries.length === best.mergedSeries.length &&
-                range > best.range)
-            ) {
-              best = {
-                range,
-                toDateStr: parsed.toDateStr,
-                fromDateStr: parsed.fromDateStr,
-                mergedSeries: parsed.mergedSeries,
-              };
-            }
-          }
-
-          if (!best) continue;
-          const { toDateStr, fromDateStr, mergedSeries } = best;
-
-          const toDate = toJstMidnight(toDateStr);
-          const inferredFromDate = new Date(toDate);
-          inferredFromDate.setDate(toDate.getDate() - (mergedSeries.length - 1));
-
-          console.log(
-            `  📈 History range selected: ${mainAccount.label}/${subAccount.currentName} (subHash=${subSummary.sub_account_id_hash}) range=${best.range}, points=${mergedSeries.length}, from=${formatYmd(inferredFromDate)}, to=${toDateStr}`,
-          );
-
-          if (fromDateStr) {
-            const reportedFromDate = toJstMidnight(fromDateStr);
-            const expectedDays = diffDaysInclusive(reportedFromDate, toDate);
-            if (expectedDays !== mergedSeries.length) {
-              console.warn(
-                `⚠️ disp_sum_history length mismatch for ${mainAccount.label}/${subAccount.currentName} (subHash=${subSummary.sub_account_id_hash}): from_date=${fromDateStr}, to_date=${toDateStr}, expected=${expectedDays}, actual=${mergedSeries.length}. Using inferred range ${formatYmd(inferredFromDate)}..${toDateStr}.`,
-              );
-            }
-          }
-
-          for (let i = 0; i < mergedSeries.length; i++) {
-            const day = new Date(
-              inferredFromDate.getTime() + i * 24 * 60 * 60 * 1000,
-            );
-            if (day < minDate || day > today) continue;
-
-            const dateKey = formatYmd(day);
-            const balance = mergedSeries[i];
-            if (!Number.isFinite(balance)) continue;
-            mergedHistoryByDate.set(
-              dateKey,
-              Math.trunc((mergedHistoryByDate.get(dateKey) ?? 0) + balance),
-            );
-          }
-        }
-
-        const isAllZeroHistory =
-          mergedHistoryByDate.size > 0 &&
-          Array.from(mergedHistoryByDate.values()).every(balance => balance === 0);
-        if (options.mode === "manual" && isAllZeroHistory) {
-          console.warn(
-            `⚠️ service_detail history is all zero for ${mainAccount.label}/${subAccount.currentName}. Rebuilding from transactions.`,
-          );
+        if (isLiabilitySubAccount) {
           mergedHistoryByDate = await buildHistoryFromTransactions(
             subAccount.id,
             subAccount.balance,
+            minDate,
+            today,
+            {
+              trimBeforeFirstTransaction: true,
+              includeEndPointWhenNoTransactions: true,
+            },
           );
+          console.log(
+            `  📈 Liability history rebuilt from transactions: ${mainAccount.label}/${subAccount.currentName}, points=${mergedHistoryByDate.size}`,
+          );
+        } else {
+          for (const subSummary of uniqueCandidateSubSummaries) {
+            const subSummaryHistoryByDate = new Map<string, number>();
+            let anchorDate = new Date(today);
+
+            while (anchorDate.getTime() >= minDate.getTime()) {
+              const anchorStr = formatYmd(anchorDate);
+              await page.goto(
+                `https://moneyforward.com/bs/history/list/${anchorStr}`,
+                {
+                  waitUntil: "domcontentloaded",
+                },
+              );
+
+              const neededDaysForAnchor = Math.max(
+                1,
+                diffDaysInclusive(minDate, anchorDate),
+              );
+              const rangeCandidates = getRangeCandidates(neededDaysForAnchor);
+
+              let best: {
+                range: number;
+                toDateStr: string;
+                fromDateStr?: string;
+                mergedSeries: number[];
+              } | null = null;
+
+              for (const range of rangeCandidates) {
+                const payload = await fetchServiceDetailBySubAccount(
+                  page,
+                  summary.account_id_hash,
+                  subSummary.sub_account_id_hash,
+                  range,
+                );
+                const parsed = parseMergedHistory(payload.account_detail, {
+                  preferLiabilitySeries: false,
+                });
+                if (!parsed) continue;
+
+                if (
+                  !best ||
+                  parsed.mergedSeries.length > best.mergedSeries.length ||
+                  (parsed.mergedSeries.length === best.mergedSeries.length &&
+                    range > best.range)
+                ) {
+                  best = {
+                    range,
+                    toDateStr: parsed.toDateStr,
+                    fromDateStr: parsed.fromDateStr,
+                    mergedSeries: parsed.mergedSeries,
+                  };
+                }
+              }
+
+              if (!best) break;
+              const { toDateStr, fromDateStr, mergedSeries } = best;
+
+              const toDate = toJstMidnight(toDateStr);
+              const inferredFromDate = new Date(toDate);
+              inferredFromDate.setDate(
+                toDate.getDate() - (mergedSeries.length - 1),
+              );
+
+              console.log(
+                `  📈 History range selected: ${mainAccount.label}/${subAccount.currentName} (subHash=${subSummary.sub_account_id_hash}) anchor=${anchorStr} range=${best.range}, points=${mergedSeries.length}, from=${formatYmd(inferredFromDate)}, to=${toDateStr}`,
+              );
+
+              if (fromDateStr) {
+                const reportedFromDate = toJstMidnight(fromDateStr);
+                const expectedDays = diffDaysInclusive(
+                  reportedFromDate,
+                  toDate,
+                );
+                if (expectedDays !== mergedSeries.length) {
+                  console.warn(
+                    `⚠️ disp_sum_history length mismatch for ${mainAccount.label}/${subAccount.currentName} (subHash=${subSummary.sub_account_id_hash}): from_date=${fromDateStr}, to_date=${toDateStr}, expected=${expectedDays}, actual=${mergedSeries.length}. Using inferred range ${formatYmd(inferredFromDate)}..${toDateStr}.`,
+                  );
+                }
+              }
+
+              const clippedFromDate =
+                inferredFromDate.getTime() < minDate.getTime()
+                  ? new Date(minDate)
+                  : inferredFromDate;
+              const clippedToDate =
+                toDate.getTime() > anchorDate.getTime()
+                  ? new Date(anchorDate)
+                  : toDate;
+
+              for (let i = 0; i < mergedSeries.length; i++) {
+                const day = new Date(
+                  inferredFromDate.getTime() + i * 24 * 60 * 60 * 1000,
+                );
+                if (day < clippedFromDate || day > clippedToDate) continue;
+                if (day < minDate || day > today) continue;
+
+                const dateKey = formatYmd(day);
+                const balance = mergedSeries[i];
+                if (!Number.isFinite(balance)) continue;
+                subSummaryHistoryByDate.set(dateKey, Math.trunc(balance));
+              }
+
+              if (inferredFromDate.getTime() <= minDate.getTime()) {
+                break;
+              }
+
+              const nextAnchor = new Date(inferredFromDate);
+              nextAnchor.setDate(nextAnchor.getDate() - 1);
+              if (nextAnchor.getTime() >= anchorDate.getTime()) {
+                console.warn(
+                  `⚠️ History pagination stalled for ${mainAccount.label}/${subAccount.currentName} (subHash=${subSummary.sub_account_id_hash}) at anchor=${anchorStr}. Stopping pagination.`,
+                );
+                break;
+              }
+              anchorDate = nextAnchor;
+            }
+
+            for (const [dateKey, balance] of subSummaryHistoryByDate) {
+              mergedHistoryByDate.set(
+                dateKey,
+                Math.trunc((mergedHistoryByDate.get(dateKey) ?? 0) + balance),
+              );
+            }
+          }
         }
 
-        for (const [dateKey, balance] of Array.from(mergedHistoryByDate.entries()).sort(
-          (a, b) => a[0].localeCompare(b[0]),
-        )) {
+        for (const [dateKey, balance] of Array.from(
+          mergedHistoryByDate.entries(),
+        ).sort((a, b) => a[0].localeCompare(b[0]))) {
           const historyDate = new Date(`${dateKey}T08:00:00+09:00`);
           await prisma.balanceHistory.upsert({
             where: {
@@ -1094,13 +1203,18 @@ async function saveTransactionsToDatabase(
         create: {
           id: txId,
           subAccountId,
-          date: new Date(`${date}T00:00:00+09:00`), // JST timezone
+          date: toUtcDateOnly(date),
           amount,
           desc,
           isTransfer,
         },
         update: {
-          // 既存のトランザクションは更新しない（冪等性を保つ）
+          // 既存データのズレ（日付等）を同期時に補正する
+          subAccountId,
+          date: toUtcDateOnly(date),
+          amount,
+          desc,
+          isTransfer,
         },
       });
       savedCount++;
@@ -1409,13 +1523,18 @@ async function saveTransactionsToDatabase(
             create: {
               id: fromTxId,
               subAccountId: fromSubAccount.id,
-              date: new Date(`${tx.date}T00:00:00+09:00`),
+              date: toUtcDateOnly(tx.date),
               amount: -absAmount,
               desc: transferDesc,
               isTransfer: true,
               linkedTransId: toTxId,
             },
             update: {
+              subAccountId: fromSubAccount.id,
+              date: toUtcDateOnly(tx.date),
+              amount: -absAmount,
+              desc: transferDesc,
+              isTransfer: true,
               linkedTransId: toTxId,
             },
           });
@@ -1426,13 +1545,18 @@ async function saveTransactionsToDatabase(
             create: {
               id: toTxId,
               subAccountId: toSubAccount.id,
-              date: new Date(`${tx.date}T00:00:00+09:00`),
+              date: toUtcDateOnly(tx.date),
               amount: absAmount,
               desc: transferDesc,
               isTransfer: true,
               linkedTransId: fromTxId,
             },
             update: {
+              subAccountId: toSubAccount.id,
+              date: toUtcDateOnly(tx.date),
+              amount: absAmount,
+              desc: transferDesc,
+              isTransfer: true,
               linkedTransId: fromTxId,
             },
           });
@@ -1467,12 +1591,12 @@ async function saveTransactionsToDatabase(
         (tx as { subAccountIdHash?: string }).subAccountIdHash,
       ) ??
       (matchedMainAccount
-        ? matchedMainAccount.subAccounts.find(
+        ? (matchedMainAccount.subAccounts.find(
             sa => sa.currentName === tx.subAccountName,
           ) ??
           matchedMainAccount.subAccounts.find(
             sa => normalize(sa.currentName) === normalize(tx.subAccountName),
-          )
+          ))
         : null);
 
     if (!subAccount) {
@@ -1758,25 +1882,31 @@ export async function runMfScraper(
 
     console.log("✅ Logged in successfully (Verified).");
 
-    await triggerSync(page, provider.id);
+    if (options.mode === "scheduled") {
+      await triggerSync(page, provider.id);
 
-    console.log("⏳ Waiting for sync to complete (max 60 min)...");
-    const startTime = Date.now();
-    const timeout = 60 * 60 * 1000;
+      console.log("⏳ Waiting for sync to complete (max 60 min)...");
+      const startTime = Date.now();
+      const timeout = 60 * 60 * 1000;
 
-    while (Date.now() - startTime < timeout) {
-      await page.reload();
-      await page.waitForTimeout(5000);
+      while (Date.now() - startTime < timeout) {
+        await page.reload();
+        await page.waitForTimeout(5000);
 
-      const loadingIcons = page.locator('img[src*="loading"]:visible');
-      const count = await loadingIcons.count();
+        const loadingIcons = page.locator('img[src*="loading"]:visible');
+        const count = await loadingIcons.count();
 
-      if (count === 0) {
-        console.log("✅ All syncs completed.");
-        break;
+        if (count === 0) {
+          console.log("✅ All syncs completed.");
+          break;
+        }
+        console.log(`🔄 Still syncing... (${count} accounts updating)`);
+        await page.waitForTimeout(10000);
       }
-      console.log(`🔄 Still syncing... (${count} accounts updating)`);
-      await page.waitForTimeout(10000);
+    } else {
+      console.log(
+        "ℹ️ Manual mode: skipping MF update button flow, starting API fetch immediately.",
+      );
     }
 
     // Phase 1: 全金融機関の残高をスクレイプし、子口座をDBに登録

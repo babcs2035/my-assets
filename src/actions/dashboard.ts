@@ -110,6 +110,7 @@ export async function getAssetHistory(days?: number) {
     select: {
       id: true,
       assetType: true,
+      balance: true,
     },
   });
 
@@ -138,10 +139,29 @@ export async function getAssetHistory(days?: number) {
   for (const h of histories) {
     const dateKey = formatJSTDate(h.date);
     if (!grouped[dateKey]) {
-      grouped[dateKey] = { CASH: 0, INVESTMENT: 0, CRYPTO: 0, POINT: 0, LIABILITY: 0 };
+      grouped[dateKey] = {
+        CASH: 0,
+        INVESTMENT: 0,
+        CRYPTO: 0,
+        POINT: 0,
+        LIABILITY: 0,
+      };
     }
     const assetType = assetTypeMap.get(h.subAccountId) ?? "CASH";
     grouped[dateKey][assetType] += h.balance;
+  }
+
+  // 最新日のスナップショットを必ず含める（履歴欠損時の0表示を防ぐ）
+  const todayKey = formatJSTDate(today);
+  grouped[todayKey] = {
+    CASH: 0,
+    INVESTMENT: 0,
+    CRYPTO: 0,
+    POINT: 0,
+    LIABILITY: 0,
+  };
+  for (const sa of subAccounts) {
+    grouped[todayKey][sa.assetType] += sa.balance;
   }
 
   return Object.entries(grouped)

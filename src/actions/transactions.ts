@@ -8,11 +8,15 @@ import {
   transactionCategoryUpdateSchema,
 } from "@/lib/validations";
 
+const toUtcDateOnly = (year: number, month: number, day: number) =>
+  new Date(Date.UTC(year, month - 1, day, 0, 0, 0, 0));
+
 /**
  * 取引明細の一覧を取得する関数である．
  * サブ口座，年月，日付，振替の有無などの条件でフィルタリングが可能である．
  */
 export async function getTransactions(params: {
+  mainAccountId?: string;
   subAccountId?: string;
   year?: number;
   month?: number;
@@ -22,6 +26,7 @@ export async function getTransactions(params: {
   includeTransfers?: boolean;
 }) {
   const {
+    mainAccountId,
     subAccountId,
     year,
     month,
@@ -36,7 +41,11 @@ export async function getTransactions(params: {
     console.log(`📅 Date filter: ${year}-${month}-${day}`);
   }
   const where: Record<string, unknown> = {};
-  where.subAccount = { isHidden: false };
+  const subAccountWhere: Record<string, unknown> = { isHidden: false };
+  if (mainAccountId) {
+    subAccountWhere.mainAccountId = mainAccountId;
+  }
+  where.subAccount = subAccountWhere;
 
   if (subAccountId) where.subAccountId = subAccountId;
 
@@ -46,17 +55,19 @@ export async function getTransactions(params: {
       // データベースの date カラムは @db.Date で時刻なしなので、
       // YYYY-MM-DD の文字列形式で比較する
       const dateStr = `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-      const start = new Date(dateStr);
+      const start = toUtcDateOnly(year, month, day);
       const end = new Date(start);
-      end.setDate(end.getDate() + 1);
+      end.setTime(end.getTime() + 24 * 60 * 60 * 1000);
       where.date = { gte: start, lt: end };
       console.log(
         `📅 Filtering by date: ${dateStr} (${formatJSTDate(start)} to ${formatJSTDate(end)})`,
       );
     } else {
       // 月全体を取得
-      const start = new Date(year, month - 1, 1);
-      const end = new Date(year, month, 1);
+      const start = toUtcDateOnly(year, month, 1);
+      const nextYear = month === 12 ? year + 1 : year;
+      const nextMonth = month === 12 ? 1 : month + 1;
+      const end = toUtcDateOnly(nextYear, nextMonth, 1);
       where.date = { gte: start, lt: end };
     }
   }
@@ -123,7 +134,10 @@ export async function getTransactions(params: {
   const linkedTransactions =
     linkedTransIds.length > 0
       ? await prisma.transaction.findMany({
-          where: { id: { in: linkedTransIds }, subAccount: { isHidden: false } },
+          where: {
+            id: { in: linkedTransIds },
+            subAccount: { isHidden: false },
+          },
           select: {
             id: true,
             subAccount: {
@@ -172,16 +186,31 @@ export async function getTransactions(params: {
  * 指定された年月のカレンダー表示用データを取得する関数である．
  * 日ごとの収入と支出の合計を計算して返す．
  */
-export async function getMonthlyCalendarData(year: number, month: number) {
+export async function getMonthlyCalendarData(
+  year: number,
+  month: number,
+  filters?: {
+    mainAccountId?: string;
+    subAccountId?: string;
+  },
+) {
   console.log(`📅 Fetching monthly calendar data for ${year}-${month}...`);
-  const start = new Date(year, month - 1, 1);
-  const end = new Date(year, month, 1);
+  const start = toUtcDateOnly(year, month, 1);
+  const nextYear = month === 12 ? year + 1 : year;
+  const nextMonth = month === 12 ? 1 : month + 1;
+  const end = toUtcDateOnly(nextYear, nextMonth, 1);
 
   const transactions = await prisma.transaction.findMany({
     where: {
       date: { gte: start, lt: end },
       isTransfer: false,
-      subAccount: { isHidden: false },
+      subAccount: {
+        isHidden: false,
+        ...(filters?.mainAccountId
+          ? { mainAccountId: filters.mainAccountId }
+          : {}),
+      },
+      ...(filters?.subAccountId ? { subAccountId: filters.subAccountId } : {}),
     },
     select: {
       date: true,
@@ -205,6 +234,75 @@ export async function getMonthlyCalendarData(year: number, month: number) {
   }
 
   return dailyData;
+}
+
+/**
+ * 入出金明細画面のフィルタ候補（金融機関・子口座）を取得する。
+ */
+export async function getTransactionFilterOptions() {
+  const subAccounts = await prisma.subAccount.findMany({
+    where: { isHidden: false },
+    select: {
+      id: true,
+      currentName: true,
+      sortOrder: true,
+      mainAccount: {
+        select: {
+          id: true,
+          label: true,
+          sortOrder: true,
+        },
+      },
+    },
+    orderBy: [{ mainAccount: { sortOrder: "asc" } }, { sortOrder: "asc" }],
+  });
+
+  const mainAccountMap = new Map<
+    string,
+    {
+      id: string;
+      label: string;
+      sortOrder: number;
+      subAccounts: Array<{ id: string; name: string; sortOrder: number }>;
+    }
+  >();
+
+  for (const sa of subAccounts) {
+    const key = sa.mainAccount.id;
+    const existing = mainAccountMap.get(key);
+    if (existing) {
+      existing.subAccounts.push({
+        id: sa.id,
+        name: sa.currentName,
+        sortOrder: sa.sortOrder,
+      });
+      continue;
+    }
+    mainAccountMap.set(key, {
+      id: sa.mainAccount.id,
+      label: sa.mainAccount.label,
+      sortOrder: sa.mainAccount.sortOrder,
+      subAccounts: [
+        {
+          id: sa.id,
+          name: sa.currentName,
+          sortOrder: sa.sortOrder,
+        },
+      ],
+    });
+  }
+
+  return Array.from(mainAccountMap.values())
+    .sort((a, b) => a.sortOrder - b.sortOrder || a.label.localeCompare(b.label))
+    .map(ma => ({
+      id: ma.id,
+      label: ma.label,
+      subAccounts: ma.subAccounts
+        .sort(
+          (a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name),
+        )
+        .map(sa => ({ id: sa.id, name: sa.name })),
+    }));
 }
 
 /**
@@ -281,7 +379,7 @@ export async function detectTransfers() {
         a.amount + b.amount === 0
       ) {
         const transferId = `tf_${a.id.slice(0, 8)}_${b.id.slice(0, 8)}`;
-        
+
         // アトミックにトランザクションを更新
         await prisma.$transaction([
           prisma.transaction.update({
@@ -301,7 +399,7 @@ export async function detectTransfers() {
             },
           }),
         ]);
-        
+
         matched++;
         break;
       }
