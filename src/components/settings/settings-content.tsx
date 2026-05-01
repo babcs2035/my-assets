@@ -153,6 +153,7 @@ export function SettingsContent() {
     new Set(),
   );
   const [syncDialogProviderId, setSyncDialogProviderId] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
   const [, startTransition] = useTransition();
 
   // Provider Form State
@@ -188,6 +189,7 @@ export function SettingsContent() {
    * 必要な初期データをサーバーアクションからまとめて取得する関数である．
    */
   const fetchData = useCallback(() => {
+    setIsLoading(true);
     startTransition(async () => {
       try {
         const [p, a, c, r] = await Promise.all([
@@ -213,6 +215,8 @@ export function SettingsContent() {
       } catch (error) {
         console.error("Failed to fetch settings data:", error);
         toast.error("設定データのフェッチに失敗しました．");
+      } finally {
+        setIsLoading(false);
       }
     });
   }, []);
@@ -732,7 +736,7 @@ export function SettingsContent() {
     <div className="space-y-8">
       <div className="grid gap-8">
         {/* プロバイダー設定セクション */}
-        <Card>
+        <Card className="relative">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
               <CreditCard className="h-4 w-4 text-blue-400" />
@@ -743,7 +747,17 @@ export function SettingsContent() {
               との連携や，データ取得元の設定を行います．
             </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
+          <CardContent className="relative space-y-4">
+            {isLoading && (
+              <div className="absolute inset-0 z-10 flex items-center justify-center rounded-lg backdrop-blur-sm">
+                <div className="flex flex-col items-center gap-2">
+                  <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                  <span className="text-sm text-muted-foreground">
+                    読み込み中...
+                  </span>
+                </div>
+              </div>
+            )}
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
               <div className="space-y-2">
                 <Label htmlFor="provider-name">プロバイダー名</Label>

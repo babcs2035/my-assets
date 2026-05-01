@@ -28,25 +28,78 @@
 
 ## 🛠 技術的詳細
 
-### 1. スクレイピングの仕組み
+### 1. ローディング状態の管理
+
+ローディング状態は完全にコンポーネント単位で管理される．グローバルなオーバーレイは存在せず，各コンポーネントが自身のローディングインジケーターを表示する責任を持つ設計となっている．
+
+**実装パターン（透明ぼかし効果）:**
+```typescript
+"use client";
+import { Loader2 } from "lucide-react";
+import { useState } from "react";
+import { Card, CardContent } from "@/components/ui/card";
+
+export function MyComponent() {
+  const [isLoading, setIsLoading] = useState(false);
+
+  const handleFetch = async () => {
+    setIsLoading(true);
+    try {
+      // データ取得処理
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  return (
+    <Card className="relative">
+      <CardContent className="relative p-4">
+        {isLoading && (
+          <div className="absolute inset-0 z-10 flex items-center justify-center rounded-lg backdrop-blur-sm">
+            <div className="flex flex-col items-center gap-2">
+              <Loader2 className="h-8 w-8 animate-spin text-primary" />
+              <span className="text-sm text-muted-foreground">読み込み中...</span>
+            </div>
+          </div>
+        )}
+        {/* コンテンツ */}
+      </CardContent>
+    </Card>
+  );
+}
+```
+
+**特徴:**
+- 各コンポーネントが独立したローディング状態を管理
+- 相対配置（`relative` + `absolute inset-0`）で該当エリアのみをカバー
+- 背景色なし，ぼかし効果（`backdrop-blur-sm`）のみで視覚的フィードバック
+- 複数のカードが同時に読み込まれる場合，各カードが独立してローディング表示
+
+**適用例:**
+- `TransactionsContent`: カレンダーと取引テーブルの2つの独立したローディング
+- `SettingsContent`: プロバイダー設定エリアのローディング
+- `AccountList`: アカウント一覧のグリッドローディング（`useTransition`の`isPending`を使用）
+- `DashboardAreaChart` / `DashboardDonutChart`: クライアントサイド hydration 時のローディングスピナー
+
+### 2. スクレイピングの仕組み
 スクレイピング処理は `src/scraper/` ディレクトリに集約されている．
 - **mf-scraper.ts**: MoneyForward から口座一覧，残高，および直近の入出金明細を取得する．
 - **custom-scraper.ts**: 特定の取引所 (例: Coincheck) や独自 API から資産データを取得するためのテンプレートである．
 - **認証の自動化**: `op item get` コマンドを使用して 1Password から TOTP (ワンタイムパスワード) やログイン情報を取得し，Playwright で動的な要素に対応しながらログインを完結させる．
 
-### 2. データベース設計思想
+### 3. データベース設計思想
 データモデルは以下の階層構造を持つ．
 - **Provider**: データ取得元 (MoneyForward, 各種取引所など) を管理する．
 - **MainAccount**: 金融機関ごとの親口座である．
 - **SubAccount**: 普通預金，定期預金，特定の銘柄など，実際に金額を持つ最小単位である．
 - **AssetHistory**: 日ごとの資産合計金額を保存し，チャート描画に使用する．
 
-### 3. ダッシュボードのデータフロー
+### 4. ダッシュボードのデータフロー
 - ダッシュボードの読み込み時に `src/actions/dashboard.ts` のサーバーアクションが実行される．
 - 直近 90 日間の `AssetHistory` を集計し，資産タイプごとのプロパティを持つ形式に整形して `DashboardAreaChart` に渡す．
 - 各ページは `force-dynamic` に設定されており，常に最新のデータベース状態を反映する設計となっている．
 
-### 4. 開発・品質管理ルール
+### 5. 開発・品質管理ルール
 本プロジェクトでは開発の一貫性を保つため，以下のルールを適用している．
 - **ドキュメント・コメント**: すべての主要な関数，コンポーネント，およびコードブロックには詳細な日本語コメントを付随させる．
 - **文体**: 句読点には「．」と「，」を使用し，「だ・である」調で記述する．
@@ -138,3 +191,29 @@
 - `OP_VAULT`
 
 Workflow 実行時に `APP_IMAGE` と `IMAGE_TAG` は自動更新され，`docker compose pull && docker compose up -d` で反映される．
+
+### デプロイ先での 1Password CLI のセットアップ
+
+`src/scraper/mf-scraper.ts` では `op` (1Password CLI) コマンドを実行して認証情報を取得する．本番環境でスクレイピング機能を使用する場合，デプロイ先のホストに 1Password CLI をインストール・認証する必要がある．
+
+**セットアップ手順:**
+
+1. **1Password CLI のインストール** (Ubuntu/Debian の例)
+   ```bash
+   curl -sS https://downloads.1password.com/linux/keys/1password.asc | gpg --dearmor --output /usr/share/keyrings/1password-archive-keyring.gpg
+   echo "deb [signed-by=/usr/share/keyrings/1password-archive-keyring.gpg] https://downloads.1password.com/linux/debian/$(dpkg --print-architecture) stable main" | sudo tee /etc/apt/sources.list.d/1password.list
+   sudo apt-get update && sudo apt-get install -y 1password-cli
+   ```
+
+2. **1Password への認証**
+   ```bash
+   op signin <your-1password-account>
+   ```
+
+3. **アイテムの確認**
+   ```bash
+   op item list --vault "your-vault-name"
+   op item get "MF_Main" --fields username --vault "your-vault-name"
+   ```
+
+デプロイ時に `docker-compose.production.yml` がホストの `/usr/bin/op` をコンテナにマウントするため，上記のセットアップが完了していれば，Docker コンテナ内からも `op` コマンドが利用可能になる．

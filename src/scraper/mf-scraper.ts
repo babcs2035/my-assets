@@ -27,14 +27,20 @@ const isPlaceholderSubAccountName = (name: string) => {
   return n === "main" || n === "メイン";
 };
 
-/**
- * 1Password CLI を使用して認証情報を取得する
- */
 function getOnePasswordOtp(itemName: string) {
   const vault = process.env.OP_VAULT || "Private";
-  return execSync(`op item get "${itemName}" --otp --vault "${vault}"`, {
-    encoding: "utf-8",
-  }).trim();
+  try {
+    return execSync(`op item get "${itemName}" --otp --vault "${vault}"`, {
+      encoding: "utf-8",
+    }).trim();
+  } catch (error) {
+    console.error("❌ Failed to retrieve OTP from 1Password:", error);
+    throw new Error(
+      "1Password CLI (op) is not available or not properly configured. " +
+        "Ensure 'op' is installed and accessible in the container. " +
+        "Error: " + (error instanceof Error ? error.message : String(error))
+    );
+  }
 }
 
 function getCredentials(itemName: string) {
@@ -53,6 +59,18 @@ function getCredentials(itemName: string) {
 
     return { email, password };
   } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    if (errorMsg.includes("op: not found")) {
+      console.error("❌ Failed to get credentials from 1Password: 'op' command not found");
+      throw new Error(
+        "1Password CLI (op) is not available in the container. " +
+          "This typically means:\n" +
+          "1. The 'op' binary is not mounted from the host (check docker-compose volumes)\n" +
+          "2. The host system doesn't have 1Password CLI installed at /usr/bin/op\n" +
+          "3. Required shared libraries (/usr/lib) are not mounted\n\n" +
+          "Original error: " + errorMsg
+      );
+    }
     console.error("❌ Failed to get credentials from 1Password:", error);
     throw error;
   }

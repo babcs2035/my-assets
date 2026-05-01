@@ -1,9 +1,7 @@
 "use client";
 
-import { ja } from "date-fns/locale";
-import { List, SlidersHorizontal } from "lucide-react";
+import { List, Loader2, SlidersHorizontal } from "lucide-react";
 import { useEffect, useState, useTransition } from "react";
-import type { DayButtonProps } from "react-day-picker";
 import { toast } from "sonner";
 import { getCategories } from "@/actions/categories";
 import {
@@ -14,8 +12,8 @@ import {
 } from "@/actions/transactions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Calendar } from "@/components/ui/calendar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { CalendarGrid } from "@/components/transactions/calendar-grid";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -84,6 +82,7 @@ export function TransactionsContent() {
   const [filterOptions, setFilterOptions] = useState<FilterOption[]>([]);
   const [selectedMainAccountId, setSelectedMainAccountId] = useState("all");
   const [selectedSubAccountId, setSelectedSubAccountId] = useState("all");
+  const [isLoading, setIsLoading] = useState(false);
   const [, startTransition] = useTransition();
 
   const year = currentDate.getFullYear();
@@ -111,6 +110,7 @@ export function TransactionsContent() {
 
   /**
    * 現在の年・月・日・ページに基づいてデータをフェッチする関数である．
+   * ローカルなローディング状態を管理しながら実行する．
    */
   const fetchData = () => {
     const dateInfo = selectedDay
@@ -122,6 +122,7 @@ export function TransactionsContent() {
     console.log(
       `📍 Params: year=${year}, month=${month}, day=${selectedDay ?? "undefined"}, page=${page}`,
     );
+    setIsLoading(true);
     startTransition(async () => {
       try {
         const [txResult, calResult, catResult] = await Promise.all([
@@ -150,6 +151,8 @@ export function TransactionsContent() {
       } catch (error) {
         console.error("❌ Failed to fetch transaction data:", error);
         toast.error("データの取得に失敗しました．");
+      } finally {
+        setIsLoading(false);
       }
     });
   };
@@ -157,7 +160,7 @@ export function TransactionsContent() {
   /**
    * 年，月，日，またはページが変更された際にデータを再取得する．
    */
-  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional dependencies
+   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional dependencies
   useEffect(() => {
     fetchData();
   }, [year, month, selectedDay, page, activeMainAccountId, activeSubAccountId]);
@@ -214,42 +217,11 @@ export function TransactionsContent() {
     setPage(newPage);
   };
 
-  /**
-   * カレンダーの日付をクリックしたときのハンドラである．
-   * その日の明細のみを表示するか，月全体表示に戻す．
-   */
-  const handleDayClick = (date: Date) => {
-    // ローカルタイムゾーンで日付を取得
-    const clickedDay = date.getDate();
-    const clickedMonth = date.getMonth() + 1;
-    const clickedYear = date.getFullYear();
-
-    console.log(
-      `📅 Calendar clicked: ${clickedYear}-${clickedMonth}-${clickedDay} (Date object: ${date.toString()})`,
-    );
-
-    // 異なる月の日付がクリックされた場合は月を変更
-    if (clickedYear !== year || clickedMonth !== month) {
-      setCurrentDate(date);
-      setSelectedDay(null);
-      setPage(1);
-      return;
-    }
-
-    // 同じ日付をクリックした場合は選択解除（月全体表示に戻る）
-    if (selectedDay === clickedDay) {
-      setSelectedDay(null);
-    } else {
-      setSelectedDay(clickedDay);
-    }
-    setPage(1);
-  };
-
   return (
     <div className="space-y-6">
       <div className="space-y-6">
         {/* カレンダー表示エリア */}
-        <Card>
+        <Card className="relative">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
               カレンダー
@@ -260,56 +232,42 @@ export function TransactionsContent() {
               )}
             </CardTitle>
           </CardHeader>
-          <CardContent className="p-4">
-            <div className="mb-4 grid grid-cols-1 gap-2 sm:grid-cols-[1fr_1fr_auto]">
-              <Select
-                value={String(year)}
-                onValueChange={value => {
-                  const y = Number(value);
-                  if (!Number.isFinite(y)) return;
-                  setCurrentDate(new Date(y, month - 1, 1));
+          <CardContent className="relative p-4">
+            {isLoading && (
+              <div className="absolute inset-0 z-10 flex items-center justify-center rounded-lg backdrop-blur-sm">
+                <div className="flex flex-col items-center gap-2">
+                  <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                  <span className="text-sm text-muted-foreground">
+                    読み込み中...
+                  </span>
+                </div>
+              </div>
+            )}
+            <CalendarGrid
+              year={year}
+              month={month}
+              selectedDay={selectedDay}
+              calendarData={calendarData}
+              availableYears={yearOptions}
+              onMonthChange={(newYear, newMonth) => {
+                setCurrentDate(new Date(newYear, newMonth - 1, 1));
+                setSelectedDay(null);
+                setPage(1);
+              }}
+              onDayClick={day => {
+                if (selectedDay === day) {
                   setSelectedDay(null);
-                  setPage(1);
-                }}
-              >
-                <SelectTrigger className="h-9">
-                  <SelectValue placeholder="年を選択" />
-                </SelectTrigger>
-                <SelectContent>
-                  {yearOptions.map(y => (
-                    <SelectItem key={y} value={String(y)}>
-                      {y}年
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-
-              <Select
-                value={String(month)}
-                onValueChange={value => {
-                  const m = Number(value);
-                  if (!Number.isFinite(m)) return;
-                  setCurrentDate(new Date(year, m - 1, 1));
-                  setSelectedDay(null);
-                  setPage(1);
-                }}
-              >
-                <SelectTrigger className="h-9">
-                  <SelectValue placeholder="月を選択" />
-                </SelectTrigger>
-                <SelectContent>
-                  {monthOptions.map(m => (
-                    <SelectItem key={m} value={String(m)}>
-                      {m}月
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-
+                } else {
+                  setSelectedDay(day);
+                }
+                setPage(1);
+              }}
+            />
+            <div className="mt-4">
               <Button
                 type="button"
                 variant="outline"
-                className="h-9"
+                className="h-9 w-full sm:w-auto"
                 onClick={() => {
                   setCurrentDate(
                     new Date(now.getFullYear(), now.getMonth(), 1),
@@ -321,105 +279,11 @@ export function TransactionsContent() {
                 今月
               </Button>
             </div>
-            <Calendar
-              mode="single"
-              selected={
-                selectedDay ? new Date(year, month - 1, selectedDay) : undefined
-              }
-              onSelect={date => {
-                if (!date) {
-                  // 選択解除された場合
-                  setSelectedDay(null);
-                  setPage(1);
-                } else {
-                  handleDayClick(date);
-                }
-              }}
-              month={currentDate}
-              onMonthChange={date => {
-                setCurrentDate(date);
-                setSelectedDay(null);
-                setPage(1);
-              }}
-              captionLayout="dropdown"
-              startMonth={new Date(2023, 0, 1)}
-              endMonth={new Date(nowJST().getFullYear() + 1, 11, 1)}
-              locale={ja}
-              className="w-full rounded-md border [--cell-size:--spacing(11)] md:[--cell-size:--spacing(13)]"
-              classNames={{
-                root: "w-full",
-                months: "w-full",
-                month: "space-y-3 w-full",
-                table: "w-full border-collapse table-fixed",
-                weekdays: "grid w-full grid-cols-7",
-                weekday:
-                  "text-muted-foreground text-center font-normal text-[0.8rem] sm:text-[0.85rem] pb-1 select-none",
-                week: "grid w-full grid-cols-7 mt-1",
-                day: "p-0",
-                day_button:
-                  "h-16 sm:h-20 md:h-24 w-full p-1 sm:p-1.5 font-normal items-start justify-start hover:bg-zinc-800/50 border border-transparent hover:border-zinc-700 rounded-md transition-colors min-w-0 flex-col",
-                head_row: "grid grid-cols-7",
-                head_cell:
-                  "text-muted-foreground text-center font-normal text-[0.8rem] sm:text-[0.85rem] pb-1",
-                row: "grid w-full grid-cols-7 mt-1",
-                cell: "align-top p-0.5 sm:p-1 min-w-0",
-                day_selected:
-                  "bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground focus:bg-primary focus:text-primary-foreground !bg-blue-600/30 !text-blue-100 border-blue-400",
-                day_today:
-                  "bg-accent/50 text-accent-foreground border-zinc-600",
-              }}
-              components={{
-                DayButton: ({
-                  day,
-                  className,
-                  ...buttonProps
-                }: DayButtonProps) => {
-                  const date = day.date;
-                  const d = date.getDate();
-                  const dateKey = formatJSTDate(date);
-                  const data = calendarData[dateKey];
-
-                  return (
-                    <button
-                      {...buttonProps}
-                      type="button"
-                      className={className}
-                    >
-                      <div className="flex h-full w-full flex-col items-start justify-between min-w-0 overflow-hidden">
-                        <span className="text-sm sm:text-base md:text-lg font-semibold text-zinc-200">
-                          {d}
-                        </span>
-                        {data && (
-                          <div className="flex w-full flex-col items-end gap-0.5 text-[9px] sm:text-[10px] md:text-xs min-w-0">
-                            {data.income > 0 && (
-                              <span
-                                className="font-mono font-medium text-emerald-400 truncate w-full text-right"
-                                title={`+¥${data.income.toLocaleString()}`}
-                              >
-                                +{data.income.toLocaleString()}
-                              </span>
-                            )}
-                            {data.expense > 0 && (
-                              <span
-                                className="font-mono font-medium text-red-400 truncate w-full text-right"
-                                title={`-¥${data.expense.toLocaleString()}`}
-                              >
-                                -{data.expense.toLocaleString()}
-                              </span>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    </button>
-                  );
-                },
-              }}
-            />
           </CardContent>
         </Card>
 
         {/* 明細一覧表示エリア */}
-        <Card>
+        <Card className="relative">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
               <List className="h-4 w-4" />
@@ -510,7 +374,17 @@ export function TransactionsContent() {
               </Button>
             </div>
           </CardHeader>
-          <CardContent className="p-0">
+          <CardContent className="relative p-0">
+            {isLoading && (
+              <div className="absolute inset-0 z-10 flex items-center justify-center rounded-lg backdrop-blur-sm">
+                <div className="flex flex-col items-center gap-2">
+                  <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                  <span className="text-sm text-muted-foreground">
+                    読み込み中...
+                  </span>
+                </div>
+              </div>
+            )}
             {transactions.length === 0 ? (
               // データがない場合の表示
               <div className="flex flex-col items-center justify-center py-16">

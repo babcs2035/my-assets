@@ -1,7 +1,7 @@
 "use client";
 
 import type { MainAccount, Provider, SubAccount } from "@prisma/client";
-import { ChevronRight, GripVertical } from "lucide-react";
+import { ChevronRight, GripVertical, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
@@ -72,7 +72,15 @@ export function AccountList({
   };
 
   return (
-    <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+    <div className="relative grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+      {isPending && (
+        <div className="absolute inset-0 z-10 flex items-center justify-center rounded-lg backdrop-blur-sm pointer-events-none">
+          <div className="flex flex-col items-center gap-2">
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            <span className="text-sm text-muted-foreground">読み込み中...</span>
+          </div>
+        </div>
+      )}
       {items.map((account, idx) => {
         const totalBalance = account.subAccounts.reduce(
           (sum, sa) => sum + sa.balance,

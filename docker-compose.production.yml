@@ -13,6 +13,9 @@ services:
       BASIC_AUTH_PASSWORD: ${BASIC_AUTH_PASSWORD:-changeme}
       OP_SERVICE_ACCOUNT_TOKEN: ${OP_SERVICE_ACCOUNT_TOKEN:-}
       OP_VAULT: ${OP_VAULT:-}
+    volumes:
+      - /usr/bin/op:/usr/bin/op:ro
+      - /usr/lib:/usr/lib:ro
     depends_on:
       db:
         condition: service_healthy

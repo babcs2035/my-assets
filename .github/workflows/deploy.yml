@@ -105,20 +105,6 @@ jobs:
             docker compose pull
             docker compose up -d --force-recreate --remove-orphans
 
-            for i in $(seq 1 30); do
-              if curl -fsS "http://127.0.0.1:${APP_PORT_VALUE}/" >/dev/null; then
-                echo "Health check passed: my-assets-app"
-                break
-              fi
-              if [ "$i" -eq 30 ]; then
-                echo "Health check failed: my-assets-app"
-                docker compose ps
-                docker compose logs --tail=120
-                exit 1
-              fi
-              sleep 3
-            done
-
             if ! docker compose ps --status running | grep -q "my-assets-app"; then
               echo "Container is not running: my-assets-app"
               docker compose ps

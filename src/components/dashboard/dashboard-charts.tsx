@@ -1,6 +1,7 @@
 "use client";
 
 import dayjs from "dayjs";
+import { Loader2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import {
   Area,
@@ -92,7 +93,11 @@ export function DashboardAreaChart({ data }: DashboardAreaChartProps) {
   }, []);
 
   if (!mounted) {
-    return <div className="min-h-[200px] w-full h-[350px]" />;
+    return (
+      <div className="relative flex min-h-[200px] w-full h-[350px] items-center justify-center rounded-lg backdrop-blur-sm">
+        <Loader2 className="h-8 w-8 animate-spin text-zinc-400" />
+      </div>
+    );
   }
 
   const filteredData = filterByUnifiedTimeRange(data, timeRange, d => d.date);
@@ -421,7 +426,11 @@ export function DashboardDonutChart({ data }: DashboardDonutChartProps) {
         }));
 
   if (!mounted) {
-    return <div className="mx-auto aspect-square max-h-[250px] pb-0 min-w-0" />;
+    return (
+      <div className="relative flex mx-auto aspect-square max-h-[250px] pb-0 min-w-0 items-center justify-center rounded-lg backdrop-blur-sm">
+        <Loader2 className="h-8 w-8 animate-spin text-zinc-400" />
+      </div>
+    );
   }
 
   return (
