@@ -1,6 +1,6 @@
 import { Suspense } from "react";
-import { SettingsContent } from "@/components/settings/settings-content";
 import { PageHeader } from "@/components/page-header";
+import { SettingsContent } from "@/components/settings/settings-content";
 import { Skeleton } from "@/components/ui/skeleton";
 
 export const dynamic = "force-dynamic";

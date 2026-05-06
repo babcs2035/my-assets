@@ -1,8 +1,8 @@
 import {
+  AlertTriangle,
   ArrowDownRight,
   ArrowUpRight,
   Minus,
-  AlertTriangle,
 } from "lucide-react";
 import {
   getAssetHistory,
@@ -67,7 +67,10 @@ export default async function DashboardPage() {
       {/* ガイドブック: 最も重要な指標（純資産）を左上に大きく。全体→部分の階層。 */}
       <div className="grid gap-4 md:grid-cols-3">
         {/* 純資産 (最重要指標) */}
-        <Card className="md:col-span-1 kpi-card" style={{ animationDelay: "0ms" }}>
+        <Card
+          className="md:col-span-1 kpi-card"
+          style={{ animationDelay: "0ms" }}
+        >
           <CardContent className="pt-5 pb-4">
             <p className="text-sm font-medium text-zinc-400 mb-1">純資産</p>
             <div

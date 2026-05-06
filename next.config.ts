@@ -6,7 +6,12 @@ const nextConfig: NextConfig = {
   basePath: "/my-assets",
   experimental: {
     serverActions: {
-      allowedOrigins: ["ktak.dev", "localhost:3000", "localhost:3400"],
+      allowedOrigins: [
+        "ktak.dev",
+        "*.ktak.dev",
+        "localhost:3000",
+        "localhost:3400",
+      ],
     },
   },
 };

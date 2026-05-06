@@ -7,8 +7,8 @@ import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import {
   reorderSubAccounts,
-  updateSubAccountHidden,
   updateSubAccountAssetType,
+  updateSubAccountHidden,
 } from "@/actions/accounts";
 import {
   Select,
@@ -101,7 +101,10 @@ export function AccountSubAccountManager({
     });
   };
 
-  const handleHiddenChange = async (subAccountId: string, isHidden: boolean) => {
+  const handleHiddenChange = async (
+    subAccountId: string,
+    isHidden: boolean,
+  ) => {
     try {
       await updateSubAccountHidden(subAccountId, isHidden);
       setItems(prev =>
@@ -109,7 +112,9 @@ export function AccountSubAccountManager({
           item.id === subAccountId ? { ...item, isHidden } : item,
         ),
       );
-      toast.success(isHidden ? "子口座を非表示にしました。" : "子口座を表示にしました。");
+      toast.success(
+        isHidden ? "子口座を非表示にしました。" : "子口座を表示にしました。",
+      );
       router.refresh();
     } catch (error) {
       console.error("❌ Failed to update hidden state:", error);

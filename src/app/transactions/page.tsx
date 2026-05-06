@@ -1,6 +1,6 @@
 import { Suspense } from "react";
-import { TransactionsContent } from "@/components/transactions/transactions-content";
 import { PageHeader } from "@/components/page-header";
+import { TransactionsContent } from "@/components/transactions/transactions-content";
 import { Skeleton } from "@/components/ui/skeleton";
 
 export const dynamic = "force-dynamic";

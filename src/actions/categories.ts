@@ -68,7 +68,7 @@ export async function deleteMainCategory(id: string) {
     select: { id: true },
   });
   const subCategoryIds = subCategories.map(sc => sc.id);
-  
+
   if (subCategoryIds.length > 0) {
     await prisma.transaction.updateMany({
       where: { subCategoryId: { in: subCategoryIds } },
@@ -78,7 +78,7 @@ export async function deleteMainCategory(id: string) {
       where: { subCategoryId: { in: subCategoryIds } },
     });
   }
-  
+
   const result = await prisma.mainCategory.delete({
     where: { id },
   });

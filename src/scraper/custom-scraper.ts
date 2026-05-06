@@ -3,12 +3,12 @@
  * Playwright を使用して Coincheck から取引履歴 CSV を取得し，資産情報を抽出する．
  */
 
-import { execSync } from "node:child_process";
 import { PrismaClient } from "@prisma/client";
 import { chromium } from "playwright";
+import { getItemField, getItemOtp } from "../lib/onepassword";
 
 const prisma = new PrismaClient();
-const ITEM_NAME = "Coincheck";
+const ITEM_NAME = process.env.OP_CUSTOM_ITEM_ID || "Coincheck";
 
 /**
  * 1Password CLI を使用してログイン情報を取得する関数である．
@@ -16,39 +16,22 @@ const ITEM_NAME = "Coincheck";
 async function getCredentials() {
   try {
     console.log(`🔑 Fetching credentials for "${ITEM_NAME}" from 1Password...`);
-    let email = "";
-    try {
-      email = execSync(
-        `op item get "${ITEM_NAME}" --fields label=email --reveal`,
-        { encoding: "utf-8" },
-      ).trim();
-    } catch {
-      email = execSync(
-        `op item get "${ITEM_NAME}" --fields username --reveal`,
-        {
-          encoding: "utf-8",
-        },
-      ).trim();
-    }
 
-    const password = execSync(
-      `op item get "${ITEM_NAME}" --fields password --reveal`,
-      { encoding: "utf-8" },
-    ).trim();
+    const email = getItemField(ITEM_NAME, "username");
+    const password = getItemField(ITEM_NAME, "password");
 
     let totp = "";
     try {
-      totp = execSync(`op item get "${ITEM_NAME}" --otp`, {
-        encoding: "utf-8",
-      }).trim();
-    } catch {
-      // TOTP が設定されていない場合は無視する．
+      totp = getItemOtp(ITEM_NAME);
+    } catch (error) {
+      // OTP が設定されていない場合は無視する
+      console.log("ℹ️ OTP not configured for this item");
     }
 
     return { email, password, totp };
   } catch (error) {
     console.error(
-      "❌ Failed to get credentials. Make sure 1Password CLI is logged in.",
+      "❌ Failed to get credentials. Make sure 1Password runtime secrets file is mounted or 1Password CLI is logged in.",
     );
     throw error;
   }

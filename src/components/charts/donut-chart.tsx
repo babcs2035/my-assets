@@ -37,7 +37,9 @@ export function DonutChart({ data }: { data: Record<string, number> }) {
   const chartData: DonutData[] = Object.entries(data)
     .filter(([, v]) => v > 0)
     .map(([type, value]) => ({
-      name: assetTypeLabel(type as "CASH" | "INVESTMENT" | "CRYPTO" | "POINT" | "LIABILITY"),
+      name: assetTypeLabel(
+        type as "CASH" | "INVESTMENT" | "CRYPTO" | "POINT" | "LIABILITY",
+      ),
       value,
       type,
     }));
@@ -67,7 +69,12 @@ export function DonutChart({ data }: { data: Record<string, number> }) {
             <Cell
               key={entry.type}
               fill={assetTypeColor(
-                entry.type as "CASH" | "INVESTMENT" | "CRYPTO" | "POINT" | "LIABILITY",
+                entry.type as
+                  | "CASH"
+                  | "INVESTMENT"
+                  | "CRYPTO"
+                  | "POINT"
+                  | "LIABILITY",
               )}
             />
           ))}

@@ -39,11 +39,11 @@
   --color-ring: oklch(0.62 0.16 250);
 
   /* ── チャートカラー (ガイドブック: 色数 1〜5 に制限) ── */
-  --color-chart-1: oklch(0.62 0.16 250);  /* Blue   - 預金・現金 */
-  --color-chart-2: oklch(0.62 0.18 300);  /* Violet - 投資信託 */
-  --color-chart-3: oklch(0.72 0.16 70);   /* Amber  - 暗号資産 */
-  --color-chart-4: oklch(0.68 0.16 160);  /* Green  - ポイント */
-  --color-chart-5: oklch(0.55 0.18 20);   /* Red    - 負債 */
+  --color-chart-1: oklch(0.62 0.16 250); /* Blue   - 預金・現金 */
+  --color-chart-2: oklch(0.62 0.18 300); /* Violet - 投資信託 */
+  --color-chart-3: oklch(0.72 0.16 70); /* Amber  - 暗号資産 */
+  --color-chart-4: oklch(0.68 0.16 160); /* Green  - ポイント */
+  --color-chart-5: oklch(0.55 0.18 20); /* Red    - 負債 */
 
   /* ── サイドバー ─────────────────────────────── */
   --color-sidebar: oklch(0.13 0.01 285);
@@ -97,8 +97,14 @@ input[type="radio"],
 
 /* ── ページ遷移アニメーション (シンプル) ─────── */
 @keyframes fade-in {
-  from { opacity: 0; transform: translateY(6px); }
-  to   { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .animate-fade-in {
@@ -107,8 +113,14 @@ input[type="radio"],
 
 /* ── KPI カード入場アニメーション ─────────────── */
 @keyframes kpi-enter {
-  from { opacity: 0; transform: translateY(8px); }
-  to   { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .kpi-card {
@@ -149,8 +161,12 @@ input[type="radio"],
 }
 
 /* ── 値の正負表現 ──────────────────────────── */
-.text-success { color: oklch(0.72 0.18 155); }
-.text-warning { color: oklch(0.78 0.16 70); }
+.text-success {
+  color: oklch(0.72 0.18 155);
+}
+.text-warning {
+  color: oklch(0.78 0.16 70);
+}
 
 /* ── Sonner Toast カスタムスタイル ──────────── */
 @layer base {

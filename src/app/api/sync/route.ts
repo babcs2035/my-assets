@@ -2,8 +2,7 @@ import { exec } from "node:child_process";
 import { NextResponse } from "next/server";
 
 export async function POST() {
-  const cmd =
-    "pnpm tsx src/scraper/mf-scraper.ts && pnpm tsx src/scraper/crypto-scraper.ts";
+  const cmd = "pnpm tsx src/scraper/mf-scraper.ts";
   console.log(`Executing sync command: ${cmd}`);
 
   // Run in background

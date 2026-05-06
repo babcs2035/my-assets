@@ -10,10 +10,10 @@ import {
   getTransactions,
   updateTransactionCategory,
 } from "@/actions/transactions";
+import { CalendarGrid } from "@/components/transactions/calendar-grid";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { CalendarGrid } from "@/components/transactions/calendar-grid";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -160,7 +160,7 @@ export function TransactionsContent() {
   /**
    * 年，月，日，またはページが変更された際にデータを再取得する．
    */
-   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional dependencies
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional dependencies
   useEffect(() => {
     fetchData();
   }, [year, month, selectedDay, page, activeMainAccountId, activeSubAccountId]);

@@ -23,7 +23,7 @@ async function main() {
         execSync("pnpm tsx src/scraper/mf-scraper.ts", {
           env: {
             ...process.env,
-            MF_ITEM_NAME: provider.name,
+            OP_MF_ITEM_ID: provider.name,
             MF_FULL_SYNC: "true",
           },
           stdio: "inherit",

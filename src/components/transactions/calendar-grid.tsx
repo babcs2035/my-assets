@@ -2,8 +2,6 @@
 
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { formatJSTDate } from "@/lib/utils";
-import { cn } from "@/lib/utils";
 import {
   Select,
   SelectContent,
@@ -11,6 +9,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { cn, formatJSTDate } from "@/lib/utils";
 
 type CalendarData = {
   income: number;
@@ -194,10 +193,16 @@ export function CalendarGrid({
             const date = new Date(
               year,
               month - 1,
-              cell.isCurrentMonth ? cell.day : cell.isPastMonth ? -startDayOfWeek + 1 + idx : daysInMonth + idx - 41,
+              cell.isCurrentMonth
+                ? cell.day
+                : cell.isPastMonth
+                  ? -startDayOfWeek + 1 + idx
+                  : daysInMonth + idx - 41,
             );
             const dateKey = formatJSTDate(date);
-            const data = cell.isCurrentMonth ? calendarData[dateKey] : undefined;
+            const data = cell.isCurrentMonth
+              ? calendarData[dateKey]
+              : undefined;
             const isSelected = cell.isCurrentMonth && selectedDay === cell.day;
             const isToday =
               cell.isCurrentMonth &&
@@ -228,16 +233,15 @@ export function CalendarGrid({
                     isToday && !isSelected && "!bg-accent/30",
                   ],
                   // 当月以外の日付
-                  !cell.isCurrentMonth && "cursor-default bg-zinc-950/50 text-zinc-600",
+                  !cell.isCurrentMonth &&
+                    "cursor-default bg-zinc-950/50 text-zinc-600",
                 )}
               >
                 {/* 日付番号 */}
                 <span
                   className={cn(
                     "text-sm font-semibold",
-                    cell.isCurrentMonth
-                      ? "text-zinc-200"
-                      : "text-zinc-600",
+                    cell.isCurrentMonth ? "text-zinc-200" : "text-zinc-600",
                   )}
                 >
                   {cell.day}

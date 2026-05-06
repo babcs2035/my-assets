@@ -29,7 +29,7 @@
 
 ### MoneyForward (`type: "mf"`)
 *   **実行コマンド**: `pnpm tsx src/scraper/mf-scraper.ts`
-*   **環境変数**: `MF_ITEM_NAME` に `provider.name` を設定して渡します。
+*   **環境変数**: `OP_MF_ITEM_ID` に `provider.name` を設定して渡します。
 *   **認証**: 1Password CLI (`op`) を使用して、指定されたアイテム名からログイン情報を取得します。
 
 ### Custom / Manual (`type: "custom"`)

@@ -112,7 +112,8 @@ export function AccountList({
                         {account.label}
                       </CardTitle>
                       <p className="text-xs text-zinc-500">
-                        {account.provider.name} · {account.subAccounts.length} 子口座
+                        {account.provider.name} · {account.subAccounts.length}{" "}
+                        子口座
                       </p>
                     </div>
                   </div>
@@ -156,33 +157,39 @@ export function AccountList({
 
                   {/* 資産タイプ別の内訳 */}
                   <div className="mt-3 space-y-1">
-                    {(["CASH", "INVESTMENT", "CRYPTO", "POINT", "LIABILITY"] as const).map(
-                      type => {
-                        const typeBalance = account.subAccounts
-                          .filter(sa => sa.assetType === type)
-                          .reduce((s, sa) => s + sa.balance, 0);
-                        if (typeBalance === 0) return null;
-                        return (
-                          <div
-                            key={type}
-                            className="flex items-center justify-between text-sm"
-                          >
-                            <span className="flex items-center gap-1.5">
-                              <span
-                                className="inline-block h-2 w-2 rounded-full"
-                                style={{ background: assetTypeColor(type) }}
-                              />
-                              <span className="text-zinc-400">
-                                {assetTypeLabel(type)}
-                              </span>
+                    {(
+                      [
+                        "CASH",
+                        "INVESTMENT",
+                        "CRYPTO",
+                        "POINT",
+                        "LIABILITY",
+                      ] as const
+                    ).map(type => {
+                      const typeBalance = account.subAccounts
+                        .filter(sa => sa.assetType === type)
+                        .reduce((s, sa) => s + sa.balance, 0);
+                      if (typeBalance === 0) return null;
+                      return (
+                        <div
+                          key={type}
+                          className="flex items-center justify-between text-sm"
+                        >
+                          <span className="flex items-center gap-1.5">
+                            <span
+                              className="inline-block h-2 w-2 rounded-full"
+                              style={{ background: assetTypeColor(type) }}
+                            />
+                            <span className="text-zinc-400">
+                              {assetTypeLabel(type)}
                             </span>
-                            <span className="font-mono text-zinc-300">
-                              {formatCurrency(typeBalance)}
-                            </span>
-                          </div>
-                        );
-                      },
-                    )}
+                          </span>
+                          <span className="font-mono text-zinc-300">
+                            {formatCurrency(typeBalance)}
+                          </span>
+                        </div>
+                      );
+                    })}
                   </div>
                 </Link>
               </CardContent>

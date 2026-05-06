@@ -41,7 +41,6 @@ jobs:
           push: true
           platforms: linux/arm64
           tags: ${{ env.REGISTRY }}/babcs2035/my-assets:latest, ${{ env.REGISTRY }}/babcs2035/my-assets:${{ github.sha }}
-          labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -100,9 +99,86 @@ jobs:
             . ./.env
             set +a
 
-            APP_PORT_VALUE="${APP_PORT:-3000}"
+            if [ -z "${OP_SERVICE_ACCOUNT_TOKEN:-}" ]; then
+              echo "OP_SERVICE_ACCOUNT_TOKEN is required in deploy .env." >&2
+              exit 1
+            fi
 
-            docker compose pull
+            if ! command -v op >/dev/null 2>&1; then
+              echo "op command not found on deploy host. Install 1Password CLI on host." >&2
+              exit 1
+            fi
+
+            mkdir -p data/runtime
+
+            OP_MF_ITEM_ID_VALUE="${OP_MF_ITEM_ID:-MF_Main}"
+            export OP_MF_ITEM_ID_VALUE
+            export OP_VAULT="${OP_VAULT:-}"
+
+            python3 - <<'PY'
+import json
+import os
+
+OP_MF_ITEM_ID_VALUE = os.environ.get("OP_MF_ITEM_ID_VALUE", "MF_Main")
+OP_VAULT_VALUE = os.environ.get("OP_VAULT", "")
+
+def extract_item(item_id: str, vault: str) -> dict:
+    import subprocess
+    cmd = ["op", "item", "get", item_id]
+    if vault:
+        cmd.extend(["--vault", vault])
+    else:
+        cmd.append("--reveal")
+    cmd.extend(["--format", "json"])
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.returncode != 0:
+        print(f"  Warning: Failed to get item '{item_id}': {result.stderr.strip()}", flush=True)
+        return {}
+
+    item = json.loads(result.stdout)
+    fields_dict = {}
+    otp_uri = None
+
+    for field in item.get("fields", []):
+        label = str(field.get("label", "")).strip().lower()
+        ftype = str(field.get("type", "")).strip().upper()
+        value = field.get("value")
+
+        if ftype == "PASSWORD" and str(field.get("purpose", "")).lower() != "otp":
+            fields_dict["password"] = str(value) if value else None
+        elif label == "username" or label == "email" or label == "acct_id":
+            fields_dict["username"] = str(value) if value else None
+
+        if ftype == "OTP" and isinstance(value, str):
+            otp_uri = value
+        elif label == "otp" and isinstance(value, str) and value.startswith("otpauth://"):
+            otp_uri = value
+        elif label == "totp" and isinstance(value, str) and value.startswith("otpauth://"):
+            otp_uri = value
+
+    if otp_uri:
+        fields_dict["otp_uri"] = otp_uri
+
+    return {k: v for k, v in fields_dict.items() if v is not None}
+
+items = {}
+
+print(f"Fetching item '{OP_MF_ITEM_ID_VALUE}' from 1Password...", flush=True)
+mf = extract_item(OP_MF_ITEM_ID_VALUE, OP_VAULT_VALUE)
+if mf:
+    items[OP_MF_ITEM_ID_VALUE] = mf
+    print(f"  Got: {list(mf.keys())}", flush=True)
+else:
+    print("  WARNING: MF item is empty!", flush=True)
+
+payload = {"items": items}
+with open("data/runtime/op-secrets.json", "w", encoding="utf-8") as f:
+    json.dump(payload, f, ensure_ascii=False)
+
+os.chmod("data/runtime/op-secrets.json", 0o600)
+print(f"Saved op-secrets.json with items: {list(items.keys())}", flush=True)
+            PY
+
             docker compose up -d --force-recreate --remove-orphans
 
             if ! docker compose ps --status running | grep -q "my-assets-app"; then
@@ -110,5 +186,3 @@ jobs:
               docker compose ps
               exit 1
             fi
-
-            docker image prune -f

@@ -1,7 +1,7 @@
 import "dotenv/config";
-import { execSync } from "node:child_process";
 import { chromium, type Page } from "playwright";
 import { generateTransactionId } from "../lib/hash";
+import { getItemField, getItemOtp } from "../lib/onepassword";
 import { prisma } from "../lib/prisma";
 import { formatJSTDate, todayJST } from "../lib/utils";
 
@@ -27,51 +27,18 @@ const isPlaceholderSubAccountName = (name: string) => {
   return n === "main" || n === "メイン";
 };
 
-function getOnePasswordOtp(itemName: string) {
-  const vault = process.env.OP_VAULT || "Private";
+/**
+ * 1Password から credentials を取得する．
+ * src/lib/onepassword.ts の getItemField を使用する．
+ */
+function getCredentials(providerName: string) {
   try {
-    return execSync(`op item get "${itemName}" --otp --vault "${vault}"`, {
-      encoding: "utf-8",
-    }).trim();
-  } catch (error) {
-    console.error("❌ Failed to retrieve OTP from 1Password:", error);
-    throw new Error(
-      "1Password CLI (op) is not available or not properly configured. " +
-        "Ensure 'op' is installed and accessible in the container. " +
-        "Error: " + (error instanceof Error ? error.message : String(error))
-    );
-  }
-}
-
-function getCredentials(itemName: string) {
-  const vault = process.env.OP_VAULT || "Private";
-
-  try {
-    const email = execSync(
-      `op item get "${itemName}" --fields username --vault "${vault}"`,
-      { encoding: "utf-8" },
-    ).trim();
-
-    const password = execSync(
-      `op item get "${itemName}" --fields password --reveal --vault "${vault}"`,
-      { encoding: "utf-8" },
-    ).trim();
-
+    const email = getItemField(providerName, "username");
+    const password = getItemField(providerName, "password");
     return { email, password };
   } catch (error) {
-    const errorMsg = error instanceof Error ? error.message : String(error);
-    if (errorMsg.includes("op: not found")) {
-      console.error("❌ Failed to get credentials from 1Password: 'op' command not found");
-      throw new Error(
-        "1Password CLI (op) is not available in the container. " +
-          "This typically means:\n" +
-          "1. The 'op' binary is not mounted from the host (check docker-compose volumes)\n" +
-          "2. The host system doesn't have 1Password CLI installed at /usr/bin/op\n" +
-          "3. Required shared libraries (/usr/lib) are not mounted\n\n" +
-          "Original error: " + errorMsg
-      );
-    }
-    console.error("❌ Failed to get credentials from 1Password:", error);
+    const msg = error instanceof Error ? error.message : String(error);
+    console.error("❌ Failed to get credentials from 1Password:", msg);
     throw error;
   }
 }
@@ -764,7 +731,7 @@ async function scrapeBalanceHistory(page: Page, options: MfScraperOptions) {
             normalizeInstitutionName(mainAccount.label),
         );
 
-    if (!summary || !summary.account_id_hash) {
+    if (!summary?.account_id_hash) {
       continue;
     }
 
@@ -1244,7 +1211,7 @@ async function saveTransactionsToDatabase(
   const buildTransferPairs = async (mainAccountId: string) => {
     const unresolved = await prisma.transaction.findMany({
       where: {
-        subAccount: { mainAccountId },
+        subAccount: { mainAccount: { id: mainAccountId } },
         isTransfer: false,
       },
       orderBy: [{ date: "asc" }, { amount: "asc" }],
@@ -1783,28 +1750,28 @@ export interface MfScraperOptions {
  * スクレイパーのメイン処理
  */
 export async function runMfScraper(
-  itemName: string,
+  providerName: string,
   signal?: AbortSignal,
   options: MfScraperOptions = { mode: "scheduled" },
 ) {
-  console.log("🚀 Starting MF Scraper...");
-  console.log(`📦 Using 1Password item: ${itemName}`);
+  console.log(`🚀 Starting MF Scraper...`);
+  console.log(`📦 Using 1Password item: ${providerName}`);
 
   let provider = await prisma.provider.findFirst({
-    where: { name: itemName },
+    where: { name: providerName },
   });
 
   if (!provider) {
     provider = await prisma.provider.create({
       data: {
-        name: itemName,
+        name: providerName,
         type: "mf",
         isActive: true,
       },
     });
   }
 
-  const { email, password } = getCredentials(itemName);
+  const { email, password } = getCredentials(providerName);
 
   const browser = await chromium.launch({ headless: true });
 
@@ -1874,7 +1841,7 @@ export async function runMfScraper(
         timeout: 5000,
       });
       console.log("🔑 Entering OTP (Fetching fresh token)...");
-      const currentOtp = getOnePasswordOtp(itemName);
+      const currentOtp = getItemOtp(providerName);
       await page.fill('input[name="otp_attempt"]', currentOtp);
       await page.click("button#submitto");
       await page.waitForTimeout(3000);
@@ -1985,8 +1952,8 @@ export async function runMfScraper(
 }
 
 // 直接実行された場合の処理
-if (process.env.MF_ITEM_NAME) {
-  runMfScraper(process.env.MF_ITEM_NAME).catch(err => {
+if (process.env.OP_MF_ITEM_ID) {
+  runMfScraper(process.env.OP_MF_ITEM_ID).catch(err => {
     console.error(err);
     process.exit(1);
   });

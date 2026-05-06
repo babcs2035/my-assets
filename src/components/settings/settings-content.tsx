@@ -152,7 +152,9 @@ export function SettingsContent() {
   const [syncingProviderIds, setSyncingProviderIds] = useState<Set<string>>(
     new Set(),
   );
-  const [syncDialogProviderId, setSyncDialogProviderId] = useState<string | null>(null);
+  const [syncDialogProviderId, setSyncDialogProviderId] = useState<
+    string | null
+  >(null);
   const [isLoading, setIsLoading] = useState(false);
   const [, startTransition] = useTransition();
 
@@ -294,9 +296,10 @@ export function SettingsContent() {
         }),
       );
       // 中止された場合は別のメッセージを表示
-      const errorMessage = error instanceof Error && error.message.includes("aborted")
-        ? "同期を中止しました．"
-        : "同期に失敗しました．";
+      const errorMessage =
+        error instanceof Error && error.message.includes("aborted")
+          ? "同期を中止しました．"
+          : "同期に失敗しました．";
       toast.error(errorMessage);
       fetchData();
     } finally {
@@ -330,8 +333,6 @@ export function SettingsContent() {
       });
     }
   };
-
-
 
   const handleAddMainCategory = async () => {
     if (!newCategoryName) return;
@@ -891,7 +892,9 @@ export function SettingsContent() {
                               <Button
                                 variant="ghost"
                                 size="sm"
-                                onClick={() => handleAbortSyncProvider(provider.id)}
+                                onClick={() =>
+                                  handleAbortSyncProvider(provider.id)
+                                }
                                 className="h-8 text-red-400 hover:text-red-300"
                               >
                                 <Square className="mr-2 h-3.5 w-3.5" />
@@ -900,7 +903,7 @@ export function SettingsContent() {
                             ) : (
                               <Dialog
                                 open={syncDialogProviderId === provider.id}
-                                onOpenChange={(open) => {
+                                onOpenChange={open => {
                                   if (open) {
                                     setSyncDialogProviderId(provider.id);
                                   } else {
@@ -922,11 +925,16 @@ export function SettingsContent() {
                                   <DialogHeader>
                                     <DialogTitle>手動同期の実行</DialogTitle>
                                     <DialogDescription>
-                                      手動同期では 2023-01-01 まで遡って、入出金明細と残高推移を全件取得します。
+                                      手動同期では 2023-01-01
+                                      まで遡って、入出金明細と残高推移を全件取得します。
                                     </DialogDescription>
                                   </DialogHeader>
                                   <DialogFooter>
-                                    <Button onClick={() => handleSyncProvider(provider.id)}>
+                                    <Button
+                                      onClick={() =>
+                                        handleSyncProvider(provider.id)
+                                      }
+                                    >
                                       実行
                                     </Button>
                                   </DialogFooter>
@@ -1062,7 +1070,9 @@ export function SettingsContent() {
                                   <Button
                                     variant="ghost"
                                     size="icon"
-                                    onClick={() => handleAbortSyncProvider(provider.id)}
+                                    onClick={() =>
+                                      handleAbortSyncProvider(provider.id)
+                                    }
                                     title="中止"
                                     className="text-red-400 hover:text-red-300"
                                   >
@@ -1074,7 +1084,9 @@ export function SettingsContent() {
                                 <Button
                                   variant="ghost"
                                   size="icon"
-                                  onClick={() => handleSyncProvider(provider.id)}
+                                  onClick={() =>
+                                    handleSyncProvider(provider.id)
+                                  }
                                   title="同期"
                                 >
                                   <RefreshCw className="h-4 w-4 text-blue-400" />

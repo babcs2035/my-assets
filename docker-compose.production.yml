@@ -11,11 +11,11 @@ services:
       APP_PORT: ${APP_PORT:-3000}
       BASIC_AUTH_USER: ${BASIC_AUTH_USER:-admin}
       BASIC_AUTH_PASSWORD: ${BASIC_AUTH_PASSWORD:-changeme}
-      OP_SERVICE_ACCOUNT_TOKEN: ${OP_SERVICE_ACCOUNT_TOKEN:-}
+      OP_MF_ITEM_ID: ${OP_MF_ITEM_ID:-MF_Main}
       OP_VAULT: ${OP_VAULT:-}
     volumes:
-      - /usr/bin/op:/usr/bin/op:ro
-      - /usr/lib:/usr/lib:ro
+      # Pre-extracted credentials (from deploy host)
+      - ./data/runtime/op-secrets.json:/app/op-secrets.json:ro
     depends_on:
       db:
         condition: service_healthy
