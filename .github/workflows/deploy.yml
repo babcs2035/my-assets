@@ -51,6 +51,9 @@ jobs:
           format: table
           exit-code: "1"
           severity: CRITICAL,HIGH
+          platform: linux/arm64
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
   deploy:
     name: Deploy to Server
