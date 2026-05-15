@@ -33,6 +33,9 @@ yarn-error.log*
 # env files (can opt-in for committing if needed)
 .env
 
+# 1Password runtime secrets (local debugging)
+op-secrets.json
+
 # vercel
 .vercel
 

@@ -53,17 +53,12 @@ export function AccountSubAccountManager({
     subAccountId: string,
     newType: AssetType,
   ) => {
-    console.log(
-      `🔄 Attempting to update asset type for sub-account ${subAccountId} to ${newType}.`,
-    );
     try {
       await updateSubAccountAssetType(subAccountId, newType);
       toast.success("資産区分を更新しました。");
-      console.log("✅ Asset type updated successfully.");
       // Server Component を再フェッチしてグラフの色を即座に更新する
       router.refresh();
-    } catch (error) {
-      console.error("❌ Failed to update asset type:", error);
+    } catch {
       toast.error("資産区分の更新に失敗しました。");
     }
   };
@@ -93,8 +88,7 @@ export function AccountSubAccountManager({
         await reorderSubAccounts(orderedIds);
         toast.success("並び順を更新しました。");
         router.refresh();
-      } catch (error) {
-        console.error("❌ Failed to reorder:", error);
+      } catch {
         toast.error("並び順の更新に失敗しました。");
         setItems(subAccounts);
       }
@@ -116,8 +110,7 @@ export function AccountSubAccountManager({
         isHidden ? "子口座を非表示にしました。" : "子口座を表示にしました。",
       );
       router.refresh();
-    } catch (error) {
-      console.error("❌ Failed to update hidden state:", error);
+    } catch {
       toast.error("表示設定の更新に失敗しました。");
     }
   };

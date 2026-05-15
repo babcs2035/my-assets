@@ -6,11 +6,11 @@ services:
     ports:
       - "127.0.0.1:${APP_PORT:-3000}:3000"
     environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER:-my-assets_user}:${POSTGRES_PASSWORD:-my-assets_password}@db:${DB_PORT:-5432}/${POSTGRES_DB:-my-assets}
+      DATABASE_URL:
       TZ: ${TZ:-Asia/Tokyo}
       APP_PORT: ${APP_PORT:-3000}
-      BASIC_AUTH_USER: ${BASIC_AUTH_USER:-admin}
-      BASIC_AUTH_PASSWORD: ${BASIC_AUTH_PASSWORD:-changeme}
+      BASIC_AUTH_USER:
+      BASIC_AUTH_PASSWORD:
       OP_MF_ITEM_ID: ${OP_MF_ITEM_ID:-MF_Main}
       OP_VAULT: ${OP_VAULT:-}
     volumes:

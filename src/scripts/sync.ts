@@ -1,63 +1,76 @@
 import "dotenv/config";
-import { execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
+import { existsSync } from "node:fs";
+import { resolve } from "node:path";
+import logger from "../lib/logger";
 import { prisma } from "../lib/prisma";
 
+const filteredEnv = { ...process.env };
+delete filteredEnv.OP_SERVICE_ACCOUNT_TOKEN;
+
 async function main() {
-  console.log("🚀 Starting sync process...");
+  logger.info("🚀 Starting sync process.");
 
   const providers = await prisma.provider.findMany({
     where: { isActive: true },
   });
 
   if (providers.length === 0) {
-    console.warn("⚠️ No active providers found.");
+    logger.warn("⚠️ No active providers found.");
     return;
   }
 
   for (const provider of providers) {
-    console.log(`\n🔄 Syncing provider: [${provider.type}] ${provider.name}`);
+    logger.info(`🔄 Syncing provider: [${provider.type}] ${provider.name}`);
 
     try {
       if (provider.type === "mf") {
-        // Run MF scraper with environment variable
-        execSync("pnpm tsx src/scraper/mf-scraper.ts", {
+        execFileSync("pnpm", ["tsx", "src/scraper/mf-scraper.ts"], {
           env: {
-            ...process.env,
+            ...filteredEnv,
             OP_MF_ITEM_ID: provider.name,
             MF_FULL_SYNC: "true",
           },
           stdio: "inherit",
         });
       } else if (provider.type === "custom") {
-        // Run Custom scraper
         const scriptName = provider.scraperScript || "custom-scraper.ts";
-        const scriptPath = `src/scraper/${scriptName}`;
-        console.log(`Running custom script: ${scriptPath}`);
+        if (!/^[a-zA-Z0-9_-]+\.ts$/.test(scriptName)) {
+          logger.error(`❌ Invalid script name: ${scriptName}`);
+          continue;
+        }
+        const scriptPath = resolve("src/scraper", scriptName);
+        if (!existsSync(scriptPath)) {
+          logger.error(`❌ Script file not found: ${scriptPath}`);
+          continue;
+        }
+        logger.info(`Running custom script: ${scriptPath}`);
 
         try {
-          execSync(`pnpm tsx ${scriptPath}`, {
-            env: { ...process.env, PROVIDER_ID: provider.id },
+          execFileSync("pnpm", ["tsx", scriptPath], {
+            env: { ...filteredEnv, PROVIDER_ID: provider.id },
             stdio: "inherit",
           });
         } catch (error) {
-          console.error(
-            `❌ Failed to run script ${scriptPath} for ${provider.name}:`,
-            error,
+          logger.error(
+            { err: error, script: scriptPath, name: provider.name },
+            "❌ Failed to run script.",
           );
         }
       } else {
-        console.warn(`Unknown provider type: ${provider.type}`);
+        logger.warn(`Unknown provider type: ${provider.type}`);
       }
     } catch (error) {
-      console.error(`❌ Failed to sync provider ${provider.name}:`, error);
-      // Ensure error doesn't stop other providers?
-      // For now, continue loop.
+      logger.error(
+        { err: error, name: provider.name },
+        "❌ Failed to sync provider.",
+      );
     }
   }
 
-  console.log("\n✅ All sync tasks completed.");
+  logger.info("✅ All sync tasks completed.");
 }
 
 main()
-  .catch(console.error)
+  .catch(logger.error)
   .finally(() => prisma.$disconnect());

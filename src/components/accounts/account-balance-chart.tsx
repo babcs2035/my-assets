@@ -234,7 +234,7 @@ export function AccountBalanceChart({
             />
             <Tooltip
               content={({ active, payload }) => {
-                if (active && payload && payload.length) {
+                if (active && payload?.length) {
                   if (hasSplitTotal) {
                     const p = payload[0].payload as {
                       date: string;

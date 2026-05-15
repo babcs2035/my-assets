@@ -2,10 +2,14 @@
 
 import type { AssetType } from "@prisma/client";
 import { revalidatePath } from "next/cache";
+import { requireAuth } from "@/lib/auth-guard";
+import logger from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
 import {
   type MainAccountCreateInput,
+  type MainAccountUpdateInput,
   mainAccountCreateSchema,
+  mainAccountUpdateSchema,
   type ProviderCreateInput,
   providerCreateSchema,
 } from "@/lib/validations";
@@ -15,7 +19,7 @@ import {
  * 各口座に関連付けられたプロバイダー，サブ口座，保有銘柄，ポイント詳細などを一括で取得する．
  */
 export async function getAccounts() {
-  console.log("📂 Fetching all accounts from database...");
+  logger.info("📂 Fetching all accounts from database...");
   return prisma.mainAccount.findMany({
     include: {
       provider: true,
@@ -34,11 +38,43 @@ export async function getAccounts() {
 }
 
 /**
+ * 口座一覧用の軽量関数である．
+ * 一覧表示に必要な最小限のフィールドのみを取得する．
+ * holdings, cryptos, pointDetail は取得しない．
+ */
+export async function getAccountList() {
+  logger.info("📂 Fetching account list (lightweight)...");
+  return prisma.mainAccount.findMany({
+    select: {
+      id: true,
+      label: true,
+      sortOrder: true,
+      provider: {
+        select: { name: true },
+      },
+      subAccounts: {
+        where: { isHidden: false },
+        select: {
+          id: true,
+          currentName: true,
+          balance: true,
+          assetType: true,
+          mainAccountId: true,
+          sortOrder: true,
+        },
+        orderBy: { sortOrder: "asc" },
+      },
+    },
+    orderBy: { sortOrder: "asc" },
+  });
+}
+
+/**
  * 指定された ID のメイン口座の詳細情報を取得する関数である．
  * 残高推移履歴も併せて取得する．
  */
 export async function getAccountDetail(id: string) {
-  console.log(`🔍 Fetching details for account: ${id}`);
+  logger.info(`🔍 Fetching details for account: ${id}`);
   return prisma.mainAccount.findUnique({
     where: { id },
     include: {
@@ -66,7 +102,7 @@ export async function getAccountDetail(id: string) {
  * すべてのプロバイダー情報を取得する関数である．
  */
 export async function getProviders() {
-  console.log("🏢 Fetching providers...");
+  logger.info("🏢 Fetching providers...");
   return prisma.provider.findMany({
     orderBy: { name: "asc" },
   });
@@ -76,8 +112,9 @@ export async function getProviders() {
  * 新しいプロバイダーを作成する関数である．
  */
 export async function createProvider(input: ProviderCreateInput) {
+  requireAuth();
   const data = providerCreateSchema.parse(input);
-  console.log(`➕ Creating new provider: ${data.name}`);
+  logger.info(`➕ Creating new provider: ${data.name}`);
   const result = await prisma.provider.create({ data });
   revalidatePath("/settings");
   revalidatePath("/accounts");
@@ -88,8 +125,9 @@ export async function createProvider(input: ProviderCreateInput) {
  * 新しいメイン口座を作成する関数である．
  */
 export async function createMainAccount(input: MainAccountCreateInput) {
+  requireAuth();
   const data = mainAccountCreateSchema.parse(input);
-  console.log(`🏦 Creating new main account: ${data.label}`);
+  logger.info(`🏦 Creating new main account: ${data.label}`);
   const result = await prisma.mainAccount.create({
     data: {
       ...data,
@@ -106,9 +144,11 @@ export async function createMainAccount(input: MainAccountCreateInput) {
  */
 export async function updateMainAccount(
   id: string,
-  data: { label?: string; mfUrlId?: string },
+  input: MainAccountUpdateInput,
 ) {
-  console.log(`📝 Updating main account: ${id}`);
+  requireAuth();
+  const data = mainAccountUpdateSchema.parse(input);
+  logger.info(`📝 Updating main account: ${id}`);
   const result = await prisma.mainAccount.update({
     where: { id },
     data,
@@ -122,7 +162,8 @@ export async function updateMainAccount(
  * メイン口座を削除する関数である．
  */
 export async function deleteMainAccount(id: string) {
-  console.log(`🗑️ Deleting main account: ${id}`);
+  requireAuth();
+  logger.info(`🗑️ Deleting main account: ${id}`);
   const result = await prisma.$transaction(async tx => {
     const subAccounts = await tx.subAccount.findMany({
       where: { mainAccountId: id },
@@ -167,7 +208,8 @@ export async function updateSubAccountAssetType(
   id: string,
   assetType: AssetType,
 ) {
-  console.log(`🏷️ Updating asset type for sub account ${id} to ${assetType}`);
+  requireAuth();
+  logger.info(`🏷️ Updating asset type for sub account ${id} to ${assetType}`);
   const result = await prisma.subAccount.update({
     where: { id },
     data: { assetType },
@@ -181,7 +223,8 @@ export async function updateSubAccountAssetType(
  * サブ口座の表示状態（非表示/表示）を更新する関数である．
  */
 export async function updateSubAccountHidden(id: string, isHidden: boolean) {
-  console.log(`🙈 Updating hidden flag for sub account ${id} to ${isHidden}`);
+  requireAuth();
+  logger.info(`🙈 Updating hidden flag for sub account ${id} to ${isHidden}`);
   const result = await prisma.subAccount.update({
     where: { id },
     data: { isHidden },
@@ -205,7 +248,8 @@ export async function remapSubAccount(
   subAccountId: string,
   newMainAccountId: string,
 ) {
-  console.log(
+  requireAuth();
+  logger.info(
     `🔗 Remapping sub account ${subAccountId} to main account ${newMainAccountId}`,
   );
   const result = await prisma.subAccount.update({
@@ -233,7 +277,8 @@ export async function createManualAccount({
   initialBalance: number;
   assetType: AssetType;
 }) {
-  console.log(`✍️ Creating manual account: ${label} (${subAccountName})`);
+  requireAuth();
+  logger.info(`✍️ Creating manual account: ${label} (${subAccountName})`);
 
   // 新規口座の sortOrder を最大値 + 1 に設定
   const maxSortOrder = await prisma.mainAccount.aggregate({
@@ -267,7 +312,8 @@ export async function createManualAccount({
  * 引数には ID の配列を新しい順序で渡す．
  */
 export async function reorderMainAccounts(orderedIds: string[]) {
-  console.log("🔀 Reordering main accounts...");
+  requireAuth();
+  logger.info("🔀 Reordering main accounts...");
   const updates = orderedIds.map((id, index) =>
     prisma.mainAccount.update({
       where: { id },
@@ -283,7 +329,8 @@ export async function reorderMainAccounts(orderedIds: string[]) {
  * 引数には ID の配列を新しい順序で渡す．
  */
 export async function reorderSubAccounts(orderedIds: string[]) {
-  console.log("🔀 Reordering sub accounts...");
+  requireAuth();
+  logger.info("🔀 Reordering sub accounts...");
   const updates = orderedIds.map((id, index) =>
     prisma.subAccount.update({
       where: { id },

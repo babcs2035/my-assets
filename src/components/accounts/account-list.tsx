@@ -1,6 +1,5 @@
 "use client";
 
-import type { MainAccount, Provider, SubAccount } from "@prisma/client";
 import { ChevronRight, GripVertical, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -11,13 +10,19 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { assetTypeColor, assetTypeLabel, formatCurrency } from "@/lib/utils";
 
-type AccountWithRelations = MainAccount & {
-  provider: Provider;
-  subAccounts: (SubAccount & {
-    holdings: unknown[];
-    cryptos: unknown[];
-    pointDetail: unknown | null;
-  })[];
+type AccountListItem = {
+  id: string;
+  label: string;
+  sortOrder: number;
+  provider: { name: string };
+  subAccounts: Array<{
+    id: string;
+    currentName: string;
+    balance: number;
+    assetType: "CASH" | "INVESTMENT" | "CRYPTO" | "POINT" | "LIABILITY";
+    mainAccountId: string;
+    sortOrder: number;
+  }>;
 };
 
 /**
@@ -27,11 +32,7 @@ type AccountWithRelations = MainAccount & {
  *   - 金額を最も目立つ位置に
  *   - 意味のある順列（ドラッグ並び替え維持）
  */
-export function AccountList({
-  accounts,
-}: {
-  accounts: AccountWithRelations[];
-}) {
+export function AccountList({ accounts }: { accounts: AccountListItem[] }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [items, setItems] = useState(accounts);
@@ -63,8 +64,7 @@ export function AccountList({
         await reorderMainAccounts(orderedIds);
         toast.success("並び順を更新しました。");
         router.refresh();
-      } catch (error) {
-        console.error("❌ Failed to reorder:", error);
+      } catch {
         toast.error("並び順の更新に失敗しました。");
         setItems(accounts);
       }

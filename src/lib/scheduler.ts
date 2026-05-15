@@ -7,6 +7,18 @@
 // Node.js 固有モジュールに依存するモジュールはトップレベルでインポートしない．
 // prisma, mf-scraper は runAllProvidersSync 内で動的インポートする．
 
+import type { Logger } from "pino";
+
+let logger: Logger | null = null;
+
+async function getLazyLogger(): Promise<Logger> {
+  if (!logger) {
+    const { default: pinoLogger } = await import("./logger");
+    logger = pinoLogger;
+  }
+  return logger;
+}
+
 /**
  * JST での現在時刻を取得する関数である．
  */
@@ -25,7 +37,6 @@ function msUntilNext0800JST(): number {
   const target = new Date(nowJST);
   target.setHours(8, 0, 0, 0);
 
-  // 既に 08:00 を過ぎている場合は翌日に設定する
   if (nowJST >= target) {
     target.setDate(target.getDate() + 1);
   }
@@ -37,10 +48,10 @@ function msUntilNext0800JST(): number {
  * 全てのアクティブなプロバイダーの同期を実行する関数である．
  */
 async function runAllProvidersSync() {
-  console.log("⏰ [Scheduler] Starting scheduled sync at 08:00 JST...");
+  const logger = await getLazyLogger();
+  logger.info("⏰ [Scheduler] Starting scheduled sync at 08:00 JST.");
 
   try {
-    // Node.js 固有モジュールに依存するため，実行時に動的インポートする
     const { prisma } = await import("@/lib/prisma");
     const { runMfScraper } = await import("@/scraper/mf-scraper");
 
@@ -49,78 +60,67 @@ async function runAllProvidersSync() {
     });
 
     if (providers.length === 0) {
-      console.warn("⏰ [Scheduler] No active providers found. Skipping sync.");
+      logger.warn("⏰ [Scheduler] No active providers found. Skipping sync.");
       return;
     }
 
-    console.log(
+    logger.info(
       `⏰ [Scheduler] Found ${providers.length} active provider(s). Starting sync...`,
     );
 
     for (const provider of providers) {
-      console.log(
+      logger.info(
         `⏰ [Scheduler] Syncing provider: [${provider.type}] ${provider.name}`,
       );
 
       try {
-        // 同期開始を記録する
         const nowJST = getNowJST();
         await prisma.provider.update({
           where: { id: provider.id },
-          data: {
-            lastSyncAt: nowJST,
-            lastSyncSuccess: null,
-          },
+          data: { lastSyncAt: nowJST, lastSyncSuccess: null },
         });
 
         if (provider.type === "mf") {
           await runMfScraper(provider.name, undefined, { mode: "scheduled" });
         } else {
-          console.warn(
+          logger.warn(
             `⏰ [Scheduler] Unknown provider type: ${provider.type}. Skipping.`,
           );
           continue;
         }
 
-        // 同期成功を記録する
         await prisma.provider.update({
           where: { id: provider.id },
-          data: {
-            lastSyncAt: getNowJST(),
-            lastSyncSuccess: true,
-          },
+          data: { lastSyncAt: getNowJST(), lastSyncSuccess: true },
         });
 
-        console.log(
-          `⏰ [Scheduler] ✅ Sync completed for provider: ${provider.name}`,
+        logger.info(
+          { name: provider.name },
+          "⏰ [Scheduler] ✅ Sync completed for provider.",
         );
       } catch (error) {
-        console.error(
-          `⏰ [Scheduler] ❌ Sync failed for provider: ${provider.name}`,
-          error,
+        logger.error(
+          { err: error, name: provider.name },
+          "⏰ [Scheduler] ❌ Sync failed for provider.",
         );
 
-        // 同期失敗を記録する
         try {
           await prisma.provider.update({
             where: { id: provider.id },
-            data: {
-              lastSyncAt: getNowJST(),
-              lastSyncSuccess: false,
-            },
+            data: { lastSyncAt: getNowJST(), lastSyncSuccess: false },
           });
-        } catch (updateError) {
-          console.error(
-            `⏰ [Scheduler] ❌ Failed to update sync status:`,
-            updateError,
+        } catch {
+          logger.error(
+            { err: error },
+            "⏰ [Scheduler] ❌ Failed to update sync status.",
           );
         }
       }
     }
 
-    console.log("⏰ [Scheduler] ✅ All scheduled syncs completed.");
+    logger.info("⏰ [Scheduler] ✅ All scheduled syncs completed.");
   } catch (error) {
-    console.error("⏰ [Scheduler] ❌ Scheduled sync failed:", error);
+    logger.error({ err: error }, "⏰ [Scheduler] ❌ Scheduled sync failed.");
   }
 }
 
@@ -131,19 +131,19 @@ async function runAllProvidersSync() {
 export function startScheduler() {
   const msUntilNext = msUntilNext0800JST();
   const hoursUntilNext = (msUntilNext / (1000 * 60 * 60)).toFixed(2);
-  console.log(
-    `⏰ [Scheduler] Next sync scheduled in ${hoursUntilNext} hours (08:00 JST).`,
-  );
 
-  // 次回の 08:00 に最初の同期を実行する
-  setTimeout(() => {
-    // 最初の実行
+  setTimeout(async () => {
     void runAllProvidersSync();
 
-    // 以降は 24 時間ごとに繰り返す
     const TWENTY_FOUR_HOURS = 24 * 60 * 60 * 1000;
     setInterval(() => {
       void runAllProvidersSync();
     }, TWENTY_FOUR_HOURS);
   }, msUntilNext);
+
+  getLazyLogger().then(l =>
+    l.info(
+      `⏰ [Scheduler] Next sync scheduled in ${hoursUntilNext} hours (08:00 JST).`,
+    ),
+  );
 }

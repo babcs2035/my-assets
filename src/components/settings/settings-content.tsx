@@ -160,7 +160,7 @@ export function SettingsContent() {
 
   // Provider Form State
   const [providerName, setProviderName] = useState("");
-  const [providerType, setProviderType] = useState<string>("mf");
+  const [providerType, setProviderType] = useState<"mf" | "custom">("mf");
   const [scraperScript, setScraperScript] = useState("");
   const [isCustomProvider, setIsCustomProvider] = useState(false);
 
@@ -214,8 +214,7 @@ export function SettingsContent() {
           ),
         );
         setRules(r);
-      } catch (error) {
-        console.error("Failed to fetch settings data:", error);
+      } catch {
         toast.error("設定データのフェッチに失敗しました．");
       } finally {
         setIsLoading(false);
@@ -234,8 +233,7 @@ export function SettingsContent() {
       await deleteMainAccount(id);
       toast.success(`口座「${name}」を削除しました．`);
       fetchData();
-    } catch (error) {
-      console.error("Failed to delete account:", error);
+    } catch {
       toast.error("口座の削除に失敗しました．");
     }
   };
@@ -253,8 +251,7 @@ export function SettingsContent() {
       setScraperScript("");
       setIsCustomProvider(false);
       fetchData();
-    } catch (error) {
-      console.error("Failed to add provider:", error);
+    } catch {
       toast.error("プロバイダーの追加に失敗しました．");
     }
   };
@@ -264,8 +261,7 @@ export function SettingsContent() {
       await deleteProvider(id);
       toast.success(`プロバイダー「${name}」を削除しました．`);
       fetchData();
-    } catch (error) {
-      console.error("Failed to delete provider:", error);
+    } catch {
       toast.error("プロバイダーの削除に失敗しました．");
     }
   };
@@ -288,18 +284,14 @@ export function SettingsContent() {
       );
       toast.success("同期が完了しました．");
       fetchData();
-    } catch (error) {
-      console.error("Failed to sync provider:", error);
+    } catch {
       window.dispatchEvent(
         new CustomEvent("provider-sync-status", {
           detail: { providerId: id, status: "error" },
         }),
       );
       // 中止された場合は別のメッセージを表示
-      const errorMessage =
-        error instanceof Error && error.message.includes("aborted")
-          ? "同期を中止しました．"
-          : "同期に失敗しました．";
+      const errorMessage = "同期に失敗しました。";
       toast.error(errorMessage);
       fetchData();
     } finally {
@@ -322,8 +314,7 @@ export function SettingsContent() {
       );
       toast.success("同期を中止しました．");
       fetchData();
-    } catch (error) {
-      console.error("Failed to abort sync:", error);
+    } catch {
       toast.error("同期の中止に失敗しました．");
     } finally {
       setSyncingProviderIds(prev => {
@@ -344,8 +335,7 @@ export function SettingsContent() {
       toast.success("カテゴリーを追加しました．");
       setNewCategoryName("");
       fetchData();
-    } catch (error) {
-      console.error("Failed to add main category:", error);
+    } catch {
       toast.error("カテゴリーの追加に失敗しました．");
     }
   };
@@ -355,8 +345,7 @@ export function SettingsContent() {
       await deleteMainCategory(id);
       toast.success("カテゴリーを削除しました．");
       fetchData();
-    } catch (error) {
-      console.error("Failed to delete main category:", error);
+    } catch {
       toast.error("カテゴリーの削除に失敗しました．");
     }
   };
@@ -372,8 +361,7 @@ export function SettingsContent() {
       setNewSubCategoryName("");
       setExpandedCategories(prev => new Set(prev).add(selectedMainCategory));
       fetchData();
-    } catch (error) {
-      console.error("Failed to add sub-category:", error);
+    } catch {
       toast.error("サブカテゴリーの追加に失敗しました．");
     }
   };
@@ -383,8 +371,7 @@ export function SettingsContent() {
       await deleteSubCategory(id);
       toast.success("サブカテゴリーを削除しました．");
       fetchData();
-    } catch (error) {
-      console.error("Failed to delete sub-category:", error);
+    } catch {
       toast.error("サブカテゴリーの削除に失敗しました．");
     }
   };
@@ -406,8 +393,7 @@ export function SettingsContent() {
     try {
       await reorderMainCategories(type, orderedIds);
       fetchData();
-    } catch (error) {
-      console.error("Failed to reorder category:", error);
+    } catch {
       toast.error("カテゴリーの並べ替えに失敗しました．");
     }
   };
@@ -419,8 +405,7 @@ export function SettingsContent() {
     try {
       await reorderSubCategories(mainCategoryId, orderedIds);
       fetchData();
-    } catch (error) {
-      console.error("Failed to reorder sub category:", error);
+    } catch {
       toast.error("サブカテゴリーの並べ替えに失敗しました．");
     }
   };
@@ -477,8 +462,7 @@ export function SettingsContent() {
       try {
         await handleReorderCategory(currentType, orderedIds);
         toast.success("並び順を更新しました．");
-      } catch (error) {
-        console.error("Failed to reorder category:", error);
+      } catch {
         toast.error("カテゴリーの並べ替えに失敗しました．");
       }
     });
@@ -544,8 +528,7 @@ export function SettingsContent() {
       try {
         await handleReorderSubCategory(mainCategoryId, orderedIds);
         toast.success("並び順を更新しました．");
-      } catch (error) {
-        console.error("Failed to reorder sub category:", error);
+      } catch {
         toast.error("サブカテゴリーの並べ替えに失敗しました．");
       }
     });
@@ -563,8 +546,7 @@ export function SettingsContent() {
       setRuleKeywords("");
       setRuleSubCategoryId("");
       fetchData();
-    } catch (error) {
-      console.error("Failed to add rule:", error);
+    } catch {
       toast.error("ルールの追加に失敗しました．");
     }
   };
@@ -574,8 +556,7 @@ export function SettingsContent() {
       await deleteCategoryRule(id);
       toast.success("ルールを削除しました．");
       fetchData();
-    } catch (error) {
-      console.error("Failed to delete rule:", error);
+    } catch {
       toast.error("ルールの削除に失敗しました．");
     }
   };
@@ -774,7 +755,7 @@ export function SettingsContent() {
                 <Select
                   value={providerType}
                   onValueChange={v => {
-                    setProviderType(v);
+                    setProviderType(v as "mf" | "custom");
                     setIsCustomProvider(v === "custom");
                   }}
                 >

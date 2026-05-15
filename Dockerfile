@@ -105,4 +105,4 @@ USER nextjs
 
 EXPOSE 3000
 
-CMD ["/bin/sh", "-c", "prisma db push && tsx prisma/seed.ts && node server.js"]
+CMD ["node", "server.js"]

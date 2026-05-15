@@ -4,8 +4,9 @@ import { z } from "zod";
  * プロバイダー (Provider) 作成時のバリデーションスキーマである．
  */
 export const providerCreateSchema = z.object({
-  name: z.string().min(1, "名前は必須です"),
+  name: z.string().min(1, "名前は必須です").max(255),
   type: z.enum(["mf", "custom"]),
+  scraperScript: z.string().max(10000).optional(),
 });
 export type ProviderCreateInput = z.infer<typeof providerCreateSchema>;
 
@@ -13,9 +14,9 @@ export type ProviderCreateInput = z.infer<typeof providerCreateSchema>;
  * メイン口座 (MainAccount) 作成時のバリデーションスキーマである．
  */
 export const mainAccountCreateSchema = z.object({
-  label: z.string().min(1, "金融機関名は必須です"),
+  label: z.string().min(1, "金融機関名は必須です").max(255),
   providerId: z.string().min(1, "プロバイダーは必須です"),
-  mfUrlId: z.string().optional(),
+  mfUrlId: z.string().max(255).optional(),
 });
 export type MainAccountCreateInput = z.infer<typeof mainAccountCreateSchema>;
 
@@ -77,3 +78,24 @@ export const transferMarkSchema = z.object({
   transactionId2: z.string(),
 });
 export type TransferMarkInput = z.infer<typeof transferMarkSchema>;
+
+/**
+ * メイン口座 (MainAccount) 更新時のバリデーションスキーマである．
+ */
+export const mainAccountUpdateSchema = z.object({
+  label: z.string().max(255).optional(),
+  mfUrlId: z.string().max(255).nullable().optional(),
+});
+export type MainAccountUpdateInput = z.infer<typeof mainAccountUpdateSchema>;
+
+/**
+ * カテゴリールール (CategoryRule) 更新時のバリデーションスキーマである．
+ */
+export const categoryRuleUpdateSchema = z.object({
+  keyword: z.string().optional(),
+  priority: z.number().int().optional(),
+  subCategoryId: z.string().optional(),
+});
+export type CategoryRuleUpdateInput = z.infer<typeof categoryRuleUpdateSchema>;
+
+// providerCreateSchema を流用する．既存の ProviderCreateInput 型で十分である．

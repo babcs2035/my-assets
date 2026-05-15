@@ -8,7 +8,6 @@ const nextConfig: NextConfig = {
     serverActions: {
       allowedOrigins: [
         "ktak.dev",
-        "*.ktak.dev",
         "localhost:3000",
         "localhost:3400",
       ],

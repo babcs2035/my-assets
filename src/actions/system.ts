@@ -1,5 +1,6 @@
 "use server";
 
+import logger from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
 
 /**
@@ -7,7 +8,7 @@ import { prisma } from "@/lib/prisma";
  * 各 Provider の lastSyncAt / lastSyncSuccess を参照し，最も新しい同期情報を返す．
  */
 export async function getLastSyncInfo() {
-  console.log("🕒 Fetching last sync info from providers...");
+  logger.info("🕒 Fetching last sync info from providers...");
   const syncingProvider = await prisma.provider.findFirst({
     where: { lastSyncAt: { not: null }, lastSyncSuccess: null, isActive: true },
     orderBy: { lastSyncAt: "desc" },
@@ -37,7 +38,7 @@ export async function getLastSyncInfo() {
     },
   });
 
-  if (!provider || !provider.lastSyncAt) {
+  if (!provider?.lastSyncAt) {
     return null;
   }
 

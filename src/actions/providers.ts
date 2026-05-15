@@ -1,8 +1,14 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { requireAuth } from "@/lib/auth-guard";
+import logger from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
 import { nowJST } from "@/lib/utils";
+import {
+  type ProviderCreateInput,
+  providerCreateSchema,
+} from "@/lib/validations";
 import { abortMfScraper, runMfScraper } from "@/scraper/mf-scraper";
 
 // アクティブな同期プロセスを管理するマップ
@@ -14,7 +20,7 @@ const activeSyncControllers = new Map<string, AbortController>();
  * MoneyForward タイプを優先して表示し，有効なプロバイダーを先に表示する．
  */
 export async function getProviders() {
-  console.log("📂 Fetching providers from database...");
+  logger.info("📂 Fetching providers from database...");
   const providers = await prisma.provider.findMany({
     include: {
       _count: {
@@ -41,12 +47,10 @@ export async function getProviders() {
 /**
  * 新しいプロバイダーを作成する関数である．
  */
-export async function createProvider(data: {
-  name: string;
-  type: string;
-  scraperScript?: string;
-}) {
-  console.log(`➕ Creating new provider: ${data.name}`);
+export async function createProvider(input: ProviderCreateInput) {
+  requireAuth();
+  const data = providerCreateSchema.parse(input);
+  logger.info(`➕ Creating new provider: ${data.name}`);
   await prisma.provider.create({
     data: {
       name: data.name,
@@ -62,7 +66,8 @@ export async function createProvider(data: {
  * 指定されたプロバイダーを削除する関数である．
  */
 export async function deleteProvider(id: string) {
-  console.log(`🗑️ Deleting provider: ${id}`);
+  requireAuth();
+  logger.info(`🗑️ Deleting provider: ${id}`);
   await prisma.$transaction(async tx => {
     const mainAccounts = await tx.mainAccount.findMany({
       where: { providerId: id },
@@ -115,20 +120,21 @@ export async function deleteProvider(id: string) {
  * 同期結果（成功/失敗，日時）を Provider レコードに記録する．
  */
 export async function syncProvider(id: string) {
-  console.log(`🔄 Syncing provider: ${id}`);
+  requireAuth();
+  logger.info(`🔄 Syncing provider: ${id}`);
 
   const provider = await prisma.provider.findUnique({
     where: { id },
   });
 
   if (!provider) {
-    console.error(`❌ Provider not found: ${id}`);
+    logger.error(`❌ Provider not found: ${id}`);
     throw new Error(`Provider not found: ${id}`);
   }
 
   // 既存の同期があれば中止
   if (activeSyncControllers.has(id)) {
-    console.log(`⚠️ Previous sync for ${id} is still running. Aborting it.`);
+    logger.info(`⚠️ Previous sync for ${id} is still running. Aborting it.`);
     activeSyncControllers.get(id)?.abort();
     activeSyncControllers.delete(id);
   }
@@ -145,11 +151,11 @@ export async function syncProvider(id: string) {
       },
     });
 
-    console.log(`🚀 Executing scraper for provider: ${provider.name}`);
+    logger.info(`🚀 Executing scraper for provider: ${provider.name}`);
     await runMfScraper(provider.name, abortController.signal, {
       mode: "manual",
     });
-    console.log(`✅ Sync completed for provider: ${provider.name}`);
+    logger.info(`✅ Sync completed for provider: ${provider.name}`);
 
     // 同期成功を記録する．
     await prisma.provider.update({
@@ -162,7 +168,7 @@ export async function syncProvider(id: string) {
   } catch (error) {
     // 中止された場合は特別な処理
     if (abortController.signal.aborted) {
-      console.log(`🛑 Sync aborted for provider: ${provider.name}`);
+      logger.info(`🛑 Sync aborted for provider: ${provider.name}`);
       await prisma.provider.update({
         where: { id },
         data: {
@@ -173,7 +179,10 @@ export async function syncProvider(id: string) {
       throw new Error("Sync was aborted");
     }
 
-    console.error(`❌ Sync failed for provider: ${provider.name}`, error);
+    logger.error(
+      { err: error },
+      `❌ Sync failed for provider: ${provider.name}`,
+    );
 
     // 同期失敗を記録する．
     await prisma.provider.update({
@@ -197,7 +206,8 @@ export async function syncProvider(id: string) {
  * 指定されたプロバイダーの同期を強制終了する関数である．
  */
 export async function abortSyncProvider(id: string) {
-  console.log(`🛑 Aborting sync for provider: ${id}`);
+  requireAuth();
+  logger.info(`🛑 Aborting sync for provider: ${id}`);
 
   const controller = activeSyncControllers.get(id);
   if (controller) {

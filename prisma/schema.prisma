@@ -44,6 +44,8 @@ model MainAccount {
   mfUrlId     String?      @unique // URL から抽出した MF 内部の親口座 ID
   sortOrder   Int          @default(0) // 表示順序
   subAccounts SubAccount[]
+
+  @@index([providerId])
 }
 
 model SubAccount {
@@ -66,6 +68,9 @@ model SubAccount {
 
   // 親口座内での子口座名の重複を避けるための制約
   @@unique([mainAccountId, currentName])
+  @@index([mainAccountId])
+  @@index([assetType])
+  @@index([isHidden])
 }
 
 // 4. Data Snapshots (08:00 定期保存用)
@@ -77,6 +82,8 @@ model BalanceHistory {
   balance      Int
 
   @@unique([subAccountId, date]) // 1 日 1 回のスナップショットを保証
+  @@index([subAccountId])
+  @@index([date])
 }
 
 // 5. Assets (Details)
@@ -93,6 +100,8 @@ model Holding {
   gainLoss       Int // 評価損益
   gainLossRate   Float // 評価損益率
   updatedAt      DateTime   @updatedAt
+
+  @@index([subAccountId])
 }
 
 model CryptoAsset {
@@ -106,6 +115,8 @@ model CryptoAsset {
   valuation      Int // 日本円換算額
   dayBeforeRatio Int? // 前日比（額）
   updatedAt      DateTime   @updatedAt
+
+  @@index([subAccountId])
 }
 
 model PointDetail {
@@ -138,6 +149,7 @@ model SubCategoryItem {
   rules          CategoryRule[]
 
   @@unique([mainCategoryId, name])
+  @@index([mainCategoryId])
 }
 
 model Transaction {
@@ -158,6 +170,12 @@ model Transaction {
 
   @@index([date])
   @@index([subCategoryId])
+  @@index([subAccountId])
+  @@index([subAccountId, date])
+  @@index([isTransfer])
+  @@index([transferId])
+  @@index([linkedTransId])
+  @@index([amount])
 }
 
 model CategoryRule {
@@ -168,4 +186,5 @@ model CategoryRule {
   priority      Int             @default(0)
 
   @@unique([keyword, subCategoryId])
+  @@index([subCategoryId])
 }

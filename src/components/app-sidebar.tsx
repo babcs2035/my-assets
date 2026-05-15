@@ -6,6 +6,7 @@ import {
   LayoutDashboard,
   Settings,
 } from "lucide-react";
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type * as React from "react";
@@ -77,9 +78,11 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             <SidebarMenuButton size="lg" asChild>
               <Link href="/">
                 <div className="flex aspect-square size-8 items-center justify-center overflow-hidden rounded-lg">
-                  <img
+                  <Image
                     src={`${basePath}/icon.svg`}
                     alt="My Assets"
+                    width={32}
+                    height={32}
                     className="size-8"
                   />
                 </div>

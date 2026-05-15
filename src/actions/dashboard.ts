@@ -1,14 +1,13 @@
 "use server";
 
 import type { AssetType } from "@prisma/client";
+import { unstable_cache } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { formatJSTDate, nowJST, todayJST, yesterdayJST } from "@/lib/utils";
 
-/**
- * ダッシュボードに表示する主要な指標 (KPI) を取得する関数である．
- * 総資産，純資産，前日比，資産タイプ別の内訳を計算する．
- */
-export async function getDashboardKPI() {
+// ── Internal (uncached) implementations ──
+
+async function getDashboardKPIInternal() {
   console.log("📊 Calculating dashboard KPIs...");
   const subAccounts = await prisma.subAccount.findMany({
     where: { isHidden: false },
@@ -77,20 +76,14 @@ export async function getDashboardKPI() {
   };
 }
 
-/**
- * 指定された日数分の資産推移データを取得する関数である．
- * balanceHistory テーブルから直接残高履歴を取得する（MoneyForward の履歴ページから取得済み）．
- */
-export async function getAssetHistory(days?: number) {
+async function getAssetHistoryInternal(days?: number) {
   console.log(`📈 Fetching asset history from balanceHistory...`);
 
-  // 対象期間の計算（JST）
   const today = todayJST();
   let since = new Date(today);
   if (days) {
     since.setDate(since.getDate() - days);
   } else {
-    // ALL 用: 最古の履歴日まで遡る（データがなければ1年分）
     const oldestHistory = await prisma.balanceHistory.findFirst({
       select: { date: true },
       orderBy: { date: "asc" },
@@ -104,7 +97,6 @@ export async function getAssetHistory(days?: number) {
     }
   }
 
-  // 全 SubAccount の資産タイプを取得
   const subAccounts = await prisma.subAccount.findMany({
     where: { isHidden: false },
     select: {
@@ -119,7 +111,6 @@ export async function getAssetHistory(days?: number) {
     assetTypeMap.set(sa.id, sa.assetType);
   }
 
-  // 対象期間の balanceHistory を取得
   const histories = await prisma.balanceHistory.findMany({
     where: {
       subAccount: { isHidden: false },
@@ -133,7 +124,6 @@ export async function getAssetHistory(days?: number) {
     orderBy: { date: "asc" },
   });
 
-  // 日付ごと・資産タイプ別に集計
   const grouped: Record<string, Record<string, number>> = {};
 
   for (const h of histories) {
@@ -151,7 +141,6 @@ export async function getAssetHistory(days?: number) {
     grouped[dateKey][assetType] += h.balance;
   }
 
-  // 最新日のスナップショットを必ず含める（履歴欠損時の0表示を防ぐ）
   const todayKey = formatJSTDate(today);
   grouped[todayKey] = {
     CASH: 0,
@@ -186,10 +175,7 @@ export async function getAssetHistory(days?: number) {
   }>;
 }
 
-/**
- * 有効期限が 1 ヶ月以内に迫っているポイント情報を取得する関数である．
- */
-export async function getExpiringPoints() {
+async function getExpiringPointsInternal() {
   console.log("⏰ Checking for expiring points...");
   const now = nowJST();
   const oneMonthLater = new Date(now);
@@ -215,3 +201,34 @@ export async function getExpiringPoints() {
     },
   });
 }
+
+// ── Cached exports (TTL: 5分) ──
+
+/**
+ * ダッシュボードに表示する主要な指標 (KPI) を取得する関数である．
+ * 総資産，純資産，前日比，資産タイプ別の内訳を計算する．
+ */
+export const getDashboardKPI = unstable_cache(
+  getDashboardKPIInternal,
+  ["dashboard-kpi"],
+  { revalidate: 300, tags: ["dashboard"] },
+);
+
+/**
+ * 指定された日数分の資産推移データを取得する関数である．
+ * balanceHistory テーブルから直接残高履歴を取得する（MoneyForward の履歴ページから取得済み）．
+ */
+export const getAssetHistory = unstable_cache(
+  getAssetHistoryInternal,
+  ["asset-history"],
+  { revalidate: 300, tags: ["asset-history"] },
+);
+
+/**
+ * 有効期限が 1 ヶ月以内に迫っているポイント情報を取得する関数である．
+ */
+export const getExpiringPoints = unstable_cache(
+  getExpiringPointsInternal,
+  ["expiring-points"],
+  { revalidate: 300, tags: ["expiring-points"] },
+);

@@ -17,8 +17,13 @@ run = [
   "docker compose up -d db --wait",
   "pnpm prisma migrate dev --name init",
   "pnpm prisma generate",
-  "pnpm prisma db seed"
+  "pnpm prisma db seed",
+  "mise run setup:secrets"
 ]
+
+[tasks."setup:secrets"]
+description = "Generate OP_SECRETS_FILE for local debugging (reads from 1Password CLI)"
+run = "bash scripts/generate-op-secrets.sh"
 
 [tasks.dev]
 description = "Start development server"

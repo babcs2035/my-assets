@@ -92,6 +92,25 @@ export function DashboardAreaChart({ data }: DashboardAreaChartProps) {
     setMounted(true);
   }, []);
 
+  // useMemo を early return より前に配置
+  const filteredData = useMemo(
+    () => filterByUnifiedTimeRange(data, timeRange, d => d.date),
+    [data, timeRange],
+  );
+  const chartData = useMemo(
+    () => (filteredData.length > 0 ? filteredData : data),
+    [filteredData, data],
+  );
+
+  const activeSeries = useMemo(() => {
+    if (chartData.length === 0) return [];
+    return areaSeries.filter(item => {
+      if (!visibleSeries[item.key]) return false;
+      return chartData.some(d => Number(d[item.key] ?? 0) !== 0);
+    });
+  }, [chartData, visibleSeries]);
+  const hasVisibleSeries = activeSeries.length > 0;
+
   if (!mounted) {
     return (
       <div className="relative flex min-h-[200px] w-full h-[350px] items-center justify-center rounded-lg backdrop-blur-sm">
@@ -99,16 +118,6 @@ export function DashboardAreaChart({ data }: DashboardAreaChartProps) {
       </div>
     );
   }
-
-  const filteredData = filterByUnifiedTimeRange(data, timeRange, d => d.date);
-  const chartData = filteredData.length > 0 ? filteredData : data;
-
-  // 全期間のデータが0の系列は非表示にする（線の重なり防止）
-  const activeSeries = areaSeries.filter(item => {
-    if (!visibleSeries[item.key]) return false;
-    return chartData.some(d => Number(d[item.key] ?? 0) !== 0);
-  });
-  const hasVisibleSeries = activeSeries.length > 0;
 
   if (chartData.length === 0 || !hasVisibleSeries) {
     return (
@@ -404,26 +413,42 @@ export function DashboardDonutChart({ data }: DashboardDonutChartProps) {
     setMounted(true);
   }, []);
 
-  const source = data as { name: string; value: number }[];
-  const sourceMap = new Map(source.map(item => [item.name, item.value]));
+  const source = useMemo(
+    () => data as { name: string; value: number }[],
+    [data],
+  );
+  const sourceMap = useMemo(
+    () => new Map(source.map(item => [item.name, item.value])),
+    [source],
+  );
   // 負債は資産構成比から除外する
-  const assetOnlySeries = areaSeries.filter(item => item.key !== "LIABILITY");
-  const pieData = assetOnlySeries.map(item => ({
-    name: item.label,
-    value: Math.max(0, Number(sourceMap.get(item.label) ?? 0)),
-    fill: item.color,
-  }));
+  const assetOnlySeries = useMemo(
+    () => areaSeries.filter(item => item.key !== "LIABILITY"),
+    [],
+  );
+  const pieData = useMemo(
+    () =>
+      assetOnlySeries.map(item => ({
+        name: item.label,
+        value: Math.max(0, Number(sourceMap.get(item.label) ?? 0)),
+        fill: item.color,
+      })),
+    [assetOnlySeries, sourceMap],
+  );
   const totalValue = useMemo(
     () => pieData.reduce((sum, d) => sum + d.value, 0),
     [pieData],
   );
-  const pieRenderData =
-    totalValue > 0
-      ? pieData
-      : pieData.map(item => ({
-          ...item,
-          value: 1,
-        }));
+  const pieRenderData = useMemo(
+    () =>
+      totalValue > 0
+        ? pieData
+        : pieData.map(item => ({
+            ...item,
+            value: 1,
+          })),
+    [pieData, totalValue],
+  );
 
   if (!mounted) {
     return (

@@ -92,7 +92,7 @@ export function TransactionsContent() {
     { length: now.getFullYear() - 2023 + 2 },
     (_, i) => 2023 + i,
   );
-  const monthOptions = Array.from({ length: 12 }, (_, i) => i + 1);
+  const _monthOptions = Array.from({ length: 12 }, (_, i) => i + 1);
   const activeMainAccountId =
     selectedMainAccountId === "all" ? undefined : selectedMainAccountId;
   const activeSubAccountId =
@@ -113,15 +113,6 @@ export function TransactionsContent() {
    * ローカルなローディング状態を管理しながら実行する．
    */
   const fetchData = () => {
-    const dateInfo = selectedDay
-      ? `${year}/${month}/${selectedDay}`
-      : `${year}/${month}`;
-    console.log(
-      `📂 Fetching transaction data for ${dateInfo} (Page: ${page})...`,
-    );
-    console.log(
-      `📍 Params: year=${year}, month=${month}, day=${selectedDay ?? "undefined"}, page=${page}`,
-    );
     setIsLoading(true);
     startTransition(async () => {
       try {
@@ -145,11 +136,7 @@ export function TransactionsContent() {
         setTotalPages(txResult.totalPages);
         setCalendarData(calResult);
         setCategories(catResult);
-        console.log(
-          `✅ Data fetched successfully: ${txResult.transactions.length} transactions`,
-        );
-      } catch (error) {
-        console.error("❌ Failed to fetch transaction data:", error);
+      } catch {
         toast.error("データの取得に失敗しました．");
       } finally {
         setIsLoading(false);
@@ -170,9 +157,7 @@ export function TransactionsContent() {
       try {
         const options = await getTransactionFilterOptions();
         setFilterOptions(options);
-      } catch (error) {
-        console.error("❌ Failed to fetch transaction filter options:", error);
-      }
+      } catch {}
     });
   }, []);
 
@@ -192,7 +177,6 @@ export function TransactionsContent() {
     transactionId: string,
     subCategoryId: string | null,
   ) => {
-    console.log(`🏷️ Updating category for transaction ${transactionId}...`);
     try {
       await updateTransactionCategory({
         transactionId,
@@ -202,10 +186,8 @@ export function TransactionsContent() {
       toast.success("カテゴリーを更新しました．", {
         description: "同じ摘要の他の明細にもルールが適用されました．",
       });
-      console.log("✅ Category updated successfully.");
       fetchData();
-    } catch (error) {
-      console.error("❌ Failed to update category:", error);
+    } catch {
       toast.error("カテゴリーの更新に失敗しました．");
     }
   };

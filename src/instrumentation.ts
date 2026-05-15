@@ -7,10 +7,11 @@
  * トップレベルでインポートしてはならない．
  * Node.js 専用の処理は register() 内で動的インポートする．
  */
+import logger from "./lib/logger";
+
 export async function register() {
-  // サーバーサイド (Node.js) でのみスケジューラを起動する
   if (process.env.NEXT_RUNTIME === "nodejs") {
-    console.log("⏰ [Scheduler] Initializing daily sync scheduler...");
+    logger.info("⏰ [Scheduler] Initializing daily sync scheduler.");
     const { startScheduler } = await import("@/lib/scheduler");
     startScheduler();
   }

@@ -1,9 +1,17 @@
 import "dotenv/config";
+import { fileURLToPath } from "node:url";
 import { chromium, type Page } from "playwright";
 import { generateTransactionId } from "../lib/hash";
+import logger from "../lib/logger";
 import { getItemField, getItemOtp } from "../lib/onepassword";
 import { prisma } from "../lib/prisma";
 import { formatJSTDate, todayJST } from "../lib/utils";
+
+// エントリポイント（直接実行）のみ自動スクレイピングを許可
+const isEntry = process.argv[1] &&
+  (fileURLToPath(import.meta.url) === process.argv[1] ||
+    process.argv[1].endsWith("mf-scraper.ts") ||
+    process.argv[1].endsWith("mf-scraper.js"));
 
 const normalizeInstitutionName = (name: string) =>
   name.split(/[（(]/)[0].replace(/\s+/g, " ").trim();
@@ -38,7 +46,7 @@ function getCredentials(providerName: string) {
     return { email, password };
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
-    console.error("❌ Failed to get credentials from 1Password:", msg);
+    logger.error({ msg }, "🚫 Failed to get credentials from 1Password.");
     throw error;
   }
 }
@@ -85,10 +93,7 @@ async function fetchJson<T>(page: Page, url: string): Promise<T> {
     },
   });
   if (!res.ok()) {
-    const body = await res.text();
-    throw new Error(
-      `API request failed (${res.status()}): ${url}\n${body.slice(0, 300)}`,
-    );
+    throw new Error(`API request failed (${res.status()}): ${url}`);
   }
   return (await res.json()) as T;
 }
@@ -191,7 +196,7 @@ async function fetchServiceDetailBySubAccount(
  * MF のすべての登録済み金融機関の同期処理をトリガーする
  */
 async function triggerSync(page: Page, providerId: string) {
-  console.log("🔄 Triggering sync for registered accounts...");
+  logger.info("🔄 Triggering sync for registered accounts...");
 
   // 明示的に accounts ページへ移動
   if (!page.url().includes("/accounts")) {
@@ -205,8 +210,9 @@ async function triggerSync(page: Page, providerId: string) {
   const targetLabels = new Set(
     mainAccounts.map(a => normalizeInstitutionName(a.label)),
   );
-  console.log(
-    `📋 Target accounts for sync: ${Array.from(targetLabels).join(", ")}`,
+  logger.info(
+    { accounts: Array.from(targetLabels).join(", ") },
+    "📋 Target accounts for sync.",
   );
 
   const rows = await page.locator("#account-table tbody tr").all();
@@ -226,21 +232,21 @@ async function triggerSync(page: Page, providerId: string) {
         (await updateButton.count()) > 0 &&
         (await updateButton.isVisible())
       ) {
-        console.log(`🔄 Clicking update for: ${serviceName}`);
+        logger.info({ serviceName }, "🔄 Clicking update.");
         await updateButton.click();
         triggeredCount++;
         await page.waitForTimeout(1000);
       }
     }
   }
-  console.log(`✅ Triggered sync for ${triggeredCount} accounts.`);
+  logger.info({ accounts: triggeredCount }, "✅ Triggered sync for accounts.");
 }
 
 /**
  * 金融機関ごとの口座残高をスクレイピングする
  */
 async function scrapeBalances(page: Page, providerId: string) {
-  console.log("💰 Scraping account balances...");
+  logger.info("💰 Scraping account balances...");
 
   const mainAccounts = await prisma.mainAccount.findMany({
     where: { providerId },
@@ -250,8 +256,9 @@ async function scrapeBalances(page: Page, providerId: string) {
     mainAccounts.map(a => normalizeInstitutionName(a.label)),
   );
 
-  console.log(
-    `📋 Target accounts (DB): ${Array.from(targetLabels).join(", ")}`,
+  logger.info(
+    { accounts: Array.from(targetLabels).join(", ") },
+    "📋 Target accounts (DB).",
   );
 
   const accountSummaries = await fetchAccountSummaries(page);
@@ -259,8 +266,9 @@ async function scrapeBalances(page: Page, providerId: string) {
     targetLabels.has(normalizeInstitutionName(acc.name)),
   );
 
-  console.log(
-    `✅ Processing ${targetAccounts.length} accounts matching DB records...`,
+  logger.info(
+    { count: targetAccounts.length },
+    "✅ Processing accounts matching DB records.",
   );
 
   const results: Array<{
@@ -320,7 +328,7 @@ async function scrapeBalances(page: Page, providerId: string) {
     results.push(...mergedBySubType.values());
   }
 
-  console.log(`✅ Collected ${results.length} balances.`);
+  logger.info({ count: results.length }, "✅ Collected balances.");
   return results;
 }
 
@@ -334,7 +342,7 @@ async function scrapeTransactions(
   _allSubAccountNames: Map<string, string[]>, // 全金融機関の子口座名（将来のフォールバック用）
   options: MfScraperOptions,
 ) {
-  console.log("📝 Scraping transactions via MF APIs...");
+  logger.info("📝 Scraping transactions via MF APIs...");
 
   const mainAccounts = await prisma.mainAccount.findMany({
     where: { providerId },
@@ -350,7 +358,7 @@ async function scrapeTransactions(
   );
 
   if (targetInstitutionNames.size === 0) {
-    console.log("⚠️ No registered accounts found for transactions.");
+    logger.info("⚠️ No registered accounts found for transactions.");
     return [];
   }
 
@@ -414,14 +422,21 @@ async function scrapeTransactions(
     );
 
     if (accountSubAccounts.length === 0) {
-      console.warn(
-        `⚠️ No sub accounts for ${account.name}. Skipping transactions.`,
+      logger.warn(
+        { account: account.name },
+        "⚠️ No sub accounts for. Skipping transactions.",
       );
       continue;
     }
 
-    console.log(
-      `Processing transactions for ${account.name}... (${isIncrementalSync ? "incremental: 2 months" : `backfill to ${MF_BACKFILL_START_DATE}`})`,
+    logger.debug(
+      {
+        account: account.name,
+        mode: isIncrementalSync
+          ? "incremental: 2 months"
+          : `backfill to ${MF_BACKFILL_START_DATE}`,
+      },
+      "Processing transactions.",
     );
 
     const windows: Array<{ from: string; to: string }> = [];
@@ -549,8 +564,9 @@ async function scrapeTransactions(
             });
           }
         } catch (error) {
-          console.warn(
-            `⚠️ Failed to fetch transactions: account=${account.name}, subHash=${sa.hash}, range=${from}..${to}`,
+          logger.warn(
+            { err: error, account: account.name, subHash: sa.hash, from, to },
+            "⚠️ Failed to fetch transactions.",
             error,
           );
         }
@@ -558,7 +574,7 @@ async function scrapeTransactions(
     }
   }
 
-  console.log(`✅ Found ${allTransactions.length} transactions.`);
+  logger.info({ count: allTransactions.length }, "✅ Found transactions.");
   return allTransactions;
 }
 
@@ -568,7 +584,7 @@ async function scrapeTransactions(
  * 履歴ページには全金融機関のデータが含まれるため、一度のループで全口座を処理する。
  */
 async function scrapeBalanceHistory(page: Page, options: MfScraperOptions) {
-  console.log("📊 Scraping balance history via service_detail API...");
+  logger.info("📊 Scraping balance history via service_detail API...");
 
   const toJstMidnight = (dateStr: string) =>
     new Date(`${dateStr}T00:00:00+09:00`);
@@ -675,7 +691,7 @@ async function scrapeBalanceHistory(page: Page, options: MfScraperOptions) {
   });
 
   if (mainAccounts.length === 0) {
-    console.log("⚠️ No main accounts found for balance history.");
+    logger.info("⚠️ No main accounts found for balance history.");
     return;
   }
 
@@ -814,8 +830,13 @@ async function scrapeBalanceHistory(page: Page, options: MfScraperOptions) {
               includeEndPointWhenNoTransactions: true,
             },
           );
-          console.log(
-            `  📈 Liability history rebuilt from transactions: ${mainAccount.label}/${subAccount.currentName}, points=${mergedHistoryByDate.size}`,
+          logger.info(
+            {
+              label: mainAccount.label,
+              subAccount: subAccount.currentName,
+              points: mergedHistoryByDate.size,
+            },
+            "📈 Liability history rebuilt from transactions.",
           );
         } else {
           for (const subSummary of uniqueCandidateSubSummaries) {
@@ -880,8 +901,18 @@ async function scrapeBalanceHistory(page: Page, options: MfScraperOptions) {
                 toDate.getDate() - (mergedSeries.length - 1),
               );
 
-              console.log(
-                `  📈 History range selected: ${mainAccount.label}/${subAccount.currentName} (subHash=${subSummary.sub_account_id_hash}) anchor=${anchorStr} range=${best.range}, points=${mergedSeries.length}, from=${formatYmd(inferredFromDate)}, to=${toDateStr}`,
+              logger.debug(
+                {
+                  label: mainAccount.label,
+                  subAccount: subAccount.currentName,
+                  subHash: subSummary.sub_account_id_hash,
+                  anchor: anchorStr,
+                  range: best.range,
+                  points: mergedSeries.length,
+                  from: formatYmd(inferredFromDate),
+                  to: toDateStr,
+                },
+                "History range selected.",
               );
 
               if (fromDateStr) {
@@ -891,8 +922,19 @@ async function scrapeBalanceHistory(page: Page, options: MfScraperOptions) {
                   toDate,
                 );
                 if (expectedDays !== mergedSeries.length) {
-                  console.warn(
-                    `⚠️ disp_sum_history length mismatch for ${mainAccount.label}/${subAccount.currentName} (subHash=${subSummary.sub_account_id_hash}): from_date=${fromDateStr}, to_date=${toDateStr}, expected=${expectedDays}, actual=${mergedSeries.length}. Using inferred range ${formatYmd(inferredFromDate)}..${toDateStr}.`,
+                  logger.warn(
+                    {
+                      label: mainAccount.label,
+                      subAccount: subAccount.currentName,
+                      subHash: subSummary.sub_account_id_hash,
+                      fromDate: fromDateStr,
+                      toDate: toDate.toISOString().split("T")[0],
+                      expected: expectedDays,
+                      actual: mergedSeries.length,
+                      from: formatYmd(inferredFromDate),
+                      to: toDateStr,
+                    },
+                    "⚠️ disp_sum_history length mismatch.",
                   );
                 }
               }
@@ -926,8 +968,14 @@ async function scrapeBalanceHistory(page: Page, options: MfScraperOptions) {
               const nextAnchor = new Date(inferredFromDate);
               nextAnchor.setDate(nextAnchor.getDate() - 1);
               if (nextAnchor.getTime() >= anchorDate.getTime()) {
-                console.warn(
-                  `⚠️ History pagination stalled for ${mainAccount.label}/${subAccount.currentName} (subHash=${subSummary.sub_account_id_hash}) at anchor=${anchorStr}. Stopping pagination.`,
+                logger.warn(
+                  {
+                    label: mainAccount.label,
+                    subAccount: subAccount.currentName,
+                    subHash: subSummary.sub_account_id_hash,
+                    anchor: anchorStr,
+                  },
+                  "⚠️ History pagination stalled. Stopping pagination.",
                 );
                 break;
               }
@@ -966,16 +1014,21 @@ async function scrapeBalanceHistory(page: Page, options: MfScraperOptions) {
           totalSaved++;
         }
       } catch (error) {
-        console.warn(
-          `⚠️ Failed to fetch history for ${mainAccount.label}/${subAccount.currentName}:`,
-          error,
+        logger.warn(
+          {
+            err: error,
+            label: mainAccount.label,
+            subAccount: subAccount.currentName,
+          },
+          "⚠️ Failed to fetch history.",
         );
       }
     }
   }
 
-  console.log(
-    `✅ Balance history scraping complete: ${totalSaved} records saved for ${totalSubAccounts} sub-accounts.`,
+  logger.info(
+    { saved: totalSaved, subAccounts: totalSubAccounts },
+    "✅ Balance history scraping complete.",
   );
 }
 
@@ -989,7 +1042,7 @@ async function saveBalancesToDatabase(
   balances: Awaited<ReturnType<typeof scrapeBalances>>,
   providerId: string,
 ) {
-  console.log("💾 Saving balances to database...");
+  logger.info("💾 Saving balances to database...");
 
   const allMainAccounts = await prisma.mainAccount.findMany({
     where: { providerId },
@@ -998,8 +1051,13 @@ async function saveBalancesToDatabase(
   // 口座情報の保存
   for (const account of balances) {
     if (!Number.isFinite(account.balance)) {
-      console.warn(
-        `⚠️ Skip invalid balance: Inst="${account.institutionName}", Sub="${account.subAccountName}", balance=${String(account.balance)}`,
+      logger.warn(
+        {
+          institution: account.institutionName,
+          subAccount: account.subAccountName,
+          balance: account.balance,
+        },
+        "⚠️ Skip invalid balance.",
       );
       continue;
     }
@@ -1085,7 +1143,10 @@ async function saveBalancesToDatabase(
     });
   }
 
-  console.log(`✅ Saved ${balances.length} balance records to database.`);
+  logger.info(
+    { count: balances.length },
+    "✅ Saved balance records to database.",
+  );
 }
 
 /**
@@ -1095,7 +1156,7 @@ async function saveTransactionsToDatabase(
   transactions: Awaited<ReturnType<typeof scrapeTransactions>>,
   providerId: string,
 ) {
-  console.log("💾 Saving transactions to database...");
+  logger.info("💾 Saving transactions to database...");
   const normalize = normalizeLoose;
 
   // 全 mainAccount を事前取得し、正規化名でマッチングするためのヘルパー
@@ -1204,7 +1265,7 @@ async function saveTransactionsToDatabase(
       });
       savedCount++;
     } catch (error) {
-      console.error(`❌ Failed to save transaction: ${txId}`, error);
+      logger.error({ err: error, txId }, "❌ Failed to save transaction.");
     }
   };
 
@@ -1456,8 +1517,14 @@ async function saveTransactionsToDatabase(
 
       // 振替先/元が解決できない場合は保存しない（不正確な単独明細を残さない）
       if (!fromSubAccount || !toSubAccount) {
-        console.warn(
-          `⚠️ Transfer unresolved and skipped: sub="${tx.subAccountName}", from="${tx.transferFromSubAccount ?? "?"}", to="${tx.transferToSubAccount ?? "?"}", msgId=${tx.msgUrlId}`,
+        logger.warn(
+          {
+            sub: tx.subAccountName,
+            from: tx.transferFromSubAccount ?? "?",
+            to: tx.transferToSubAccount ?? "?",
+            msgId: tx.msgUrlId,
+          },
+          "⚠️ Transfer unresolved and skipped.",
         );
         continue;
       }
@@ -1554,13 +1621,19 @@ async function saveTransactionsToDatabase(
         const toInst = toSubAccount.mainAccount.label;
         const crossInstitution =
           fromInst !== toInst ? ` (${fromInst} → ${toInst})` : "";
-        console.log(
-          `  ✅ Transfer recorded: ${fromName} → ${toName}${crossInstitution} (¥${absAmount.toLocaleString()})`,
+        logger.info(
+          {
+            from: fromName,
+            to: toName,
+            crossInstitution,
+            amount: absAmount.toLocaleString(),
+          },
+          "✅ Transfer recorded.",
         );
       } catch (error) {
-        console.error(
-          `❌ Failed to save transfer: ${tx.date} ${fromName} → ${toName}`,
-          error,
+        logger.error(
+          { err: error, date: tx.date, from: fromName, to: toName },
+          "❌ Failed to save transfer.",
         );
       }
       continue;
@@ -1585,14 +1658,24 @@ async function saveTransactionsToDatabase(
         : null);
 
     if (!subAccount) {
-      console.warn(
-        `⚠️ Unmatched transaction: Inst="${tx.institutionName}", Sub="${tx.subAccountName}" not found in DB. MsgId: ${tx.msgUrlId}`,
+      logger.warn(
+        {
+          institution: tx.institutionName,
+          subAccount: tx.subAccountName,
+          msgId: tx.msgUrlId,
+        },
+        "⚠️ Unmatched transaction not found in DB.",
       );
       // Debug info: 正規化名でマッチした mainAccount を使用
       const ma = matchedMainAccount;
       if (ma) {
-        console.warn(
-          `   Available DB subAccounts: ${ma.subAccounts.map(s => `"${s.currentName}"`).join(", ")}`,
+        logger.debug(
+          {
+            subAccounts: ma.subAccounts
+              .map(s => `"${s.currentName}"`)
+              .join(", "),
+          },
+          "   Available DB subAccounts.",
         );
         // フォールバック1: MF側で "Main" になった場合、子口座が1つならそこへ紐付ける
         if (
@@ -1600,8 +1683,9 @@ async function saveTransactionsToDatabase(
           ma.subAccounts.length === 1
         ) {
           subAccount = ma.subAccounts[0];
-          console.warn(
-            `   ↪ Fallback matched to the only sub account: "${subAccount.currentName}"`,
+          logger.debug(
+            { subAccount: subAccount.currentName },
+            "   Fallback matched to the only sub account.",
           );
         }
 
@@ -1615,8 +1699,9 @@ async function saveTransactionsToDatabase(
           );
           if (matched.length === 1) {
             subAccount = matched[0];
-            console.warn(
-              `   ↪ Fallback matched by description to "${subAccount.currentName}"`,
+            logger.debug(
+              { subAccount: subAccount.currentName },
+              "   Fallback matched by description.",
             );
           } else {
             // 振替でない明細も含め、正規化文字列で再推定
@@ -1627,12 +1712,13 @@ async function saveTransactionsToDatabase(
             );
             if (normalizedMatched.length === 1) {
               subAccount = normalizedMatched[0];
-              console.warn(
-                `   ↪ Fallback matched by normalized text to "${subAccount.currentName}"`,
+              logger.debug(
+                { subAccount: subAccount.currentName },
+                "   Fallback matched by normalized text.",
               );
             } else {
-              console.warn(
-                `   ↪ Skip creating "Main": could not uniquely resolve existing sub account`,
+              logger.debug(
+                `   Skip creating "Main": could not uniquely resolve existing sub account`,
               );
             }
           }
@@ -1651,24 +1737,32 @@ async function saveTransactionsToDatabase(
           );
           if (normalizedMatched.length === 1) {
             subAccount = normalizedMatched[0];
-            console.warn(
-              `   ↪ Fallback matched by normalized text to "${subAccount.currentName}"`,
+            logger.debug(
+              { subAccount: subAccount.currentName },
+              "   Fallback matched by normalized text.",
             );
           }
         }
       } else {
-        console.warn(
-          `   MainAccount "${tx.institutionName}" not found either.`,
+        logger.warn(
+          { institution: tx.institutionName },
+          "   MainAccount not found either.",
         );
       }
     }
 
     if (!subAccount) {
       // スキップされたトランザクションを詳細にログ出力
-      console.warn(
-        `⚠️ TRANSACTION SKIPPED: Could not match any account. ` +
-          `Institution="${tx.institutionName}", Sub="${tx.subAccountName}", ` +
-          `Date="${tx.date}", Desc="${tx.desc}", Amount=${tx.amount}, MsgId=${tx.msgUrlId}`,
+      logger.warn(
+        {
+          institution: tx.institutionName,
+          subAccount: tx.subAccountName,
+          date: tx.date,
+          desc: tx.desc,
+          amount: tx.amount,
+          msgId: tx.msgUrlId,
+        },
+        "⚠️ TRANSACTION SKIPPED: Could not match any account.",
       );
       continue;
     }
@@ -1708,8 +1802,9 @@ async function saveTransactionsToDatabase(
     });
   }
 
-  console.log(
-    `✅ Saved ${savedCount}/${transactions.length} transactions to database.`,
+  logger.info(
+    { saved: savedCount, total: transactions.length },
+    "✅ Saved transactions to database.",
   );
 }
 
@@ -1728,16 +1823,19 @@ const activeBrowsers = new Map<
  * 指定されたプロバイダーのスクレイパーを中止する
  */
 export async function abortMfScraper(providerId: string) {
-  console.log(`🛑 Attempting to abort scraper for provider: ${providerId}`);
+  logger.info({ providerId }, "🛑 Attempting to abort scraper for provider.");
   const entry = Array.from(activeBrowsers.values()).find(
     e => e.providerId === providerId,
   );
   if (entry) {
     try {
       await entry.browser.close();
-      console.log(`✅ Browser closed for provider: ${providerId}`);
+      logger.info({ providerId }, "✅ Browser closed for provider.");
     } catch (err) {
-      console.error(`⚠️ Error closing browser for provider: ${providerId}`, err);
+      logger.error(
+        { err, providerId },
+        "⚠️ Error closing browser for provider.",
+      );
     }
   }
 }
@@ -1754,8 +1852,8 @@ export async function runMfScraper(
   signal?: AbortSignal,
   options: MfScraperOptions = { mode: "scheduled" },
 ) {
-  console.log(`🚀 Starting MF Scraper...`);
-  console.log(`📦 Using 1Password item: ${providerName}`);
+  logger.info("🚀 Starting MF Scraper...");
+  logger.info({ providerName }, "📦 Using 1Password item.");
 
   let provider = await prisma.provider.findFirst({
     where: { name: providerName },
@@ -1787,7 +1885,7 @@ export async function runMfScraper(
 
   // 中止シグナルのリスナーを設定
   const abortHandler = async () => {
-    console.log("🛑 Abort signal received, closing browser...");
+    logger.info("🛑 Abort signal received, closing browser...");
     try {
       await browser.close();
     } catch {
@@ -1811,11 +1909,11 @@ export async function runMfScraper(
   });
 
   try {
-    console.log("🔐 Logging in to MoneyForward...");
+    logger.info("🔐 Logging in to MoneyForward...");
     await page.goto("https://moneyforward.com/sign_in");
 
     if (!page.url().includes("id.moneyforward.com")) {
-      console.log(`Current URL: ${page.url()}`);
+      logger.debug({ url: page.url() }, "Current URL.");
     }
 
     try {
@@ -1823,88 +1921,154 @@ export async function runMfScraper(
         timeout: 20000,
       });
     } catch {
-      console.log(`Login form not found. Current URL: ${page.url()}`);
+      logger.error({ url: page.url() }, "❌ Login form not found.");
       throw new Error("Login form not found");
     }
-    console.log("📧 Submitting email...");
+    logger.info("📧 Submitting email...");
     await page.fill('input[name="mfid_user[email]"]', email);
     await page.click("button#submitto");
 
-    console.log("⏳ Waiting for password field...");
+    logger.info("⏳️ Waiting for password field...");
     await page.waitForSelector('input[name="mfid_user[password]"]');
-    console.log("🔑 Submitting password...");
+    logger.info("🔑 Submitting password...");
     await page.fill('input[name="mfid_user[password]"]', password);
     await page.click("button#submitto");
 
-    try {
-      await page.waitForSelector('input[name="otp_attempt"]', {
-        timeout: 5000,
-      });
-      console.log("🔑 Entering OTP (Fetching fresh token)...");
+    const otpInputFound = await page.locator('input[name="otp_attempt"]').count();
+    logger.info({ otpInputFound }, "🔑 Checking for OTP input field...");
+
+    if (otpInputFound > 0) {
+      logger.info("🔑 Entering OTP (fetching fresh token)...");
       const currentOtp = getItemOtp(providerName);
+      logger.info({ currentOtp }, "🔑 OTP code generated.");
+
       await page.fill('input[name="otp_attempt"]', currentOtp);
+      const filledValue = await page.inputValue('input[name="otp_attempt"]');
+      logger.info({ filledValue, expected: currentOtp, match: filledValue === currentOtp }, "🔑 OTP input verified.");
+
       await page.click("button#submitto");
-      await page.waitForTimeout(3000);
-    } catch {
-      console.log("ℹ️ No OTP required or OTP input skipped.");
+      // MoneyForwardの2FAはSPA的挙動でページ遷移しないため、
+      // 単に時間を待ってからログイン状態を再検証する
+      await page.waitForTimeout(8000);
+      await page.waitForLoadState("domcontentloaded").catch(() => {});
+    } else {
+      logger.debug("ℹ️ No OTP input field found, skipping OTP step.");
     }
 
-    // ログイン成功確認要素（ログアウトリンク）
-    const isLoggedIn = await page.evaluate(() => {
-      return document.querySelector('a[href="/sign_out"]') !== null;
-    });
+    // ログイン成功確認要素（ログアウトリンク）— SPA遷移で実行コンテキストが
+    // 破棄される場合があるため、リトライ付きで検証する
+    async function verifyLoggedIn(): Promise<boolean> {
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          await page.waitForLoadState("domcontentloaded").catch(() => {});
+          const result = await page.evaluate(() => {
+            return document.querySelector('a[href="/sign_out"]') !== null;
+          });
+          return result;
+        } catch {
+          await page.waitForTimeout(2000);
+          await page.waitForLoadState("domcontentloaded").catch(() => {});
+        }
+      }
+      return false;
+    }
+    let isLoggedIn = await verifyLoggedIn();
 
     if (!isLoggedIn) {
-      console.error("❌ Login Verification Failed.");
-      console.error(`Current URL: ${page.url()}`);
-      console.error(`Page Title: ${await page.title()}`);
-      console.log("🔍 Dumping page content for debugging...");
-      console.log(await page.content());
-      throw new Error(
-        "Login verification failed: User appears not to be logged in.",
+      const currentUrl = page.url();
+      const title = await page.title();
+      const bodyText = await page.evaluate(() => document.body?.innerText?.slice(0, 500) ?? '');
+      const buttons = await page.evaluate(() =>
+        Array.from(document.querySelectorAll('button, input[type="submit"], a[role="button"]')).map(el => ({
+          text: el.textContent?.trim(),
+          className: el.className,
+          href: el.getAttribute('href'),
+          type: el.getAttribute('type'),
+        })),
       );
+      logger.error(
+        { currentUrl, title, bodyText, buttons },
+        "❌ Login verification failed.",
+      );
+
+      // two_factor_auth ページでエラーメッセージが表示されている場合、
+      // OTPコードが期限切れの可能性がある。再試行する
+      if (currentUrl.includes('two_factor_auth') && bodyText.includes('コードが間違っています')) {
+        logger.warn("⚠️ OTP code expired or incorrect. Retrying with fresh code...");
+        for (let attempt = 0; attempt < 2; attempt++) {
+          const freshOtp = getItemOtp(providerName);
+          logger.info({ freshOtp, attempt }, "🔑 Fresh OTP code generated for retry.");
+
+          const otpInput = page.locator('input[name="otp_attempt"]');
+          if (await otpInput.count() > 0) {
+            await otpInput.fill(freshOtp);
+            await page.click("button#submitto");
+            await page.waitForTimeout(10000);
+
+            isLoggedIn = await verifyLoggedIn();
+            if (isLoggedIn) {
+              logger.info("✅ Login verification passed on retry.");
+              break;
+            }
+          }
+        }
+
+        if (!isLoggedIn) {
+          const retryUrl = page.url();
+          const retryTitle = await page.title();
+          const retryBody = await page.evaluate(() => document.body?.innerText?.slice(0, 500) ?? '');
+          logger.error(
+            { currentUrl: retryUrl, title: retryTitle, bodyText: retryBody },
+            "❌ Login verification failed after all retries.",
+          );
+        }
+      }
+
+      if (!isLoggedIn) {
+        throw new Error(
+          `Login verification failed: User appears not to be logged in. (current page: ${currentUrl}, title: ${title})`,
+        );
+      }
     }
 
-    console.log("✅ Logged in successfully (Verified).");
+    logger.info("✅ Logged in successfully (verified).");
 
     if (options.mode === "scheduled") {
       await triggerSync(page, provider.id);
 
-      console.log("⏳ Waiting for sync to complete (max 60 min)...");
+      logger.info("⏳️ Waiting for sync to complete (max 60 min)...");
       const startTime = Date.now();
       const timeout = 60 * 60 * 1000;
 
       while (Date.now() - startTime < timeout) {
-        await page.reload();
+        await page.reload({ waitUntil: "domcontentloaded" }).catch(() => {});
         await page.waitForTimeout(5000);
 
         const loadingIcons = page.locator('img[src*="loading"]:visible');
         const count = await loadingIcons.count();
 
         if (count === 0) {
-          console.log("✅ All syncs completed.");
+          logger.info("✅ All syncs completed.");
           break;
         }
-        console.log(`🔄 Still syncing... (${count} accounts updating)`);
+        logger.info({ count }, "🔄 Still syncing... accounts updating.");
         await page.waitForTimeout(10000);
       }
     } else {
-      console.log(
+      logger.info(
         "ℹ️ Manual mode: skipping MF update button flow, starting API fetch immediately.",
       );
     }
 
     // Phase 1: 全金融機関の残高をスクレイプし、子口座をDBに登録
-    console.log(
-      "📋 Phase 1: Scraping balances and registering sub-accounts...",
-    );
+    logger.info("Phase 1: Scraping balances and registering sub-accounts...");
     const balances = await scrapeBalances(page, provider.id);
 
     // 残高データから子口座を先にDBに登録
     await saveBalancesToDatabase(balances, provider.id);
 
     // Phase 2: 全金融機関の全子口座名を収集
-    console.log("📋 Phase 2: Collecting all sub-account names from DB...");
+    logger.info("📋 Phase 2: Collecting all sub-account names from DB...");
     const allMainAccounts = await prisma.mainAccount.findMany({
       include: { subAccounts: { select: { currentName: true } } },
     });
@@ -1915,13 +2079,17 @@ export async function runMfScraper(
       const names = ma.subAccounts.map(sa => sa.currentName);
       allSubAccountNames.set(key, [...new Set([...existing, ...names])]);
     }
-    console.log(
-      `  ✅ Found ${allMainAccounts.length} institutions with ${Array.from(allSubAccountNames.values()).flat().length} sub-accounts total.`,
+    logger.info(
+      {
+        institutions: allMainAccounts.length,
+        subAccounts: Array.from(allSubAccountNames.values()).flat().length,
+      },
+      "✅ Found institutions with sub-accounts.",
     );
 
     // Phase 3: 入出金明細・振替をスクレイプ（全子口座情報を使用）
-    console.log(
-      "📋 Phase 3: Scraping transactions with full sub-account knowledge...",
+    logger.info(
+      "Phase 3: Scraping transactions with full sub-account knowledge...",
     );
     const transactions = await scrapeTransactions(
       page,
@@ -1932,16 +2100,16 @@ export async function runMfScraper(
     );
 
     // Phase 4: 取引明細をDBに保存
-    console.log("📋 Phase 4: Saving transactions to database...");
+    logger.info("📋 Phase 4: Saving transactions to database...");
     await saveTransactionsToDatabase(transactions, provider.id);
 
     // Phase 5: 残高履歴を過去から取得
-    console.log("📋 Phase 5: Scraping balance history...");
+    logger.info("📋 Phase 5: Scraping balance history...");
     await scrapeBalanceHistory(page, options);
 
-    console.log("🎉 MF Scraping process completed successfully!");
+    logger.info("🎉 MF Scraping process completed successfully!");
   } catch (error) {
-    console.error("❌ Scraping process failed:", error);
+    logger.error({ err: error }, "❌ Scraping process failed.");
     throw error;
   } finally {
     signal?.removeEventListener("abort", abortHandler);
@@ -1952,9 +2120,9 @@ export async function runMfScraper(
 }
 
 // 直接実行された場合の処理
-if (process.env.OP_MF_ITEM_ID) {
+if (isEntry && process.env.OP_MF_ITEM_ID) {
   runMfScraper(process.env.OP_MF_ITEM_ID).catch(err => {
-    console.error(err);
+    logger.error({ err }, "Failed to run MF scraper directly.");
     process.exit(1);
   });
 }

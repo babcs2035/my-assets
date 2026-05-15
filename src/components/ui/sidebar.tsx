@@ -222,7 +222,7 @@ export function SidebarMenuButton({
   asChild?: boolean;
   isActive?: boolean;
   size?: "default" | "sm" | "lg";
-  tooltip?: string | React.ComponentProps<any>;
+  tooltip?: string | React.ComponentProps<"button">;
 }) {
   const Comp = asChild ? Slot : "button";
   const { expanded, isMobile } = useSidebar();
@@ -252,6 +252,10 @@ export function SidebarMenuButton({
   );
 
   if (showTooltip) {
+    const tooltipContent =
+      typeof tooltip === "string"
+        ? tooltip
+        : (tooltip as React.ComponentProps<"button">).children;
     return (
       <Tooltip>
         <TooltipTrigger asChild>{buttonContent}</TooltipTrigger>
@@ -260,7 +264,7 @@ export function SidebarMenuButton({
           align="center"
           className="hidden md:block bg-zinc-900 text-zinc-50 border-zinc-800"
         >
-          {typeof tooltip === "string" ? tooltip : tooltip?.children}
+          {tooltipContent}
         </TooltipContent>
       </Tooltip>
     );

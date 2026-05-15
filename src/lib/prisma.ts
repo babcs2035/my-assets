@@ -1,6 +1,7 @@
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@prisma/client";
 import { Pool } from "pg";
+import logger from "./logger";
 
 /**
  * データベース接続文字列を環境変数から取得する．
@@ -30,9 +31,9 @@ const adapter = new PrismaPg(pool);
  * 既存のインスタンスがある場合はそれを再利用し，ない場合は新規作成する．
  */
 export const prisma = globalForPrisma.prisma ?? new PrismaClient({ adapter });
+export { pool };
 
-// Prisma Client の初期化成功ログを出力する．
-console.log("🐘 Prisma client initialized with PostgreSQL adapter.");
+logger.info("🐘 Prisma client initialized with PostgreSQL adapter.");
 
 /**
  * 開発環境の場合，グローバルオブジェクトにインスタンスを保存して再利用可能にする．

@@ -1,10 +1,11 @@
 import { Plus } from "lucide-react";
 import Link from "next/link";
-import { getAccounts } from "@/actions/accounts";
+import { getAccountList } from "@/actions/accounts";
 import { AccountList } from "@/components/accounts/account-list";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import logger from "@/lib/logger";
 
 /**
  * 動的レンダリングを強制するための設定である．
@@ -16,8 +17,8 @@ export const dynamic = "force-dynamic";
  * ガイドブック: タイトルにページの内容を正確に表記する．
  */
 export default async function AccountsPage() {
-  console.log("📂 Rendering AccountsPage...");
-  const accounts = await getAccounts();
+  logger.info("📂 Rendering AccountsPage...");
+  const accounts = await getAccountList();
 
   return (
     <div className="space-y-6 animate-fade-in">

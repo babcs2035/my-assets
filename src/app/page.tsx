@@ -16,6 +16,7 @@ import {
 } from "@/components/dashboard/dashboard-charts";
 import { PageHeader } from "@/components/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import logger from "@/lib/logger";
 import { formatCurrency, formatJSTDateTime } from "@/lib/utils";
 
 /**
@@ -32,7 +33,7 @@ export const dynamic = "force-dynamic";
  *   - メタ情報を記載（最終更新日時）
  */
 export default async function DashboardPage() {
-  console.log("🏠 Rendering DashboardPage...");
+  logger.info("🏠 Rendering DashboardPage...");
 
   const [kpi, history, expiringPoints, syncInfo] = await Promise.all([
     getDashboardKPI(),

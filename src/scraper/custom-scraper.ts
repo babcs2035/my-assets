@@ -5,6 +5,7 @@
 
 import { PrismaClient } from "@prisma/client";
 import { chromium } from "playwright";
+import logger from "../lib/logger";
 import { getItemField, getItemOtp } from "../lib/onepassword";
 
 const prisma = new PrismaClient();
@@ -15,7 +16,7 @@ const ITEM_NAME = process.env.OP_CUSTOM_ITEM_ID || "Coincheck";
  */
 async function getCredentials() {
   try {
-    console.log(`🔑 Fetching credentials for "${ITEM_NAME}" from 1Password...`);
+    logger.info(`🔑 Fetching credentials for "${ITEM_NAME}" from 1Password...`);
 
     const email = getItemField(ITEM_NAME, "username");
     const password = getItemField(ITEM_NAME, "password");
@@ -23,14 +24,14 @@ async function getCredentials() {
     let totp = "";
     try {
       totp = getItemOtp(ITEM_NAME);
-    } catch (error) {
+    } catch (_error) {
       // OTP が設定されていない場合は無視する
-      console.log("ℹ️ OTP not configured for this item");
+      logger.info("ℹ️ OTP not configured for this item");
     }
 
     return { email, password, totp };
   } catch (error) {
-    console.error(
+    logger.error(
       "❌ Failed to get credentials. Make sure 1Password runtime secrets file is mounted or 1Password CLI is logged in.",
     );
     throw error;
@@ -64,19 +65,19 @@ async function main() {
     if (p) {
       providerId = p.id;
     } else {
-      console.warn("⚠️ No custom provider found in database.");
+      logger.warn("⚠️ No custom provider found in database.");
     }
   }
 
   const { email, password, totp } = await getCredentials();
 
-  console.log("🚀 Starting Coincheck Scraper...");
+  logger.info("🚀 Starting Coincheck Scraper...");
   const browser = await chromium.launch({ headless: true });
   const context = await browser.newContext();
   const page = await context.newPage();
 
   try {
-    console.log("🔐 Logging in to Coincheck...");
+    logger.info("🔐 Logging in to Coincheck...");
     await page.goto("https://coincheck.com/ja/sessions/signin");
 
     await page.fill('input[type="email"]', email);
@@ -89,18 +90,18 @@ async function main() {
         { timeout: 5000 },
       );
       if (otpInput && totp) {
-        console.log("🔐 Entering 2FA code...");
+        logger.info("🔐 Entering 2FA code...");
         await otpInput.fill(totp);
         await page.click('button[type="submit"]');
       }
     } catch {
-      console.log("ℹ️ 2FA input not found or skipped.");
+      logger.info("ℹ️ 2FA input not found or skipped.");
     }
 
     await page.waitForURL("**/exchange", { timeout: 30000 });
-    console.log("✅ Successfully logged in.");
+    logger.info("✅ Successfully logged in.");
 
-    console.log("📥 Downloading transaction history CSV...");
+    logger.info("📥 Downloading transaction history CSV...");
     await page.goto("https://coincheck.com/ja/exchange/history");
 
     const downloadPromise = page.waitForEvent("download");
@@ -116,13 +117,13 @@ async function main() {
       }
     }
     const csvContent = Buffer.concat(chunks).toString("utf-8");
-    console.log(`✅ CSV downloaded (${csvContent.length} bytes).`);
+    logger.info(`✅ CSV downloaded (${csvContent.length} bytes).`);
 
     const lines = csvContent.split(/\r?\n/);
     const headers = lines[0]
       .split(",")
       .map(h => h.trim().replace(/^"|"$/g, ""));
-    console.log("📋 CSV headers:", headers);
+    logger.info({ headers }, "📋 CSV headers.");
 
     const currencyIdx = headers.findIndex(h =>
       ["通貨", "Currency", "Coin"].some(k => h.includes(k)),
@@ -134,7 +135,7 @@ async function main() {
     const balances = new Map<string, number>();
 
     if (currencyIdx !== -1 && amountIdx !== -1) {
-      console.log("👍 Structured CSV detected. Parsing rows...");
+      logger.info("👍 Structured CSV detected. Parsing rows...");
       for (let i = 1; i < lines.length; i++) {
         const line = lines[i];
         if (!line.trim()) continue;
@@ -151,7 +152,7 @@ async function main() {
         }
       }
     } else {
-      console.warn("⚠️ Headers not recognized. Using heuristic parser...");
+      logger.warn("⚠️ Headers not recognized. Using heuristic parser...");
       const knownCurrencies = [
         "BTC",
         "ETH",
@@ -214,10 +215,13 @@ async function main() {
       }
     }
 
-    console.log("💰 Aggregated balances:", Object.fromEntries(balances));
+    logger.info(
+      { balances: Object.fromEntries(balances) },
+      "💰 Aggregated balances.",
+    );
 
     if (providerId) {
-      console.log("💾 Saving aggregated balance data to database...");
+      logger.info("💾 Saving aggregated balance data to database...");
       const mainAccount = await prisma.mainAccount.upsert({
         where: { mfUrlId: "COINCHECK_CUSTOM" },
         create: {
@@ -283,14 +287,14 @@ async function main() {
         data: { balance: Math.floor(totalBalanceJPY), assetType: "CRYPTO" },
       });
 
-      console.log("✅ Data successfully saved to database.");
+      logger.info("✅ Data successfully saved to database.");
     }
   } catch (err) {
-    console.error("❌ An error occurred during scraping process:", err);
+    logger.error({ err }, "❌ An error occurred during scraping process.");
   } finally {
     await browser.close();
     await prisma.$disconnect();
   }
 }
 
-main().catch(console.error);
+main().catch(logger.error);

@@ -77,8 +77,7 @@ export function SyncStatus() {
             setLastSyncText("待機中");
           }
         }
-      } catch (error) {
-        console.error("❌ Failed to check sync status:", error);
+      } catch {
         setStatus("error");
         setLastSyncText("エラー");
       }

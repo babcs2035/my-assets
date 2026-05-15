@@ -212,6 +212,7 @@ export function CalendarGrid({
 
             return (
               <button
+                /* biome-ignore lint/suspicious/noArrayIndexKey: calendar cells never reorder */
                 key={idx}
                 type="button"
                 onClick={() => {
