@@ -3,7 +3,7 @@
 # -----------------------------------------------------------------------------
 # Base Stage
 # -----------------------------------------------------------------------------
-FROM node:25.6.1-slim AS base
+FROM node:25.6.1-slim@sha256:34d76bac75fba8eea764d3b79b05be7a77fa0651d7b956b011b4a55837fdbc02 AS base
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
 RUN npm install -g pnpm@10.33.2
@@ -19,15 +19,15 @@ RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile
 # -----------------------------------------------------------------------------
 # Stage 1.5: Generate Prisma Client (on Build Platform / amd64 to avoid QEMU issues)
 # -----------------------------------------------------------------------------
-FROM --platform=$BUILDPLATFORM node:25.6.1-slim AS prisma-gen
+FROM --platform=$BUILDPLATFORM deps AS prisma-gen
 WORKDIR /app
+RUN rm -rf node_modules
 RUN apt-get update && apt-get install -y openssl
 RUN npm install -g pnpm@10.33.2
 RUN echo "node-linker=hoisted" > .npmrc
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
-RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile --ignore-scripts
 COPY prisma ./prisma
-RUN pnpm prisma generate
+RUN --mount=type=cache,id=pnpm-prisma,target=/pnpm/store \
+    pnpm install --frozen-lockfile --ignore-scripts && pnpm prisma generate
 
 # -----------------------------------------------------------------------------
 # Stage 2: Build the application
@@ -42,7 +42,6 @@ RUN pnpm exec playwright install-deps chromium && \
     pnpm exec playwright install chromium
 
 # Copy generated Prisma Client from native build platform
-RUN rm -rf node_modules/.prisma node_modules/@prisma
 COPY --from=prisma-gen /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=prisma-gen /app/node_modules/@prisma ./node_modules/@prisma
 
