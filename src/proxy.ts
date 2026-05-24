@@ -37,7 +37,8 @@ function getRateLimitMap(): Map<string, RateLimitEntry> {
       if (!(globalThis as Record<string, unknown>).__rateLimitMap) {
         (globalThis as Record<string, unknown>).__rateLimitMap = new Map();
       }
-      rateLimitMap = (globalThis as Record<string, unknown>).__rateLimitMap as Map<string, RateLimitEntry>;
+      rateLimitMap = (globalThis as Record<string, unknown>)
+        .__rateLimitMap as Map<string, RateLimitEntry>;
     } else {
       rateLimitMap = new Map();
     }
@@ -59,7 +60,8 @@ function maybeCleanup(): void {
   const now = Date.now();
   // Clean up every ~5 minutes of wall-clock time
   const lastCleanupKey = "__rateLimitLastCleanup";
-  const lastCleanup = ((globalThis as Record<string, unknown>)[lastCleanupKey] as number) ?? 0;
+  const lastCleanup =
+    ((globalThis as Record<string, unknown>)[lastCleanupKey] as number) ?? 0;
   if (now - lastCleanup > 5 * 60 * 1000) {
     cleanupExpiredEntries();
     (globalThis as Record<string, unknown>)[lastCleanupKey] = now;
@@ -187,7 +189,10 @@ function makeUnauthorizedResponse(
   }
 
   const info = getRateLimitInfo(ip);
-  const response = NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const response = NextResponse.json(
+    { error: "Unauthorized" },
+    { status: 401 },
+  );
   response.headers.set("WWW-Authenticate", 'Basic realm="my-assets"');
   if (info.blocked) {
     response.headers.set("Retry-After", info.retryAfter ?? "900");

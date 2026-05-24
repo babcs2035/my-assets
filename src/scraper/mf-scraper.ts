@@ -8,7 +8,8 @@ import { prisma } from "../lib/prisma";
 import { formatJSTDate, todayJST } from "../lib/utils";
 
 // エントリポイント（直接実行）のみ自動スクレイピングを許可
-const isEntry = process.argv[1] &&
+const isEntry =
+  process.argv[1] &&
   (fileURLToPath(import.meta.url) === process.argv[1] ||
     process.argv[1].endsWith("mf-scraper.ts") ||
     process.argv[1].endsWith("mf-scraper.js"));
@@ -1934,7 +1935,9 @@ export async function runMfScraper(
     await page.fill('input[name="mfid_user[password]"]', password);
     await page.click("button#submitto");
 
-    const otpInputFound = await page.locator('input[name="otp_attempt"]').count();
+    const otpInputFound = await page
+      .locator('input[name="otp_attempt"]')
+      .count();
     logger.info({ otpInputFound }, "🔑 Checking for OTP input field...");
 
     if (otpInputFound > 0) {
@@ -1944,7 +1947,14 @@ export async function runMfScraper(
 
       await page.fill('input[name="otp_attempt"]', currentOtp);
       const filledValue = await page.inputValue('input[name="otp_attempt"]');
-      logger.info({ filledValue, expected: currentOtp, match: filledValue === currentOtp }, "🔑 OTP input verified.");
+      logger.info(
+        {
+          filledValue,
+          expected: currentOtp,
+          match: filledValue === currentOtp,
+        },
+        "🔑 OTP input verified.",
+      );
 
       await page.click("button#submitto");
       // MoneyForwardの2FAはSPA的挙動でページ遷移しないため、
@@ -1977,13 +1987,19 @@ export async function runMfScraper(
     if (!isLoggedIn) {
       const currentUrl = page.url();
       const title = await page.title();
-      const bodyText = await page.evaluate(() => document.body?.innerText?.slice(0, 500) ?? '');
+      const bodyText = await page.evaluate(
+        () => document.body?.innerText?.slice(0, 500) ?? "",
+      );
       const buttons = await page.evaluate(() =>
-        Array.from(document.querySelectorAll('button, input[type="submit"], a[role="button"]')).map(el => ({
+        Array.from(
+          document.querySelectorAll(
+            'button, input[type="submit"], a[role="button"]',
+          ),
+        ).map(el => ({
           text: el.textContent?.trim(),
           className: el.className,
-          href: el.getAttribute('href'),
-          type: el.getAttribute('type'),
+          href: el.getAttribute("href"),
+          type: el.getAttribute("type"),
         })),
       );
       logger.error(
@@ -1993,14 +2009,22 @@ export async function runMfScraper(
 
       // two_factor_auth ページでエラーメッセージが表示されている場合、
       // OTPコードが期限切れの可能性がある。再試行する
-      if (currentUrl.includes('two_factor_auth') && bodyText.includes('コードが間違っています')) {
-        logger.warn("⚠️ OTP code expired or incorrect. Retrying with fresh code...");
+      if (
+        currentUrl.includes("two_factor_auth") &&
+        bodyText.includes("コードが間違っています")
+      ) {
+        logger.warn(
+          "⚠️ OTP code expired or incorrect. Retrying with fresh code...",
+        );
         for (let attempt = 0; attempt < 2; attempt++) {
           const freshOtp = getItemOtp(providerName);
-          logger.info({ freshOtp, attempt }, "🔑 Fresh OTP code generated for retry.");
+          logger.info(
+            { freshOtp, attempt },
+            "🔑 Fresh OTP code generated for retry.",
+          );
 
           const otpInput = page.locator('input[name="otp_attempt"]');
-          if (await otpInput.count() > 0) {
+          if ((await otpInput.count()) > 0) {
             await otpInput.fill(freshOtp);
             await page.click("button#submitto");
             await page.waitForTimeout(10000);
@@ -2016,7 +2040,9 @@ export async function runMfScraper(
         if (!isLoggedIn) {
           const retryUrl = page.url();
           const retryTitle = await page.title();
-          const retryBody = await page.evaluate(() => document.body?.innerText?.slice(0, 500) ?? '');
+          const retryBody = await page.evaluate(
+            () => document.body?.innerText?.slice(0, 500) ?? "",
+          );
           logger.error(
             { currentUrl: retryUrl, title: retryTitle, bodyText: retryBody },
             "❌ Login verification failed after all retries.",

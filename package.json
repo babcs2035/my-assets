@@ -10,7 +10,8 @@
     "lint": "biome check --write src",
     "format": "biome format --write src",
     "check": "biome check src && tsc --noEmit",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "prepare": "husky"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
@@ -60,6 +61,8 @@
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "dotenv": "^17.4.2",
+    "husky": "^9.1.7",
+    "lint-staged": "^17.0.5",
     "otplib": "^13.4.0",
     "playwright": "^1.59.1",
     "prisma": "^7.8.0",

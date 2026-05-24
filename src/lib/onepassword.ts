@@ -69,7 +69,10 @@ function loadRuntimeSecrets(): Record<string, unknown> | null {
         "Invalid runtime secrets format: 'items' must be an object",
       );
     }
-    logger.debug({ secretsPath, itemKeys: Object.keys(data.items) }, "Runtime secrets loaded.");
+    logger.debug(
+      { secretsPath, itemKeys: Object.keys(data.items) },
+      "Runtime secrets loaded.",
+    );
     return data.items as Record<string, unknown>;
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
@@ -219,7 +222,10 @@ export function getItemField(itemId: string, field: string): string {
     throw new Error(`Runtime secrets do not contain item: ${itemId}`);
   }
   const value = (item as Record<string, unknown>)[field];
-  logger.debug({ field, hasValue: !!value, availableKeys: Object.keys(item) }, `getItemField: looking up '${field}'`);
+  logger.debug(
+    { field, hasValue: !!value, availableKeys: Object.keys(item) },
+    `getItemField: looking up '${field}'`,
+  );
   if (!value) {
     throw new Error(
       `Runtime secrets do not contain '${field}' for item: ${itemId}`,
@@ -285,7 +291,10 @@ export function getItemOtp(itemId: string): string {
     } catch {
       try {
         otpUri = getItemField(itemId, "one-time password");
-        logger.info({ itemId, source: "one-time password" }, "OTP URI resolved.");
+        logger.info(
+          { itemId, source: "one-time password" },
+          "OTP URI resolved.",
+        );
       } catch {
         throw new Error(
           `Runtime secrets do not contain 'otp_uri', 'otp', or 'one-time password' for item: ${itemId}. ` +

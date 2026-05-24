@@ -2,6 +2,11 @@
 // pnpm add -D prisma
 import { defineConfig } from "prisma/config";
 
+// Load .env for local development only when DATABASE_URL is not set as an env var
+if (!process.env.DATABASE_URL) {
+  require("dotenv/config");
+}
+
 export default defineConfig({
   schema: "prisma/schema.prisma",
   migrations: {
@@ -9,6 +14,6 @@ export default defineConfig({
     seed: "pnpm tsx prisma/seed.ts",
   },
   datasource: {
-    url: process.env["DATABASE_URL"],
+    url: process.env.DATABASE_URL,
   },
 });

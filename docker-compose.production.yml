@@ -6,7 +6,7 @@ services:
     ports:
       - "127.0.0.1:${APP_PORT:-3000}:3000"
     environment:
-      DATABASE_URL:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-my-assets_user}:${POSTGRES_PASSWORD:-my-assets_password}@my-assets-db:${DB_PORT:-5432}/${POSTGRES_DB:-my-assets}
       TZ: ${TZ:-Asia/Tokyo}
       APP_PORT: ${APP_PORT:-3000}
       BASIC_AUTH_USER:
