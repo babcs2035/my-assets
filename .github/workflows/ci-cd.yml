@@ -10,6 +10,34 @@ env:
   REGISTRY: ghcr.io
 
 jobs:
+  ci-checks:
+    name: Code Quality Checks
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@main
+
+      - name: Setup mise
+        uses: jdx/mise-action@main
+        with:
+          install: true
+
+      - name: Prepare environment variables
+        run: cp .env.example .env
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma Client
+        run: pnpm prisma generate
+
+      - name: Run Format & Lint Check with Biome
+        run: pnpm biome ci ./src
+
+      - name: Run Type Check
+        run: pnpm tsc --noEmit
+
   build-and-push:
     name: Build & Push Docker Image
     runs-on: ubuntu-latest
@@ -106,6 +134,11 @@ jobs:
               exit 1
             fi
 
+            if ! grep -q '^DATABASE_URL=' .env || [ -z "$(grep '^DATABASE_URL=' .env | tail -n1 | cut -d= -f2-)" ]; then
+              echo "DATABASE_URL is required in deploy .env." >&2
+              exit 1
+            fi
+
             set -a
             . ./.env
             set +a
@@ -184,11 +217,8 @@ jobs:
                 print(f"Saved op-secrets.json with items: {list(items.keys())}", flush=True)
             '
 
+            docker compose pull --quiet || true
             docker compose up -d --force-recreate --remove-orphans
-
-            # Run database migrations as a single-instance task (not in container CMD)
-            docker compose exec -T app prisma db push
-            docker compose exec -T app tsx prisma/seed.ts
 
             if ! docker compose ps --status running | grep -q "my-assets-app"; then
               echo "Container is not running: my-assets-app"

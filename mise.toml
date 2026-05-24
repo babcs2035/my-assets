@@ -1,5 +1,5 @@
 [tools]
-node = "latest"
+node = "24"
 pnpm = "latest"
 
 [tasks.install]
@@ -8,7 +8,7 @@ run = "pnpm install"
 
 [tasks.setup]
 description = "Setup development environment (Create .env, Install deps, Start DB, Migrate & Seed)"
-depends = []
+depends = ["install"]
 run = [
   "cp -n .env.example .env || true",
   "rm -rf node_modules",
@@ -31,13 +31,12 @@ depends = ["install"]
 run = "pnpm dev"
 
 [tasks.build]
-description = "Build application"
+description = "Build application (prisma generate + next build)"
 depends = ["install"]
-run = "pnpm build"
+run = "pnpm prisma generate && pnpm next build"
 
 [tasks.start]
 description = "Start production server"
-depends = ["build"]
 run = "pnpm start"
 
 [tasks.check]

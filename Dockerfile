@@ -1,72 +1,47 @@
 # syntax=docker/dockerfile:1
 
-# -----------------------------------------------------------------------------
+# ==============================================================================
 # Base Stage
-# -----------------------------------------------------------------------------
-FROM node:25.6.1-slim@sha256:34d76bac75fba8eea764d3b79b05be7a77fa0651d7b956b011b4a55837fdbc02 AS base
+# ==============================================================================
+FROM node:24-slim AS base
 ENV PNPM_HOME="/pnpm"
-ENV PATH="$PNPM_HOME:$PATH"
-RUN npm install -g pnpm@10.33.2
+ENV PATH="$PNPM_HOME/bin:$PNPM_HOME:$PATH"
+RUN npm install -g pnpm@11.2.2
 WORKDIR /app
 
-# -----------------------------------------------------------------------------
+# ==============================================================================
 # Stage 1: Install dependencies
-# -----------------------------------------------------------------------------
+# ==============================================================================
 FROM base AS deps
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+RUN echo "node-linker=hoisted" > .npmrc
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile --ignore-scripts
 
-# -----------------------------------------------------------------------------
-# Stage 1.5: Generate Prisma Client (on Build Platform / amd64 to avoid QEMU issues)
-# -----------------------------------------------------------------------------
-FROM --platform=$BUILDPLATFORM deps AS prisma-gen
-WORKDIR /app
-RUN rm -rf node_modules
-RUN apt-get update && apt-get install -y openssl
-RUN npm install -g pnpm@10.33.2
-RUN echo "node-linker=hoisted" > .npmrc
-COPY prisma ./prisma
-RUN --mount=type=cache,id=pnpm-prisma,target=/pnpm/store \
-    pnpm install --frozen-lockfile --ignore-scripts && pnpm prisma generate
-
-# -----------------------------------------------------------------------------
+# ==============================================================================
 # Stage 2: Build the application
-# -----------------------------------------------------------------------------
-FROM base AS builder
+# ==============================================================================
+FROM base AS build-cache
+ARG DATABASE_URL="postgresql://dummy:dummy@localhost:5432/dummy"
+ENV DATABASE_URL=${DATABASE_URL}
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
-# Playwright install (Installing here to ensure binaries are available for copy)
+# Generate Prisma Client
+# Node 24 + arm64 does not have the WASM DMMF bug (prisma/prisma#29464)
+RUN pnpm exec prisma generate
+
+# Playwright install (Note: Only needed if build process uses it, otherwise move to runner)
+# Installing here to ensure binaries are available for copy
 RUN pnpm exec playwright install-deps chromium && \
     pnpm exec playwright install chromium
 
-# Copy generated Prisma Client from native build platform
-COPY --from=prisma-gen /app/node_modules/.prisma ./node_modules/.prisma
-COPY --from=prisma-gen /app/node_modules/@prisma ./node_modules/@prisma
-
-ENV DATABASE_URL="postgresql://dummy:dummy@localhost:5432/dummy"
-
 # Build Next.js application
-# We use 'next build' directly to skip the 'prisma generate' which fails under QEMU
-RUN --mount=type=cache,id=nextjs,target=/app/.next/cache ./node_modules/.bin/next build
+RUN --mount=type=cache,id=nextjs,target=/app/.next/cache pnpm build
 
-# FIX: Explicitly copy external packages to standalone node_modules
-# This addresses the issue where 'pg' and other native modules are not correctly
-# included in the standalone build or handled by serverExternalPackages
-RUN mkdir -p .next/standalone/node_modules/@prisma
-RUN cp -R -L node_modules/pg .next/standalone/node_modules/ || true \
-    && cp -R -L node_modules/dotenv .next/standalone/node_modules/ || true \
-    && cp -R -L node_modules/prisma .next/standalone/node_modules/ || true \
-    && cp -R -L node_modules/@prisma/adapter-pg .next/standalone/node_modules/@prisma/ || true \
-    && cp -R -L node_modules/@prisma/driver-adapter-utils .next/standalone/node_modules/@prisma/ || true \
-    && cp -R -L node_modules/@prisma/debug .next/standalone/node_modules/@prisma/ || true \
-    && cp -R -L node_modules/@prisma/client .next/standalone/node_modules/@prisma/ || true \
-    && cp -R -L node_modules/.prisma .next/standalone/node_modules/ || true
-
-# -----------------------------------------------------------------------------
+# ==============================================================================
 # Stage 3: Production runner
-# -----------------------------------------------------------------------------
+# ==============================================================================
 FROM base AS runner
 
 ENV NODE_ENV=production
@@ -84,17 +59,19 @@ RUN apt-get update && apt-get install -y tzdata openssl \
 RUN groupadd --system --gid 1001 nodejs && \
     useradd --system --uid 1001 --gid nodejs nextjs
 
-# Install global tools
+# Install global tools (needed for CMD: prisma migrate deploy, seed)
 RUN pnpm add -g prisma@7.8.0 tsx@4.21.0
 
 # Copy standalone build
-COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
-COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
-COPY --from=builder --chown=nextjs:nodejs /app/public ./public
-COPY --from=builder --chown=nextjs:nodejs /app/prisma ./prisma
-COPY --from=builder --chown=nextjs:nodejs /app/prisma.config.ts ./
+COPY --from=build-cache --chown=nextjs:nodejs /app/.next/standalone ./
+COPY --from=build-cache --chown=nextjs:nodejs /app/.next/static ./.next/static
+COPY --from=build-cache --chown=nextjs:nodejs /app/public ./public
+COPY --from=build-cache --chown=nextjs:nodejs /app/prisma ./prisma
+COPY --from=build-cache --chown=nextjs:nodejs /app/prisma.config.ts ./
+# Copy node_modules for prisma/config and @prisma/config subpath imports (needed by prisma.config.ts)
+COPY --from=build-cache --chown=nextjs:nodejs /app/node_modules ./node_modules
 # Copy Playwright binaries
-COPY --from=builder --chown=nextjs:nodejs /root/.cache/ms-playwright /home/nextjs/.cache/ms-playwright
+COPY --from=build-cache --chown=nextjs:nodejs /root/.cache/ms-playwright /home/nextjs/.cache/ms-playwright
 
 # Setup permissions
 RUN mkdir -p .cache /pnpm && chown -R nextjs:nodejs /app /home/nextjs/.cache /pnpm
@@ -104,4 +81,4 @@ USER nextjs
 
 EXPOSE 3000
 
-CMD ["node", "server.js"]
+CMD ["/bin/sh", "-c", "prisma migrate deploy && tsx prisma/seed.ts && node server.js"]
