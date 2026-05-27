@@ -2,7 +2,6 @@
 
 import type { AssetType } from "@prisma/client";
 import { revalidatePath } from "next/cache";
-import { requireAuth } from "@/lib/auth-guard";
 import logger from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
 import {
@@ -112,7 +111,6 @@ export async function getProviders() {
  * 新しいプロバイダーを作成する関数である．
  */
 export async function createProvider(input: ProviderCreateInput) {
-  requireAuth();
   const data = providerCreateSchema.parse(input);
   logger.info(`➕ Creating new provider: ${data.name}`);
   const result = await prisma.provider.create({ data });
@@ -125,7 +123,6 @@ export async function createProvider(input: ProviderCreateInput) {
  * 新しいメイン口座を作成する関数である．
  */
 export async function createMainAccount(input: MainAccountCreateInput) {
-  requireAuth();
   const data = mainAccountCreateSchema.parse(input);
   logger.info(`🏦 Creating new main account: ${data.label}`);
   const result = await prisma.mainAccount.create({
@@ -146,7 +143,6 @@ export async function updateMainAccount(
   id: string,
   input: MainAccountUpdateInput,
 ) {
-  requireAuth();
   const data = mainAccountUpdateSchema.parse(input);
   logger.info(`📝 Updating main account: ${id}`);
   const result = await prisma.mainAccount.update({
@@ -162,7 +158,6 @@ export async function updateMainAccount(
  * メイン口座を削除する関数である．
  */
 export async function deleteMainAccount(id: string) {
-  requireAuth();
   logger.info(`🗑️ Deleting main account: ${id}`);
   const result = await prisma.$transaction(async tx => {
     const subAccounts = await tx.subAccount.findMany({
@@ -208,7 +203,6 @@ export async function updateSubAccountAssetType(
   id: string,
   assetType: AssetType,
 ) {
-  requireAuth();
   logger.info(`🏷️ Updating asset type for sub account ${id} to ${assetType}`);
   const result = await prisma.subAccount.update({
     where: { id },
@@ -223,7 +217,6 @@ export async function updateSubAccountAssetType(
  * サブ口座の表示状態（非表示/表示）を更新する関数である．
  */
 export async function updateSubAccountHidden(id: string, isHidden: boolean) {
-  requireAuth();
   logger.info(`🙈 Updating hidden flag for sub account ${id} to ${isHidden}`);
   const result = await prisma.subAccount.update({
     where: { id },
@@ -248,7 +241,6 @@ export async function remapSubAccount(
   subAccountId: string,
   newMainAccountId: string,
 ) {
-  requireAuth();
   logger.info(
     `🔗 Remapping sub account ${subAccountId} to main account ${newMainAccountId}`,
   );
@@ -277,7 +269,6 @@ export async function createManualAccount({
   initialBalance: number;
   assetType: AssetType;
 }) {
-  requireAuth();
   logger.info(`✍️ Creating manual account: ${label} (${subAccountName})`);
 
   // 新規口座の sortOrder を最大値 + 1 に設定
@@ -312,7 +303,6 @@ export async function createManualAccount({
  * 引数には ID の配列を新しい順序で渡す．
  */
 export async function reorderMainAccounts(orderedIds: string[]) {
-  requireAuth();
   logger.info("🔀 Reordering main accounts...");
   const updates = orderedIds.map((id, index) =>
     prisma.mainAccount.update({
@@ -329,7 +319,6 @@ export async function reorderMainAccounts(orderedIds: string[]) {
  * 引数には ID の配列を新しい順序で渡す．
  */
 export async function reorderSubAccounts(orderedIds: string[]) {
-  requireAuth();
   logger.info("🔀 Reordering sub accounts...");
   const updates = orderedIds.map((id, index) =>
     prisma.subAccount.update({

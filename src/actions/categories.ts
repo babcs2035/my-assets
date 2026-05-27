@@ -1,7 +1,6 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { requireAuth } from "@/lib/auth-guard";
 import logger from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
 import {
@@ -40,7 +39,6 @@ export async function getCategories() {
  * 新しいメインカテゴリーを作成する関数である．
  */
 export async function createMainCategory(input: MainCategoryCreateInput) {
-  requireAuth();
   const data = mainCategoryCreateSchema.parse(input);
   logger.info(`Creating main category: ${data.name}`);
 
@@ -66,7 +64,6 @@ export async function createMainCategory(input: MainCategoryCreateInput) {
  * メインカテゴリーを削除する関数である．
  */
 export async function deleteMainCategory(id: string) {
-  requireAuth();
   logger.info(`🗑️ Deleting main category: ${id}`);
   // サブカテゴリーに紐付くトランザクションのsubCategoryIdをnullにする
   const subCategories = await prisma.subCategoryItem.findMany({
@@ -97,7 +94,6 @@ export async function deleteMainCategory(id: string) {
  * 新しいサブカテゴリーを作成する関数である．
  */
 export async function createSubCategory(input: SubCategoryCreateInput) {
-  requireAuth();
   const data = subCategoryCreateSchema.parse(input);
   logger.info(`➕ Creating sub category: ${data.name}`);
 
@@ -123,7 +119,6 @@ export async function createSubCategory(input: SubCategoryCreateInput) {
  * サブカテゴリーを削除する関数である．
  */
 export async function deleteSubCategory(id: string) {
-  requireAuth();
   logger.info(`🗑️ Deleting sub category: ${id}`);
   // 紐付くトランザクションのsubCategoryIdをnullにする
   await prisma.transaction.updateMany({
@@ -163,7 +158,6 @@ export async function getCategoryRules() {
  * 新しいカテゴリールールを作成する関数である．
  */
 export async function createCategoryRule(input: CategoryRuleCreateInput) {
-  requireAuth();
   const data = categoryRuleCreateSchema.parse(input);
   logger.info(`➕ Creating category rule for keyword: ${data.keyword}`);
 
@@ -185,7 +179,6 @@ export async function updateCategoryRule(
   id: string,
   input: CategoryRuleUpdateInput,
 ) {
-  requireAuth();
   const data = categoryRuleUpdateSchema.parse(input);
   logger.info(`📝 Updating category rule: ${id}`);
   const result = await prisma.categoryRule.update({
@@ -200,7 +193,6 @@ export async function updateCategoryRule(
  * カテゴリールールを削除する関数である．
  */
 export async function deleteCategoryRule(id: string) {
-  requireAuth();
   logger.info(`🗑️ Deleting category rule: ${id}`);
   const result = await prisma.categoryRule.delete({
     where: { id },
@@ -214,7 +206,6 @@ export async function deleteCategoryRule(id: string) {
  * 優先順位の高いルールから順に適用され，適用された取引の総数を返す．
  */
 export async function applyAllCategoryRules() {
-  requireAuth();
   logger.info("Applying all category rules to unclassified transactions...");
   const rules = await prisma.categoryRule.findMany({
     orderBy: { priority: "desc" },
@@ -249,7 +240,6 @@ export async function reorderMainCategory(
   id: string,
   direction: "up" | "down",
 ) {
-  requireAuth();
   logger.info(`Reordering category ${id} ${direction}...`);
 
   const target = await prisma.mainCategory.findUnique({ where: { id } });
@@ -294,7 +284,6 @@ export async function reorderMainCategory(
  * 同じメインカテゴリー内での上下移動を想定している．
  */
 export async function reorderSubCategory(id: string, direction: "up" | "down") {
-  requireAuth();
   logger.info(`Reordering sub category ${id} ${direction}...`);
 
   const target = await prisma.subCategoryItem.findUnique({ where: { id } });
@@ -342,7 +331,6 @@ export async function reorderMainCategories(
   type: "INCOME" | "EXPENSE",
   orderedIds: string[],
 ) {
-  requireAuth();
   logger.info(`Reordering main categories in ${type}...`);
   await prisma.$transaction(
     orderedIds.map((id, index) =>
@@ -363,7 +351,6 @@ export async function reorderSubCategories(
   mainCategoryId: string,
   orderedIds: string[],
 ) {
-  requireAuth();
   logger.info(
     `Reordering sub categories in main category ${mainCategoryId}...`,
   );

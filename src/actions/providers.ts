@@ -1,7 +1,6 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { requireAuth } from "@/lib/auth-guard";
 import logger from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
 import { nowJST } from "@/lib/utils";
@@ -48,7 +47,6 @@ export async function getProviders() {
  * 新しいプロバイダーを作成する関数である．
  */
 export async function createProvider(input: ProviderCreateInput) {
-  requireAuth();
   const data = providerCreateSchema.parse(input);
   logger.info(`➕ Creating new provider: ${data.name}`);
   await prisma.provider.create({
@@ -66,7 +64,6 @@ export async function createProvider(input: ProviderCreateInput) {
  * 指定されたプロバイダーを削除する関数である．
  */
 export async function deleteProvider(id: string) {
-  requireAuth();
   logger.info(`🗑️ Deleting provider: ${id}`);
   await prisma.$transaction(async tx => {
     const mainAccounts = await tx.mainAccount.findMany({
@@ -120,7 +117,6 @@ export async function deleteProvider(id: string) {
  * 同期結果（成功/失敗，日時）を Provider レコードに記録する．
  */
 export async function syncProvider(id: string) {
-  requireAuth();
   logger.info(`🔄 Syncing provider: ${id}`);
 
   const provider = await prisma.provider.findUnique({
@@ -206,7 +202,6 @@ export async function syncProvider(id: string) {
  * 指定されたプロバイダーの同期を強制終了する関数である．
  */
 export async function abortSyncProvider(id: string) {
-  requireAuth();
   logger.info(`🛑 Aborting sync for provider: ${id}`);
 
   const controller = activeSyncControllers.get(id);

@@ -182,7 +182,7 @@ async function fetchServiceDetailBySubAccount(
   page: Page,
   accountIdHash: string,
   subAccountIdHash: string,
-  range: number,
+  range: number | "all",
 ) {
   const params = new URLSearchParams();
   params.set("sub_account_id_hash", subAccountIdHash);
@@ -638,7 +638,13 @@ async function scrapeBalanceHistory(page: Page, options: MfScraperOptions) {
     }
 
     const inferredHistory = new Map<string, number>();
-    let runningBalance = Math.trunc(endDateBalance);
+    // trimBeforeFirstTransaction の場合、最初の取引日の直前の残高は 0 で初期化
+    // （負債アカウントが全額返済済みの場合、endDateBalance=0 を起点に逆算すると
+    //  最初の取引日の前で runningBalance=-全取引合計 になり不正な値になるため）
+    let runningBalance =
+      options?.trimBeforeFirstTransaction && txDateKeys.length > 0
+        ? 0
+        : Math.trunc(endDateBalance);
     for (
       let cursor = new Date(endDate);
       cursor.getTime() >= effectiveStartDate.getTime();
@@ -715,26 +721,6 @@ async function scrapeBalanceHistory(page: Page, options: MfScraperOptions) {
     minDate.setMonth(minDate.getMonth() - 2);
   }
   minDate.setHours(0, 0, 0, 0);
-
-  const configuredMaxRange = Number(process.env.MF_HISTORY_RANGE_DAYS ?? 0);
-  const getRangeCandidates = (neededDays: number) =>
-    Array.from(
-      new Set(
-        [
-          30,
-          60,
-          90,
-          180,
-          365,
-          730,
-          1095,
-          1460,
-          1825,
-          neededDays,
-          configuredMaxRange > 0 ? configuredMaxRange : 0,
-        ].filter(v => Number.isFinite(v) && v > 0),
-      ),
-    ).sort((a, b) => a - b);
 
   let totalSaved = 0;
   let totalSubAccounts = 0;
@@ -841,149 +827,47 @@ async function scrapeBalanceHistory(page: Page, options: MfScraperOptions) {
           );
         } else {
           for (const subSummary of uniqueCandidateSubSummaries) {
-            const subSummaryHistoryByDate = new Map<string, number>();
-            let anchorDate = new Date(today);
+            // range: "all" で全履歴を1回のAPI呼び出しで取得
+            const payload = await fetchServiceDetailBySubAccount(
+              page,
+              summary.account_id_hash,
+              subSummary.sub_account_id_hash,
+              "all",
+            );
+            const parsed = parseMergedHistory(payload.account_detail, {
+              preferLiabilitySeries: false,
+            });
+            if (!parsed) continue;
 
-            while (anchorDate.getTime() >= minDate.getTime()) {
-              const anchorStr = formatYmd(anchorDate);
-              await page.goto(
-                `https://moneyforward.com/bs/history/list/${anchorStr}`,
-                {
-                  waitUntil: "domcontentloaded",
-                },
+            const toDate = toJstMidnight(parsed.toDateStr);
+            const inferredFromDate = new Date(toDate);
+            inferredFromDate.setDate(
+              toDate.getDate() - (parsed.mergedSeries.length - 1),
+            );
+
+            logger.debug(
+              {
+                label: mainAccount.label,
+                subAccount: subAccount.currentName,
+                subHash: subSummary.sub_account_id_hash,
+                range: "all",
+                points: parsed.mergedSeries.length,
+                from: formatYmd(inferredFromDate),
+                to: parsed.toDateStr,
+              },
+              "History fetched with range=all.",
+            );
+
+            // minDate 〜 today の範囲にクリップしてマージ
+            for (let i = 0; i < parsed.mergedSeries.length; i++) {
+              const day = new Date(
+                inferredFromDate.getTime() + i * 24 * 60 * 60 * 1000,
               );
+              if (day < minDate || day > today) continue;
 
-              const neededDaysForAnchor = Math.max(
-                1,
-                diffDaysInclusive(minDate, anchorDate),
-              );
-              const rangeCandidates = getRangeCandidates(neededDaysForAnchor);
-
-              let best: {
-                range: number;
-                toDateStr: string;
-                fromDateStr?: string;
-                mergedSeries: number[];
-              } | null = null;
-
-              for (const range of rangeCandidates) {
-                const payload = await fetchServiceDetailBySubAccount(
-                  page,
-                  summary.account_id_hash,
-                  subSummary.sub_account_id_hash,
-                  range,
-                );
-                const parsed = parseMergedHistory(payload.account_detail, {
-                  preferLiabilitySeries: false,
-                });
-                if (!parsed) continue;
-
-                if (
-                  !best ||
-                  parsed.mergedSeries.length > best.mergedSeries.length ||
-                  (parsed.mergedSeries.length === best.mergedSeries.length &&
-                    range > best.range)
-                ) {
-                  best = {
-                    range,
-                    toDateStr: parsed.toDateStr,
-                    fromDateStr: parsed.fromDateStr,
-                    mergedSeries: parsed.mergedSeries,
-                  };
-                }
-              }
-
-              if (!best) break;
-              const { toDateStr, fromDateStr, mergedSeries } = best;
-
-              const toDate = toJstMidnight(toDateStr);
-              const inferredFromDate = new Date(toDate);
-              inferredFromDate.setDate(
-                toDate.getDate() - (mergedSeries.length - 1),
-              );
-
-              logger.debug(
-                {
-                  label: mainAccount.label,
-                  subAccount: subAccount.currentName,
-                  subHash: subSummary.sub_account_id_hash,
-                  anchor: anchorStr,
-                  range: best.range,
-                  points: mergedSeries.length,
-                  from: formatYmd(inferredFromDate),
-                  to: toDateStr,
-                },
-                "History range selected.",
-              );
-
-              if (fromDateStr) {
-                const reportedFromDate = toJstMidnight(fromDateStr);
-                const expectedDays = diffDaysInclusive(
-                  reportedFromDate,
-                  toDate,
-                );
-                if (expectedDays !== mergedSeries.length) {
-                  logger.warn(
-                    {
-                      label: mainAccount.label,
-                      subAccount: subAccount.currentName,
-                      subHash: subSummary.sub_account_id_hash,
-                      fromDate: fromDateStr,
-                      toDate: toDate.toISOString().split("T")[0],
-                      expected: expectedDays,
-                      actual: mergedSeries.length,
-                      from: formatYmd(inferredFromDate),
-                      to: toDateStr,
-                    },
-                    "⚠️ disp_sum_history length mismatch.",
-                  );
-                }
-              }
-
-              const clippedFromDate =
-                inferredFromDate.getTime() < minDate.getTime()
-                  ? new Date(minDate)
-                  : inferredFromDate;
-              const clippedToDate =
-                toDate.getTime() > anchorDate.getTime()
-                  ? new Date(anchorDate)
-                  : toDate;
-
-              for (let i = 0; i < mergedSeries.length; i++) {
-                const day = new Date(
-                  inferredFromDate.getTime() + i * 24 * 60 * 60 * 1000,
-                );
-                if (day < clippedFromDate || day > clippedToDate) continue;
-                if (day < minDate || day > today) continue;
-
-                const dateKey = formatYmd(day);
-                const balance = mergedSeries[i];
-                if (!Number.isFinite(balance)) continue;
-                subSummaryHistoryByDate.set(dateKey, Math.trunc(balance));
-              }
-
-              if (inferredFromDate.getTime() <= minDate.getTime()) {
-                break;
-              }
-
-              const nextAnchor = new Date(inferredFromDate);
-              nextAnchor.setDate(nextAnchor.getDate() - 1);
-              if (nextAnchor.getTime() >= anchorDate.getTime()) {
-                logger.warn(
-                  {
-                    label: mainAccount.label,
-                    subAccount: subAccount.currentName,
-                    subHash: subSummary.sub_account_id_hash,
-                    anchor: anchorStr,
-                  },
-                  "⚠️ History pagination stalled. Stopping pagination.",
-                );
-                break;
-              }
-              anchorDate = nextAnchor;
-            }
-
-            for (const [dateKey, balance] of subSummaryHistoryByDate) {
+              const dateKey = formatYmd(day);
+              const balance = parsed.mergedSeries[i];
+              if (!Number.isFinite(balance)) continue;
               mergedHistoryByDate.set(
                 dateKey,
                 Math.trunc((mergedHistoryByDate.get(dateKey) ?? 0) + balance),

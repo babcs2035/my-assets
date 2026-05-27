@@ -9,8 +9,6 @@ services:
       DATABASE_URL: postgresql://${POSTGRES_USER:-my-assets_user}:${POSTGRES_PASSWORD:-my-assets_password}@my-assets-db:${DB_PORT:-5432}/${POSTGRES_DB:-my-assets}
       TZ: ${TZ:-Asia/Tokyo}
       APP_PORT: ${APP_PORT:-3000}
-      BASIC_AUTH_USER:
-      BASIC_AUTH_PASSWORD:
       OP_MF_ITEM_ID: ${OP_MF_ITEM_ID:-MF_Main}
       OP_VAULT: ${OP_VAULT:-}
     volumes:

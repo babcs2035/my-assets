@@ -2,13 +2,14 @@
 
 import type { AssetType } from "@prisma/client";
 import { unstable_cache } from "next/cache";
+import logger from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
 import { formatJSTDate, nowJST, todayJST, yesterdayJST } from "@/lib/utils";
 
 // ── Internal (uncached) implementations ──
 
 async function getDashboardKPIInternal() {
-  console.log("📊 Calculating dashboard KPIs...");
+  logger.info("Calculating dashboard KPIs...");
   const subAccounts = await prisma.subAccount.findMany({
     where: { isHidden: false },
     select: {
@@ -77,7 +78,7 @@ async function getDashboardKPIInternal() {
 }
 
 async function getAssetHistoryInternal(days?: number) {
-  console.log(`📈 Fetching asset history from balanceHistory...`);
+  logger.info("Fetching asset history from balanceHistory...");
 
   const today = todayJST();
   let since = new Date(today);
@@ -176,7 +177,7 @@ async function getAssetHistoryInternal(days?: number) {
 }
 
 async function getExpiringPointsInternal() {
-  console.log("⏰ Checking for expiring points...");
+  logger.info("Checking for expiring points...");
   const now = nowJST();
   const oneMonthLater = new Date(now);
   oneMonthLater.setMonth(oneMonthLater.getMonth() + 1);

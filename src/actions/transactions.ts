@@ -1,7 +1,6 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { requireAuth } from "@/lib/auth-guard";
 import logger from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
 import { formatJSTDate } from "@/lib/utils";
@@ -292,7 +291,6 @@ export async function getTransactionFilterOptions() {
 export async function updateTransactionCategory(
   input: TransactionCategoryUpdateInput,
 ) {
-  requireAuth();
   const data = transactionCategoryUpdateSchema.parse(input);
   logger.info(`📝 Updating category for transaction ${data.transactionId}...`);
 
@@ -337,7 +335,6 @@ export async function updateTransactionCategory(
  * 処理対象を直近 3 か月に制限する．
  */
 export async function detectTransfers() {
-  requireAuth();
   logger.info("🔍 Detecting transfers between accounts...");
 
   const now = new Date();
