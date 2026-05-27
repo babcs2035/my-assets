@@ -4,7 +4,7 @@ const logger = pino({
   transport: {
     target: "pino-pretty",
     options: {
-      translateTime: "HH:MM:ss",
+      translateTime: "SYS:HH:MM:ss Asia/Tokyo",
       ignore: "pid,hostname",
       singleLine: false,
     },
