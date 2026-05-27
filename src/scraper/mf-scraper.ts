@@ -107,6 +107,73 @@ async function fetchAccountSummaries(page: Page): Promise<MfAccountSummary[]> {
   return payload.accounts ?? [];
 }
 
+type MfAssetDetail = {
+  asset_class_id: number;
+  asset_subclass_id: number;
+  code?: string | null;
+  name: string | null;
+  qty?: number | null;
+  entried_price?: number | null;
+  current_price?: number | null;
+  value?: number | null;
+  profit?: number | null;
+  entried_at?: string | null;
+  expire_at?: string | null;
+  cost?: string | null;
+  currency?: string | null;
+  jpyrate?: number | null;
+  interest?: number | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+  extra?: unknown | null;
+};
+
+type MfAccountDetailPageData = {
+  account?: {
+    id: string;
+    account_id_hash: string;
+    display_name: string;
+    sub_accounts?: Array<{
+      id: string;
+      sub_account_id_hash: string;
+      sub_type: string;
+      is_dummy: boolean;
+    }>;
+    grouped_asset_details_by_asset_classes?: Array<{
+      asset_class_type: string;
+      asset_class_name: string;
+      asset_subclasses?: Array<{
+        asset_subclass_type: string;
+        asset_subclass_name: string;
+        asset_details: MfAssetDetail[];
+      }>;
+    }>;
+  };
+};
+
+/**
+ * アカウント詳細ページ（/sp2/accounts/{show_account_id}）から
+ * grouped_asset_details_by_asset_classes を取得する
+ */
+async function fetchAccountHoldingsPage(
+  page: Page,
+  showAccountId: string,
+): Promise<MfAccountDetailPageData | null> {
+  const url = `https://moneyforward.com/sp2/accounts/${showAccountId}`;
+  await page.goto(url, { waitUntil: "domcontentloaded", timeout: 15000 });
+  const html = await page.content();
+
+  const preMatch = html.match(/<pre[^>]*>([\s\S]*?)<\/pre>/);
+  if (!preMatch) return null;
+
+  try {
+    const data = JSON.parse(preMatch[1]) as MfAccountDetailPageData;
+    return data;
+  } catch {
+    return null;
+  }
+}
+
 async function fetchTermDataBySubAccount(
   page: Page,
   subAccountIdHash: string,
@@ -171,6 +238,33 @@ async function fetchTermDataBySubAccount(
 
 type MfServiceDetailResponse = {
   result?: string;
+  user_asset_dets?: {
+    MF?: Array<{
+      code?: string | null;
+      name?: string | null;
+      qty?: number | null;
+      entried_price?: number | null;
+      current_price?: number | null;
+      value?: number | null;
+      profit?: number | null;
+      entried_at?: string | null;
+      expire_at?: string | null;
+      cost?: string | null;
+      currency?: string | null;
+      jpyrate?: number | null;
+      interest?: number | null;
+      created_at?: string | null;
+      updated_at?: string | null;
+      extra?: unknown | null;
+      asset_detail_id_hash?: string | null;
+      account_name?: string | null;
+      sub_account_name?: string | null;
+      is_manual?: boolean | null;
+      is_wallet?: boolean | null;
+      is_manual_em?: boolean | null;
+      sub_account_id_hash?: string | null;
+    }>;
+  };
   account_detail?: {
     from_date?: string;
     to_date?: string;
@@ -190,6 +284,98 @@ async function fetchServiceDetailBySubAccount(
   return await fetchJson<MfServiceDetailResponse>(
     page,
     `https://moneyforward.com/sp/service_detail/${accountIdHash}?${params.toString()}`,
+  );
+}
+
+/**
+ * アカウント詳細ページから投資信託の保有銘柄データを取得して DB に保存する
+ */
+async function saveHoldingsFromAccountPage(
+  subAccountId: string,
+  subAccountName: string,
+  assetDetails: MfAssetDetail[],
+  date: string,
+) {
+  if (!assetDetails || assetDetails.length === 0) return;
+
+  logger.info(
+    { holdingsCount: assetDetails.length, subAccount: subAccountName },
+    "💼 Saving investment trust holdings...",
+  );
+
+  let savedCount = 0;
+  const today = toUtcDateOnly(date);
+
+  for (const holding of assetDetails) {
+    const holdingName = holding.name?.trim();
+    if (!holdingName) continue;
+
+    const qty = holding.qty ?? 0;
+    const avgCostBasis = holding.entried_price ?? 0;
+    const unitPrice = holding.current_price ?? 0;
+    const valuation = holding.value ?? 0;
+    const profit = holding.profit ?? 0;
+    // MF page data: entried_price is cumulative cost (総取得コスト), not per-unit
+    const gainLossRate =
+      avgCostBasis > 0 ? Number(((profit / avgCostBasis) * 100).toFixed(4)) : 0;
+
+    try {
+      await prisma.$transaction(async tx => {
+        await tx.holding.upsert({
+          where: {
+            subAccountId_name: {
+              subAccountId,
+              name: holdingName,
+            },
+          },
+          create: {
+            subAccountId,
+            name: holdingName,
+            quantity: qty,
+            avgCostBasis,
+            unitPrice,
+            valuation,
+            gainLoss: profit,
+            gainLossRate,
+            dayBeforeRatio: 0,
+          },
+          update: {
+            quantity: qty,
+            avgCostBasis,
+            unitPrice,
+            valuation,
+            gainLoss: profit,
+            gainLossRate,
+            updatedAt: new Date(),
+          },
+        });
+
+        await tx.holdingHistory.create({
+          data: {
+            subAccountId,
+            name: holdingName,
+            quantity: qty,
+            avgCostBasis,
+            unitPrice,
+            valuation,
+            gainLoss: profit,
+            gainLossRate,
+            date: today,
+          },
+        });
+      });
+      savedCount++;
+    } catch (error) {
+      logger.warn(
+        { err: error, name: holdingName, subAccount: subAccountName },
+        "⚠️ Failed to save holding history.",
+      );
+    }
+  }
+
+  logger.info(
+    { count: savedCount, subAccount: subAccountName },
+    "✅ Holdings saved from account detail page.",
   );
 }
 
@@ -726,16 +912,93 @@ async function scrapeBalanceHistory(page: Page, options: MfScraperOptions) {
   let totalSubAccounts = 0;
 
   for (const mainAccount of mainAccounts) {
-    const summary = mainAccount.mfUrlId
-      ? summaryByShowId.get(mainAccount.mfUrlId)
-      : accountSummaries.find(
-          acc =>
-            normalizeInstitutionName(acc.name) ===
-            normalizeInstitutionName(mainAccount.label),
-        );
+    let summary: MfAccountSummary | undefined;
+
+    if (mainAccount.mfUrlId) {
+      summary = summaryByShowId.get(mainAccount.mfUrlId);
+    }
+    // hashマッチ失敗時は名前でフォールバック
+    if (!summary) {
+      summary = accountSummaries.find(
+        acc =>
+          normalizeInstitutionName(acc.name) ===
+          normalizeInstitutionName(mainAccount.label),
+      );
+    }
+
+    logger.debug(
+      {
+        label: mainAccount.label,
+        mfUrlId: mainAccount.mfUrlId,
+        summaryFound: !!summary?.account_id_hash,
+      },
+      "📋 Processing mainAccount.",
+    );
 
     if (!summary?.account_id_hash) {
       continue;
+    }
+
+    // 証券口座の場合、アカウント詳細ページから保有銘柄データを取得
+    const mainSubAccountsForHolding = mainAccount.subAccounts;
+    const investmentSubAccount = mainSubAccountsForHolding.find(
+      sa => sa.assetType === "INVESTMENT",
+    );
+    logger.debug(
+      { label: mainAccount.label, hasInvestment: !!investmentSubAccount },
+      "🔍 Holdings fetch check.",
+    );
+    if (investmentSubAccount && summary.sub_accounts) {
+      const securitiesSubSummary = summary.sub_accounts.find(sa =>
+        sa.sub_type.startsWith("証券"),
+      );
+      if (securitiesSubSummary) {
+        try {
+          const showAccountId = extractShowAccountId(summary.show_path);
+          if (!showAccountId) continue;
+          const pageData = await fetchAccountHoldingsPage(page, showAccountId);
+          logger.debug(
+            {
+              label: mainAccount.label,
+              hasPageData: !!pageData,
+              hasAssetClasses:
+                !!pageData?.account?.grouped_asset_details_by_asset_classes,
+            },
+            "📋 Account page data.",
+          );
+          if (pageData?.account?.grouped_asset_details_by_asset_classes) {
+            const allAssetDetails: MfAssetDetail[] = [];
+            for (const assetClass of pageData.account
+              .grouped_asset_details_by_asset_classes) {
+              for (const subclass of assetClass.asset_subclasses ?? []) {
+                allAssetDetails.push(...(subclass.asset_details ?? []));
+              }
+            }
+            // asset_class_id=3 (MF) かつ asset_subclass_id=12 (MUTUAL_FUND/投資信託)
+            const mfDetails = allAssetDetails.filter(
+              d => d.asset_class_id === 3 && d.asset_subclass_id === 12,
+            );
+            logger.debug(
+              { label: mainAccount.label, mfCount: mfDetails.length },
+              "📊 Found asset_details from account page.",
+            );
+            if (mfDetails.length > 0) {
+              const todayStr = formatJSTDate(today);
+              await saveHoldingsFromAccountPage(
+                investmentSubAccount.id,
+                investmentSubAccount.currentName,
+                mfDetails,
+                todayStr,
+              );
+            }
+          }
+        } catch (error) {
+          logger.warn(
+            { err: error, label: mainAccount.label },
+            "⚠️ Failed to fetch account holdings page.",
+          );
+        }
+      }
     }
 
     const subSummaryByDisplayName = new Map<string, MfSubAccountSummary[]>();
@@ -775,6 +1038,26 @@ async function scrapeBalanceHistory(page: Page, options: MfScraperOptions) {
           );
         });
       }
+      // 種別（sub_type）でマッチする（証券口座など name マッチが失敗する場合）
+      if (!candidateSubSummaries || candidateSubSummaries.length === 0) {
+        // mainAccount の subAccounts を取得して assetType で判別
+        const mainSubAccounts = await prisma.subAccount.findMany({
+          where: { mainAccountId: mainAccount.id },
+          select: { id: true, currentName: true, assetType: true },
+        });
+        for (const sa of summary.sub_accounts ?? []) {
+          if (sa.sub_type === "証券") {
+            // 証券口座は INVESTMENT を優先
+            const matched = mainSubAccounts.find(
+              msa => msa.assetType === "INVESTMENT" || msa.assetType === "CASH",
+            );
+            if (matched && sa.sub_account_id_hash) {
+              candidateSubSummaries = [sa];
+              break;
+            }
+          }
+        }
+      }
       if (
         (!candidateSubSummaries || candidateSubSummaries.length === 0) &&
         subAccount.assetType === "LIABILITY"
@@ -799,8 +1082,17 @@ async function scrapeBalanceHistory(page: Page, options: MfScraperOptions) {
             .map(sa => [sa.sub_account_id_hash, sa]),
         ).values(),
       );
-      if (!isLiabilitySubAccount && uniqueCandidateSubSummaries.length === 0)
+      if (!isLiabilitySubAccount && uniqueCandidateSubSummaries.length === 0) {
+        logger.debug(
+          {
+            label: mainAccount.label,
+            subAccount: subAccount.currentName,
+            assetType: subAccount.assetType,
+          },
+          "⏭️ No candidate subSummary for non-liability subAccount.",
+        );
         continue;
+      }
       totalSubAccounts++;
 
       try {
@@ -828,6 +1120,14 @@ async function scrapeBalanceHistory(page: Page, options: MfScraperOptions) {
         } else {
           for (const subSummary of uniqueCandidateSubSummaries) {
             // range: "all" で全履歴を1回のAPI呼び出しで取得
+            logger.debug(
+              {
+                label: mainAccount.label,
+                subAccount: subAccount.currentName,
+                subHash: subSummary.sub_account_id_hash,
+              },
+              "🔗 Calling service_detail API.",
+            );
             const payload = await fetchServiceDetailBySubAccount(
               page,
               summary.account_id_hash,
@@ -917,9 +1217,6 @@ async function scrapeBalanceHistory(page: Page, options: MfScraperOptions) {
   );
 }
 
-/**
- * 取得データをDBに保存する (詳細ログ付き)
- */
 /**
  * 残高情報のみをDBに保存する関数
  */

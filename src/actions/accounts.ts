@@ -83,6 +83,9 @@ export async function getAccountDetail(id: string) {
           holdings: {
             orderBy: { valuation: "desc" },
           },
+          holdingHistories: {
+            orderBy: { date: "asc" },
+          },
           cryptos: {
             orderBy: { valuation: "desc" },
           },
@@ -174,6 +177,9 @@ export async function deleteMainAccount(id: string) {
         where: { subAccountId: { in: subAccountIds } },
       });
       await tx.holding.deleteMany({
+        where: { subAccountId: { in: subAccountIds } },
+      });
+      await tx.holdingHistory.deleteMany({
         where: { subAccountId: { in: subAccountIds } },
       });
       await tx.cryptoAsset.deleteMany({

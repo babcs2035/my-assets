@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { getAccountDetail } from "@/actions/accounts";
 import { AccountSubAccountManager } from "@/components/account-sub-account-manager";
 import { AccountBalanceChart } from "@/components/accounts/account-balance-chart";
+import { HoldingTrendChart } from "@/components/accounts/holding-trend-chart";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -132,6 +133,66 @@ export default async function AccountDetailPage({ params }: Props) {
   const allHoldings = visibleSubAccounts.flatMap(sa => sa.holdings);
   const allCryptos = visibleSubAccounts.flatMap(sa => sa.cryptos);
 
+  // 全 subAccount の holdingHistories を銘柄名でグループ化
+  type HistGroup = {
+    name: string;
+    valuation: number;
+    unitPrice: number;
+    gainLoss: number;
+    gainLossRate: number;
+    date: Date | string;
+  };
+  const historiesBySubAccount = new Map<string, Map<string, HistGroup[]>>();
+  for (const sa of visibleSubAccounts) {
+    if (!sa.holdingHistories?.length) continue;
+    const grouped = new Map<string, HistGroup[]>();
+    for (const hist of sa.holdingHistories) {
+      const existing = grouped.get(hist.name) ?? [];
+      existing.push({
+        name: hist.name,
+        valuation: hist.valuation,
+        unitPrice: hist.unitPrice,
+        gainLoss: hist.gainLoss,
+        gainLossRate: hist.gainLossRate,
+        date: hist.date,
+      });
+      grouped.set(hist.name, existing);
+    }
+    historiesBySubAccount.set(sa.id, grouped);
+  }
+
+  // チャート用の銘柄データ（履歴を結合）
+  const chartHoldings: Array<{
+    id: string;
+    name: string;
+    quantity: number;
+    avgCostBasis: number;
+    unitPrice: number;
+    valuation: number;
+    gainLoss: number;
+    gainLossRate: number;
+    dayBeforeRatio: number | null;
+    holdingHistories: HistGroup[];
+  }> = [];
+  for (const h of allHoldings) {
+    const subGrouped = historiesBySubAccount.get(h.subAccountId);
+    if (!subGrouped) continue;
+    const holdingHistories = subGrouped.get(h.name);
+    if (!holdingHistories || holdingHistories.length === 0) continue;
+    chartHoldings.push({
+      id: h.id,
+      name: h.name,
+      quantity: h.quantity,
+      avgCostBasis: h.avgCostBasis,
+      unitPrice: h.unitPrice,
+      valuation: h.valuation,
+      gainLoss: h.gainLoss,
+      gainLossRate: h.gainLossRate,
+      dayBeforeRatio: h.dayBeforeRatio,
+      holdingHistories,
+    });
+  }
+
   const subAccountChartData = visibleSubAccounts.map(sa => {
     const chartData = getBalanceHistoryData(sa.histories ?? [], sa.balance);
     return { id: sa.id, assetType: sa.assetType, data: chartData };
@@ -199,6 +260,11 @@ export default async function AccountDetailPage({ params }: Props) {
           mainAccountId={account.id}
         />
       </div>
+
+      {/* 投資信託銘柄推移 */}
+      {chartHoldings.length > 0 && (
+        <HoldingTrendChart holdings={chartHoldings} />
+      )}
 
       {/* 投資信託テーブル */}
       {allHoldings.length > 0 && (

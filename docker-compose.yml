@@ -14,6 +14,9 @@ services:
       BASIC_AUTH_USER:
       BASIC_AUTH_PASSWORD:
       OP_SERVICE_ACCOUNT_TOKEN: ${OP_SERVICE_ACCOUNT_TOKEN:-}
+      OP_MF_ITEM_ID: ${OP_MF_ITEM_ID:-MF_Main}
+    volumes:
+      - ./data/runtime/op-secrets.json:/app/op-secrets.json:ro
     depends_on:
       db:
         condition: service_healthy

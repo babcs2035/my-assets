@@ -1,4 +1,3 @@
-// 1. Data Source & Generator
 generator client {
   provider      = "prisma-client-js"
   binaryTargets = ["native", "debian-openssl-3.0.x", "linux-arm64-openssl-3.0.x"]
@@ -8,113 +7,111 @@ datasource db {
   provider = "postgresql"
 }
 
-// 2. Enums
-// 資産の 4 つの区分を定義
-enum AssetType {
-  CASH // 預金・現金
-  INVESTMENT // 投資信託・証券
-  CRYPTO // 暗号資産
-  POINT // ポイント
-  LIABILITY // 負債・クレジットカード等
-}
-
-// カテゴリーの収支区分
-enum CategoryType {
-  INCOME  // 収入
-  EXPENSE // 支出
-}
-
-// 3. Provider & Accounts
 model Provider {
   id              String        @id @default(cuid())
-  name            String        @unique // 1Password のアイテム名 (例: "MF_Main")
-  type            String // "mf", "custom"
-  scraperScript   String?
+  name            String        @unique
+  type            String
   isActive        Boolean       @default(true)
-  lastSyncAt      DateTime?     // 最終同期日時
-  lastSyncSuccess Boolean?      // 最終同期の成否
+  scraperScript   String?
+  lastSyncAt      DateTime?
+  lastSyncSuccess Boolean?
   mainAccounts    MainAccount[]
 }
 
 model MainAccount {
   id          String       @id @default(cuid())
-  label       String // ユーザー設定の金融機関名
+  label       String
   providerId  String
+  mfUrlId     String?      @unique
+  sortOrder   Int          @default(0)
   provider    Provider     @relation(fields: [providerId], references: [id])
-  mfUrlId     String?      @unique // URL から抽出した MF 内部の親口座 ID
-  sortOrder   Int          @default(0) // 表示順序
   subAccounts SubAccount[]
 
   @@index([providerId])
 }
 
 model SubAccount {
-  id            String           @id @default(cuid())
-  mainAccountId String
-  mainAccount   MainAccount      @relation(fields: [mainAccountId], references: [id], onDelete: Cascade)
+  id               String           @id @default(cuid())
+  mainAccountId    String
+  currentName      String
+  assetType        AssetType        @default(CASH)
+  balance          Int
+  sortOrder        Int              @default(0)
+  isHidden         Boolean          @default(false)
+  histories        BalanceHistory[]
+  cryptos          CryptoAsset[]
+  holdings         Holding[]
+  holdingHistories HoldingHistory[]
+  pointDetail      PointDetail?
+  mainAccount      MainAccount      @relation(fields: [mainAccountId], references: [id], onDelete: Cascade)
+  transactions     Transaction[]
 
-  // MF 上で子口座 ID がないため、親 ID と名称の組み合わせで同定を試みる
-  currentName String
-  assetType   AssetType @default(CASH)
-  balance     Int // 最新の日本円換算残高
-  sortOrder   Int       @default(0) // 表示順序
-  isHidden    Boolean   @default(false) // UI 上で非表示にするか
-
-  transactions Transaction[]
-  histories    BalanceHistory[]
-  holdings     Holding[] // 投資信託銘柄
-  cryptos      CryptoAsset[] // 暗号資産銘柄
-  pointDetail  PointDetail? // ポイント詳細
-
-  // 親口座内での子口座名の重複を避けるための制約
   @@unique([mainAccountId, currentName])
   @@index([mainAccountId])
   @@index([assetType])
   @@index([isHidden])
 }
 
-// 4. Data Snapshots (08:00 定期保存用)
 model BalanceHistory {
   id           String     @id @default(cuid())
   subAccountId String
-  subAccount   SubAccount @relation(fields: [subAccountId], references: [id], onDelete: Cascade)
-  date         DateTime // 08:00 同期完了直後の日付
+  date         DateTime
   balance      Int
+  subAccount   SubAccount @relation(fields: [subAccountId], references: [id], onDelete: Cascade)
 
-  @@unique([subAccountId, date]) // 1 日 1 回のスナップショットを保証
+  @@unique([subAccountId, date])
   @@index([subAccountId])
   @@index([date])
 }
 
-// 5. Assets (Details)
 model Holding {
   id             String     @id @default(cuid())
   subAccountId   String
-  subAccount     SubAccount @relation(fields: [subAccountId], references: [id], onDelete: Cascade)
-  name           String // 銘柄名
-  quantity       Float // 保有数
-  avgCostBasis   Int // 平均取得単価
-  unitPrice      Int // 基準価額
-  valuation      Int // 評価額
-  dayBeforeRatio Int // 前日比（額）
-  gainLoss       Int // 評価損益
-  gainLossRate   Float // 評価損益率
+  name           String
+  quantity       Float
+  avgCostBasis   Int
+  unitPrice      Int
+  valuation      Int
+  dayBeforeRatio Int
+  gainLoss       Int
+  gainLossRate   Float
   updatedAt      DateTime   @updatedAt
+  subAccount     SubAccount @relation(fields: [subAccountId], references: [id], onDelete: Cascade)
 
+  @@unique([subAccountId, name])
   @@index([subAccountId])
+}
+
+model HoldingHistory {
+  id           String     @id @default(cuid())
+  subAccountId String
+  name         String
+  quantity     Float
+  avgCostBasis Int
+  unitPrice    Int
+  valuation    Int
+  gainLoss     Int
+  gainLossRate Float
+  date         DateTime
+  createdAt    DateTime   @default(now())
+  subAccount   SubAccount @relation(fields: [subAccountId], references: [id], onDelete: Cascade)
+
+  @@unique([subAccountId, name, date])
+  @@index([subAccountId, name])
+  @@index([date])
 }
 
 model CryptoAsset {
   id             String     @id @default(cuid())
   subAccountId   String
-  subAccount     SubAccount @relation(fields: [subAccountId], references: [id], onDelete: Cascade)
-  symbol         String // 通貨記号 (XMR, BTC 等)
-  name           String // 通貨名
-  quantity       Float // 枚数
-  price          Float // 現在レート（円）
-  valuation      Int // 日本円換算額
-  dayBeforeRatio Int? // 前日比（額）
+  symbol         String
+  name           String
+  quantity       Float
+  price          Float
+  valuation      Int
+  dayBeforeRatio Int?
   updatedAt      DateTime   @updatedAt
+  subAccount     SubAccount @relation(fields: [subAccountId], references: [id], onDelete: Cascade)
 
   @@index([subAccountId])
 }
@@ -122,18 +119,17 @@ model CryptoAsset {
 model PointDetail {
   id             String     @id @default(cuid())
   subAccountId   String     @unique
+  points         Float
+  rate           Float      @default(1.0)
+  expirationDate DateTime?
   subAccount     SubAccount @relation(fields: [subAccountId], references: [id], onDelete: Cascade)
-  points         Float // ポイント数
-  rate           Float      @default(1.0) // 換算レート
-  expirationDate DateTime? // 有効期限
 }
 
-// 6. Transactions & Categorization
 model MainCategory {
   id            String            @id @default(cuid())
   name          String
-  type          CategoryType      @default(EXPENSE) // 収入 or 支出
-  sortOrder     Int               @default(0) // 表示順序
+  type          CategoryType      @default(EXPENSE)
+  sortOrder     Int               @default(0)
   subCategories SubCategoryItem[]
 
   @@unique([name, type])
@@ -142,31 +138,28 @@ model MainCategory {
 model SubCategoryItem {
   id             String         @id @default(cuid())
   name           String
-  sortOrder      Int            @default(0) // 表示順序
   mainCategoryId String
+  sortOrder      Int            @default(0)
+  rules          CategoryRule[]
   mainCategory   MainCategory   @relation(fields: [mainCategoryId], references: [id])
   transactions   Transaction[]
-  rules          CategoryRule[]
 
   @@unique([mainCategoryId, name])
   @@index([mainCategoryId])
 }
 
 model Transaction {
-  // ID は決定論的ハッシュ: sha256(subAccountId + date + amount + desc)
   id            String           @id
   subAccountId  String
-  subAccount    SubAccount       @relation(fields: [subAccountId], references: [id], onDelete: Cascade)
   date          DateTime         @db.Date
   amount        Int
   desc          String
   subCategoryId String?
+  isTransfer    Boolean          @default(false)
+  transferId    String?
+  linkedTransId String?
+  subAccount    SubAccount       @relation(fields: [subAccountId], references: [id], onDelete: Cascade)
   subCategory   SubCategoryItem? @relation(fields: [subCategoryId], references: [id])
-
-  // 振替・資金移動管理
-  isTransfer    Boolean @default(false)
-  transferId    String? // 振替ペア共有 ID
-  linkedTransId String? // 相手方明細 ID
 
   @@index([date])
   @@index([subCategoryId])
@@ -180,11 +173,24 @@ model Transaction {
 
 model CategoryRule {
   id            String          @id @default(cuid())
-  keyword       String // desc に含まれる文字列
+  keyword       String
   subCategoryId String
-  subCategory   SubCategoryItem @relation(fields: [subCategoryId], references: [id])
   priority      Int             @default(0)
+  subCategory   SubCategoryItem @relation(fields: [subCategoryId], references: [id])
 
   @@unique([keyword, subCategoryId])
   @@index([subCategoryId])
+}
+
+enum AssetType {
+  CASH
+  INVESTMENT
+  CRYPTO
+  POINT
+  LIABILITY
+}
+
+enum CategoryType {
+  INCOME
+  EXPENSE
 }
