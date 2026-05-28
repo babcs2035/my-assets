@@ -224,6 +224,21 @@ jobs:
             '
 
             docker compose pull --quiet || true
+
+            # Apply database migrations explicitly before starting the app
+            echo "Applying database migrations..."
+            set -a
+            . ./.env
+            set +a
+            docker compose run --rm app prisma migrate deploy
+            MIGRATE_EXIT=$?
+            if [ $MIGRATE_EXIT -ne 0 ]; then
+              echo "ERROR: Database migration failed with exit code $MIGRATE_EXIT" >&2
+              echo "Aborting deploy." >&2
+              exit $MIGRATE_EXIT
+            fi
+            echo "Database migrations applied successfully."
+
             docker compose up -d --force-recreate --remove-orphans
 
             if ! docker compose ps --status running | grep -q "my-assets-app"; then

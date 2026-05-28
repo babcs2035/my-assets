@@ -81,4 +81,4 @@ USER nextjs
 
 EXPOSE 3000
 
-CMD ["/bin/sh", "-c", "prisma migrate deploy 2>&1 || true && tsx prisma/seed.ts && node server.js"]
+CMD ["/bin/sh", "-c", "prisma migrate deploy 2>&1 && tsx prisma/seed.ts && node server.js"]
