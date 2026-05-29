@@ -1,6 +1,13 @@
 "use client";
 
-import { List, Loader2, SlidersHorizontal } from "lucide-react";
+import {
+  ArrowUpDown,
+  ChevronDown,
+  ChevronUp,
+  List,
+  Loader2,
+  SlidersHorizontal,
+} from "lucide-react";
 import { useEffect, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { getCategories } from "@/actions/categories";
@@ -69,6 +76,9 @@ type FilterOption = Awaited<
  * 明細管理ページのメインコンテンツコンポーネントである．
  * カレンダー表示と一覧表示の 2 つの形式で取引明細を確認・管理できる．
  */
+export type SortKey = "date" | "desc" | "amount" | "account";
+export type SortDirection = "asc" | "desc";
+
 export function TransactionsContent() {
   const [currentDate, setCurrentDate] = useState<Date>(nowJST());
   const [selectedDay, setSelectedDay] = useState<number | null>(null);
@@ -84,6 +94,8 @@ export function TransactionsContent() {
   const [selectedSubAccountId, setSelectedSubAccountId] = useState("all");
   const [isLoading, setIsLoading] = useState(false);
   const [, startTransition] = useTransition();
+  const [sortKey, setSortKey] = useState<SortKey>("date");
+  const [sortDir, setSortDir] = useState<SortDirection>("desc");
 
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth() + 1;
@@ -132,7 +144,25 @@ export function TransactionsContent() {
           }),
           getCategories(),
         ]);
-        setTransactions(txResult.transactions);
+        const txs = [...txResult.transactions];
+        // ソート適用
+        txs.sort((a, b) => {
+          let cmp = 0;
+          if (sortKey === "date") {
+            cmp = new Date(a.date).getTime() - new Date(b.date).getTime();
+          } else if (sortKey === "desc") {
+            cmp = (a.desc ?? "").localeCompare(b.desc ?? "");
+          } else if (sortKey === "amount") {
+            cmp = a.amount - b.amount;
+          } else if (sortKey === "account") {
+            cmp =
+              `${a.subAccount.mainAccount.label}-${a.subAccount.currentName}`.localeCompare(
+                `${b.subAccount.mainAccount.label}-${b.subAccount.currentName}`,
+              );
+          }
+          return sortDir === "asc" ? cmp : -cmp;
+        });
+        setTransactions(txs);
         setTotalPages(txResult.totalPages);
         setCalendarData(calResult);
         setCategories(catResult);
@@ -197,6 +227,29 @@ export function TransactionsContent() {
    */
   const handlePageChange = (newPage: number) => {
     setPage(newPage);
+  };
+
+  /**
+   * ソートキー・ソート方向を切り替えるハンドラである．
+   */
+  const handleSort = (key: SortKey) => {
+    if (sortKey === key) {
+      setSortDir(prev => (prev === "asc" ? "desc" : "asc"));
+    } else {
+      setSortKey(key);
+      setSortDir(key === "date" ? "desc" : "asc");
+    }
+  };
+
+  const SortIcon = ({ columnKey }: { columnKey: SortKey }) => {
+    if (sortKey !== columnKey) {
+      return <ArrowUpDown className="ml-1 h-3 w-3 text-zinc-500" />;
+    }
+    return sortDir === "asc" ? (
+      <ChevronUp className="ml-1 h-3 w-3 text-zinc-300" />
+    ) : (
+      <ChevronDown className="ml-1 h-3 w-3 text-zinc-300" />
+    );
   };
 
   return (
@@ -487,10 +540,42 @@ export function TransactionsContent() {
                   <Table className="min-w-[800px]">
                     <TableHeader>
                       <TableRow>
-                        <TableHead>日付</TableHead>
-                        <TableHead>口座</TableHead>
-                        <TableHead>摘要</TableHead>
-                        <TableHead className="text-right">金額</TableHead>
+                        <TableHead
+                          className="w-[100px] cursor-pointer select-none hover:text-zinc-300"
+                          onClick={() => handleSort("date")}
+                        >
+                          <div className="flex items-center justify-center gap-1">
+                            日付
+                            <SortIcon columnKey="date" />
+                          </div>
+                        </TableHead>
+                        <TableHead
+                          className="cursor-pointer select-none hover:text-zinc-300"
+                          onClick={() => handleSort("account")}
+                        >
+                          <div className="flex items-center gap-1">
+                            口座
+                            <SortIcon columnKey="account" />
+                          </div>
+                        </TableHead>
+                        <TableHead
+                          className="cursor-pointer select-none hover:text-zinc-300"
+                          onClick={() => handleSort("desc")}
+                        >
+                          <div className="flex items-center gap-1">
+                            摘要
+                            <SortIcon columnKey="desc" />
+                          </div>
+                        </TableHead>
+                        <TableHead
+                          className="w-[120px] text-right cursor-pointer select-none hover:text-zinc-300"
+                          onClick={() => handleSort("amount")}
+                        >
+                          <div className="flex items-center justify-end gap-1">
+                            金額
+                            <SortIcon columnKey="amount" />
+                          </div>
+                        </TableHead>
                         <TableHead>カテゴリー</TableHead>
                       </TableRow>
                     </TableHeader>

@@ -1,10 +1,12 @@
 "use client";
 
 import {
+  ArrowDownUp,
   ArrowLeftRight,
   Building2,
   LayoutDashboard,
   Settings,
+  TrendingUp,
 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
@@ -31,14 +33,24 @@ const navItems = [
     icon: LayoutDashboard,
   },
   {
-    href: "/accounts",
-    label: "口座管理",
-    icon: Building2,
+    href: "/assets",
+    label: "資産",
+    icon: TrendingUp,
+  },
+  {
+    href: "/income-expense",
+    label: "収支",
+    icon: ArrowLeftRight,
   },
   {
     href: "/transactions",
     label: "入出金明細",
-    icon: ArrowLeftRight,
+    icon: ArrowDownUp,
+  },
+  {
+    href: "/accounts",
+    label: "口座管理",
+    icon: Building2,
   },
   {
     href: "/settings",

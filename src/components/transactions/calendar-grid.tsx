@@ -11,6 +11,25 @@ import {
 } from "@/components/ui/select";
 import { cn, formatJSTDate } from "@/lib/utils";
 
+/**
+ * 支出額に基づいてヒートマップの色を計算する。
+ * 0〜maxExpenseの範囲で濃さを決定。
+ */
+function getHeatmapColor(expense: number, maxExpense: number): string {
+  if (maxExpense === 0) return "bg-zinc-950";
+  const ratio = Math.min(expense / maxExpense, 1);
+  if (ratio < 0.1) return "bg-red-950/20";
+  if (ratio < 0.2) return "bg-red-950/30";
+  if (ratio < 0.3) return "bg-red-900/35";
+  if (ratio < 0.4) return "bg-red-900/45";
+  if (ratio < 0.5) return "bg-red-800/50";
+  if (ratio < 0.6) return "bg-red-700/55";
+  if (ratio < 0.7) return "bg-red-700/65";
+  if (ratio < 0.8) return "bg-red-600/70";
+  if (ratio < 0.9) return "bg-red-600/80";
+  return "bg-red-500/85";
+}
+
 type CalendarData = {
   income: number;
   expense: number;
@@ -27,6 +46,17 @@ interface CalendarGridProps {
 }
 
 /**
+ * 当月の最大支出額を計算する。
+ */
+function getMaxExpense(calendarData: Record<string, CalendarData>): number {
+  let max = 0;
+  for (const data of Object.values(calendarData)) {
+    if (data.expense > max) max = data.expense;
+  }
+  return max;
+}
+
+/**
  * 月間カレンダーグリッド表示コンポーネント
  * DayPicker を使わず、シンプルな手作り実装で確実に 7 列グリッドを表示する
  * 年月セレクトをカレンダーヘッダーに統合している
@@ -40,6 +70,7 @@ export function CalendarGrid({
   onDayClick,
   availableYears = [],
 }: CalendarGridProps) {
+  const maxExpense = getMaxExpense(calendarData);
   // 月の1日
   const firstDay = new Date(year, month - 1, 1);
   // 月の最後の日
@@ -229,14 +260,24 @@ export function CalendarGrid({
                   idx >= calendarCells.length - 7 && "border-b-0",
                   // 当月の日付
                   cell.isCurrentMonth && [
-                    "cursor-pointer hover:bg-zinc-800/50",
-                    isSelected && "!bg-blue-600/40",
+                    "cursor-pointer",
+                    isSelected && "!bg-blue-600/50",
                     isToday && !isSelected && "!bg-accent/30",
                   ],
                   // 当月以外の日付
                   !cell.isCurrentMonth &&
                     "cursor-default bg-zinc-950/50 text-zinc-600",
                 )}
+                style={
+                  cell.isCurrentMonth && data && data.expense > 0
+                    ? {
+                        backgroundColor: getHeatmapColor(
+                          data.expense,
+                          maxExpense,
+                        ),
+                      }
+                    : undefined
+                }
               >
                 {/* 日付番号 */}
                 <span
@@ -248,23 +289,28 @@ export function CalendarGrid({
                   {cell.day}
                 </span>
 
-                {/* 入出金データ */}
-                {data && (
-                  <div className="flex w-full flex-col items-end gap-0.5 text-[10px] sm:text-xs font-mono min-w-0">
+                {/* 支出ヒートマップ（金額表示） */}
+                {cell.isCurrentMonth && data && data.expense > 0 && (
+                  <div className="flex w-full flex-col items-end gap-0.5 min-w-0 mt-0.5">
+                    <span
+                      className={cn(
+                        "font-mono font-bold truncate w-full text-right",
+                        data.expense >= 10000
+                          ? "text-xs text-red-200"
+                          : "text-sm text-red-100",
+                      )}
+                      title={`支出: ¥${data.expense.toLocaleString()}`}
+                    >
+                      {data.expense >= 100000
+                        ? `${(data.expense / 10000).toFixed(0)}万`
+                        : data.expense.toLocaleString()}
+                    </span>
                     {data.income > 0 && (
                       <span
-                        className="text-emerald-400 truncate w-full text-right font-semibold"
-                        title={`+¥${data.income.toLocaleString()}`}
+                        className="text-emerald-400 text-xs font-mono font-semibold truncate w-full text-right"
+                        title={`収入: ¥${data.income.toLocaleString()}`}
                       >
                         +{data.income.toLocaleString()}
-                      </span>
-                    )}
-                    {data.expense > 0 && (
-                      <span
-                        className="text-red-400 truncate w-full text-right font-semibold"
-                        title={`-¥${data.expense.toLocaleString()}`}
-                      >
-                        -{data.expense.toLocaleString()}
                       </span>
                     )}
                   </div>

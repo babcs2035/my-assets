@@ -4,18 +4,25 @@ import {
   ArrowUpRight,
   Minus,
 } from "lucide-react";
+import { getCurrentMonthIncomeExpense } from "@/actions/assets";
 import {
   getAssetHistory,
   getDashboardKPI,
   getExpiringPoints,
 } from "@/actions/dashboard";
 import { getLastSyncInfo } from "@/actions/system";
-import {
-  DashboardAreaChart,
-  DashboardDonutChart,
-} from "@/components/dashboard/dashboard-charts";
+import { DashboardAreaWrapper } from "@/components/dashboard/dashboard-area-wrapper";
+import { DashboardDonutChart } from "@/components/dashboard/dashboard-donut-chart";
 import { PageHeader } from "@/components/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import logger from "@/lib/logger";
 import { formatCurrency, formatJSTDateTime } from "@/lib/utils";
 
@@ -35,21 +42,30 @@ export const dynamic = "force-dynamic";
 export default async function DashboardPage() {
   logger.info("🏠 Rendering DashboardPage...");
 
-  const [kpi, history, expiringPoints, syncInfo] = await Promise.all([
-    getDashboardKPI(),
-    getAssetHistory(),
-    getExpiringPoints(),
-    getLastSyncInfo(),
-  ]);
+  const [kpi, history, expiringPoints, syncInfo, monthlyIncomeExpense] =
+    await Promise.all([
+      getDashboardKPI(),
+      getAssetHistory(),
+      getExpiringPoints(),
+      getLastSyncInfo(),
+      getCurrentMonthIncomeExpense(),
+    ]);
 
   const chartData = history;
 
-  const donutData = [
-    { name: "預金・現金", value: kpi.byAssetType.CASH ?? 0 },
-    { name: "投資信託・証券", value: kpi.byAssetType.INVESTMENT ?? 0 },
-    { name: "暗号資産", value: kpi.byAssetType.CRYPTO ?? 0 },
-    { name: "ポイント", value: kpi.byAssetType.POINT ?? 0 },
-  ];
+  const assetOnlySeries = [
+    { key: "CASH", label: "預金・現金", color: "#3b82f6" },
+    { key: "INVESTMENT", label: "投資信託・証券", color: "#8b5cf6" },
+    { key: "CRYPTO", label: "暗号資産", color: "#f59e0b" },
+    { key: "POINT", label: "ポイント", color: "#10b981" },
+  ] as const;
+
+  const totalAssets =
+    kpi.byAssetType.CASH ??
+    0 +
+      (kpi.byAssetType.INVESTMENT ?? 0) +
+      (kpi.byAssetType.CRYPTO ?? 0) +
+      (kpi.byAssetType.POINT ?? 0);
 
   const lastSyncDate = syncInfo?.date
     ? formatJSTDateTime(new Date(syncInfo.date))
@@ -65,15 +81,13 @@ export default async function DashboardPage() {
       />
 
       {/* ── KPI 指標エリア ──────────────────────── */}
-      {/* ガイドブック: 最も重要な指標（純資産）を左上に大きく。全体→部分の階層。 */}
-      <div className="grid gap-4 md:grid-cols-3">
-        {/* 純資産 (最重要指標) */}
-        <Card
-          className="md:col-span-1 kpi-card"
-          style={{ animationDelay: "0ms" }}
-        >
-          <CardContent className="pt-5 pb-4">
-            <p className="text-sm font-medium text-zinc-400 mb-1">純資産</p>
+      {/* 純資産のみ表示（総資産・総負債は削除） */}
+      <div className="grid gap-4 md:grid-cols-1">
+        <Card className="kpi-card" style={{ animationDelay: "0ms" }}>
+          <CardContent className="pt-2 pb-1">
+            <p className="text-[11px] font-medium text-zinc-400 mb-0.5">
+              純資産
+            </p>
             <div
               className="text-3xl sm:text-4xl font-bold text-zinc-50 font-mono"
               title={formatCurrency(kpi.netWorth)}
@@ -81,7 +95,7 @@ export default async function DashboardPage() {
               {formatCurrency(kpi.netWorth)}
             </div>
             {/* 前日比 – ガイドブック: 比較対象を提供する */}
-            <div className="flex items-center text-sm text-muted-foreground mt-2.5 gap-1.5">
+            <div className="flex items-center text-xs text-muted-foreground mt-2 gap-1.5">
               {kpi.dailyChange > 0 ? (
                 <ArrowUpRight className="h-4 w-4 text-emerald-500 shrink-0" />
               ) : kpi.dailyChange < 0 ? (
@@ -105,36 +119,129 @@ export default async function DashboardPage() {
             </div>
           </CardContent>
         </Card>
+      </div>
 
-        {/* 総資産 */}
-        <Card className="kpi-card" style={{ animationDelay: "60ms" }}>
-          <CardContent className="pt-5 pb-4">
-            <p className="text-sm font-medium text-zinc-400 mb-1">総資産</p>
-            <div
-              className="text-2xl sm:text-3xl font-bold text-zinc-100 font-mono"
-              title={formatCurrency(kpi.totalAssets)}
-            >
-              {formatCurrency(kpi.totalAssets)}
+      {/* ── 今月の収支 ──────────────────────────── */}
+      <div className="grid gap-4 md:grid-cols-3">
+        <Card>
+          <CardContent className="pt-2 pb-1">
+            <p className="text-[11px] font-medium text-zinc-400 mb-0.5">
+              今月の収入
+            </p>
+            <div className="text-2xl sm:text-3xl font-bold text-emerald-400 font-mono">
+              {formatCurrency(monthlyIncomeExpense.current.income)}
+            </div>
+            <div className="flex items-center text-sm text-muted-foreground mt-2.5 gap-1.5">
+              {monthlyIncomeExpense.current.income -
+                monthlyIncomeExpense.previous.income >=
+              0 ? (
+                <ArrowUpRight className="h-4 w-4 text-emerald-500 shrink-0" />
+              ) : (
+                <ArrowDownRight className="h-4 w-4 text-red-500 shrink-0" />
+              )}
+              <span
+                className={
+                  monthlyIncomeExpense.current.income -
+                    monthlyIncomeExpense.previous.income >=
+                  0
+                    ? "text-emerald-500 font-medium"
+                    : "text-red-500 font-medium"
+                }
+              >
+                {monthlyIncomeExpense.current.income -
+                  monthlyIncomeExpense.previous.income >=
+                  0 && "+"}
+                {(
+                  monthlyIncomeExpense.current.income -
+                  monthlyIncomeExpense.previous.income
+                ).toLocaleString()}{" "}
+                円
+              </span>
+              <span className="text-zinc-500">前月比</span>
             </div>
           </CardContent>
         </Card>
-
-        {/* 総負債 */}
-        <Card className="kpi-card" style={{ animationDelay: "120ms" }}>
-          <CardContent className="pt-5 pb-4">
-            <p className="text-sm font-medium text-zinc-400 mb-1">総負債</p>
+        <Card>
+          <CardContent className="pt-2 pb-1">
+            <p className="text-[11px] font-medium text-zinc-400 mb-0.5">
+              今月の支出
+            </p>
+            <div className="text-2xl sm:text-3xl font-bold text-red-400 font-mono">
+              {formatCurrency(monthlyIncomeExpense.current.expense)}
+            </div>
+            <div className="flex items-center text-sm text-muted-foreground mt-2.5 gap-1.5">
+              {monthlyIncomeExpense.current.expense -
+                monthlyIncomeExpense.previous.expense >=
+              0 ? (
+                <ArrowUpRight className="h-4 w-4 text-red-500 shrink-0" />
+              ) : (
+                <ArrowDownRight className="h-4 w-4 text-emerald-500 shrink-0" />
+              )}
+              <span
+                className={
+                  monthlyIncomeExpense.current.expense -
+                    monthlyIncomeExpense.previous.expense >=
+                  0
+                    ? "text-red-500 font-medium"
+                    : "text-emerald-500 font-medium"
+                }
+              >
+                {monthlyIncomeExpense.current.expense -
+                  monthlyIncomeExpense.previous.expense >=
+                  0 && "+"}
+                {(
+                  monthlyIncomeExpense.current.expense -
+                  monthlyIncomeExpense.previous.expense
+                ).toLocaleString()}{" "}
+                円
+              </span>
+              <span className="text-zinc-500">前月比</span>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-2 pb-1">
+            <p className="text-[11px] font-medium text-zinc-400 mb-0.5">
+              今月の収支
+            </p>
             <div
-              className="text-2xl sm:text-3xl font-bold text-zinc-100 font-mono"
-              title={formatCurrency(kpi.totalLiabilities)}
+              className={`text-2xl sm:text-3xl font-bold font-mono ${monthlyIncomeExpense.current.balance >= 0 ? "text-emerald-400" : "text-red-400"}`}
             >
-              {formatCurrency(kpi.totalLiabilities)}
+              {formatCurrency(monthlyIncomeExpense.current.balance)}
+            </div>
+            <div className="flex items-center text-sm text-muted-foreground mt-2.5 gap-1.5">
+              {monthlyIncomeExpense.current.balance -
+                monthlyIncomeExpense.previous.balance >=
+              0 ? (
+                <ArrowUpRight className="h-4 w-4 text-emerald-500 shrink-0" />
+              ) : (
+                <ArrowDownRight className="h-4 w-4 text-red-500 shrink-0" />
+              )}
+              <span
+                className={
+                  monthlyIncomeExpense.current.balance -
+                    monthlyIncomeExpense.previous.balance >=
+                  0
+                    ? "text-emerald-500 font-medium"
+                    : "text-red-500 font-medium"
+                }
+              >
+                {monthlyIncomeExpense.current.balance -
+                  monthlyIncomeExpense.previous.balance >=
+                  0 && "+"}
+                {(
+                  monthlyIncomeExpense.current.balance -
+                  monthlyIncomeExpense.previous.balance
+                ).toLocaleString()}{" "}
+                円
+              </span>
+              <span className="text-zinc-500">前月比</span>
             </div>
           </CardContent>
         </Card>
       </div>
 
       {/* ── グラフエリア ────────────────────────── */}
-      {/* ガイドブック: 全体の推移 → 構成比 の順で配置 */}
       <div className="grid gap-4 lg:grid-cols-7">
         {/* 資産推移（積み上げ面グラフ） */}
         <Card className="col-span-1 lg:col-span-5 overflow-hidden">
@@ -144,7 +251,7 @@ export default async function DashboardPage() {
             </CardTitle>
           </CardHeader>
           <CardContent className="pl-0 sm:pl-2">
-            <DashboardAreaChart data={chartData} />
+            <DashboardAreaWrapper data={chartData} />
           </CardContent>
         </Card>
 
@@ -152,14 +259,161 @@ export default async function DashboardPage() {
         <Card className="col-span-1 lg:col-span-2 overflow-hidden">
           <CardHeader className="pb-2">
             <CardTitle className="text-base font-medium text-zinc-200">
-              資産構成比
+              資産構成
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <DashboardDonutChart data={donutData} />
+            <DashboardDonutChart
+              assetOnlySeries={assetOnlySeries}
+              totalAssets={totalAssets}
+              kpiByAssetType={kpi.byAssetType}
+            />
           </CardContent>
         </Card>
       </div>
+
+      {/* ── 資産構成詳細 ────────────────────────── */}
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base font-medium text-zinc-200">
+            資産構成詳細
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>カテゴリ</TableHead>
+                <TableHead className="text-right">金額</TableHead>
+                <TableHead className="text-right">比率</TableHead>
+                <TableHead className="text-right">前日</TableHead>
+                <TableHead className="text-right">1週間</TableHead>
+                <TableHead className="text-right">1カ月</TableHead>
+                <TableHead className="text-right">1年</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {(() => {
+                const history = chartData;
+                const now = new Date();
+                const oneWeekAgo = new Date(now);
+                oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+                const oneMonthAgo = new Date(now);
+                oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
+                const oneYearAgo = new Date(now);
+                oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
+
+                const findValue = (date: Date, key: string) => {
+                  const dateStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+                  const entry = history.find(h => h.date === dateStr);
+                  return entry ? (entry[key as keyof typeof entry] ?? 0) : 0;
+                };
+
+                const diff = (nowVal: number, agoVal: number) => {
+                  const d = nowVal - agoVal;
+                  const p =
+                    agoVal !== 0 ? ((d / agoVal) * 100).toFixed(2) : "0.00";
+                  return { num: d, pct: p };
+                };
+
+                return assetOnlySeries.map(s => {
+                  const current = kpi.byAssetType[s.key] ?? 0;
+                  const pct =
+                    totalAssets > 0
+                      ? ((current / totalAssets) * 100).toFixed(1)
+                      : "0";
+                  const yesterday = kpi.yesterdayByType?.[s.key] ?? 0;
+                  const yd = diff(current, yesterday);
+                  const weekAgo = Number(findValue(oneWeekAgo, s.key)) ?? 0;
+                  const wk = diff(current, weekAgo);
+                  const monthAgo = Number(findValue(oneMonthAgo, s.key)) ?? 0;
+                  const mo = diff(current, monthAgo);
+                  const yearAgo = Number(findValue(oneYearAgo, s.key)) ?? 0;
+                  const yr = diff(current, yearAgo);
+
+                  return (
+                    <TableRow key={s.key}>
+                      <TableCell>
+                        <div className="flex items-center gap-1.5">
+                          <span
+                            className="h-2.5 w-2.5 rounded-full shrink-0"
+                            style={{ backgroundColor: s.color }}
+                          />
+                          <span className="text-sm text-zinc-200 truncate">
+                            {s.label}
+                          </span>
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-right font-mono text-sm font-medium text-zinc-100">
+                        {formatCurrency(current)}
+                      </TableCell>
+                      <TableCell className="text-right font-mono text-xs text-zinc-300">
+                        {pct}%
+                      </TableCell>
+                      <TableCell className="text-right font-mono text-xs">
+                        <span
+                          className={
+                            yd.num >= 0 ? "text-emerald-400" : "text-red-400"
+                          }
+                        >
+                          {yd.num >= 0 && "+"}
+                          {yd.num.toLocaleString()}
+                        </span>
+                        <span className="text-zinc-500 ml-0.5">
+                          ({yd.num >= 0 && "+"}
+                          {yd.pct}%)
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-right font-mono text-xs">
+                        <span
+                          className={
+                            wk.num >= 0 ? "text-emerald-400" : "text-red-400"
+                          }
+                        >
+                          {wk.num >= 0 && "+"}
+                          {wk.num.toLocaleString()}
+                        </span>
+                        <span className="text-zinc-500 ml-0.5">
+                          ({wk.num >= 0 && "+"}
+                          {wk.pct}%)
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-right font-mono text-xs">
+                        <span
+                          className={
+                            mo.num >= 0 ? "text-emerald-400" : "text-red-400"
+                          }
+                        >
+                          {mo.num >= 0 && "+"}
+                          {mo.num.toLocaleString()}
+                        </span>
+                        <span className="text-zinc-500 ml-0.5">
+                          ({mo.num >= 0 && "+"}
+                          {mo.pct}%)
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-right font-mono text-xs">
+                        <span
+                          className={
+                            yr.num >= 0 ? "text-emerald-400" : "text-red-400"
+                          }
+                        >
+                          {yr.num >= 0 && "+"}
+                          {yr.num.toLocaleString()}
+                        </span>
+                        <span className="text-zinc-500 ml-0.5">
+                          ({yr.num >= 0 && "+"}
+                          {yr.pct}%)
+                        </span>
+                      </TableCell>
+                    </TableRow>
+                  );
+                });
+              })()}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
 
       {/* ── ポイント期限通知 ───────────────────── */}
       {expiringPoints.length > 0 && (

@@ -776,17 +776,11 @@ async function scrapeBalanceHistory(page: Page, options: MfScraperOptions) {
   const toJstMidnight = (dateStr: string) =>
     new Date(`${dateStr}T00:00:00+09:00`);
   const formatYmd = (d: Date) => formatJSTDate(d);
-  const diffDaysInclusive = (from: Date, to: Date) =>
-    Math.floor((to.getTime() - from.getTime()) / (1000 * 60 * 60 * 24)) + 1;
   const buildHistoryFromTransactions = async (
     subAccountId: string,
     endDateBalance: number,
     startDate: Date,
     endDate: Date,
-    options?: {
-      trimBeforeFirstTransaction?: boolean;
-      includeEndPointWhenNoTransactions?: boolean;
-    },
   ) => {
     const txs = await prisma.transaction.findMany({
       where: {
@@ -809,36 +803,32 @@ async function scrapeBalanceHistory(page: Page, options: MfScraperOptions) {
     }
 
     const txDateKeys = Array.from(dailyNetByDate.keys()).sort();
-    const effectiveStartDate =
-      options?.trimBeforeFirstTransaction && txDateKeys.length > 0
-        ? toJstMidnight(txDateKeys[0])
-        : startDate;
 
-    if (
-      txDateKeys.length === 0 &&
-      options?.includeEndPointWhenNoTransactions === true
-    ) {
+    if (txDateKeys.length === 0) {
       return new Map<string, number>([
         [formatYmd(endDate), Math.trunc(endDateBalance)],
       ]);
     }
 
     const inferredHistory = new Map<string, number>();
-    // trimBeforeFirstTransaction の場合、最初の取引日の直前の残高は 0 で初期化
-    // （負債アカウントが全額返済済みの場合、endDateBalance=0 を起点に逆算すると
-    //  最初の取引日の前で runningBalance=-全取引合計 になり不正な値になるため）
-    let runningBalance =
-      options?.trimBeforeFirstTransaction && txDateKeys.length > 0
-        ? 0
-        : Math.trunc(endDateBalance);
+    // 今日(endDate)のend balanceはendDateBalanceそのまま
+    inferredHistory.set(formatYmd(endDate), Math.trunc(endDateBalance));
+
+    // endDate-1からstartDateまで逆算
+    // 負債: 0から始まり取引があるときのみ負になる
+    // runningBalance > 0 なら0（取引前の負債は0）
+    let runningBalance = Math.trunc(endDateBalance);
     for (
       let cursor = new Date(endDate);
-      cursor.getTime() >= effectiveStartDate.getTime();
+      cursor.getTime() > startDate.getTime();
       cursor = new Date(cursor.getTime() - 24 * 60 * 60 * 1000)
     ) {
-      const dateKey = formatYmd(cursor);
-      inferredHistory.set(dateKey, runningBalance);
-      runningBalance -= dailyNetByDate.get(dateKey) ?? 0;
+      const _prevDateKey = formatYmd(cursor); // D+1 (unused - kept for reference)
+      const prevDate = new Date(cursor);
+      const currDate = new Date(prevDate.getTime() - 24 * 60 * 60 * 1000); // D
+      const currDateKey = formatYmd(currDate);
+      runningBalance -= dailyNetByDate.get(currDateKey) ?? 0;
+      inferredHistory.set(currDateKey, runningBalance);
     }
     return inferredHistory;
   };
@@ -1099,15 +1089,12 @@ async function scrapeBalanceHistory(page: Page, options: MfScraperOptions) {
         let mergedHistoryByDate = new Map<string, number>();
 
         if (isLiabilitySubAccount) {
+          // MFのbalanceは既に負の値
           mergedHistoryByDate = await buildHistoryFromTransactions(
             subAccount.id,
             subAccount.balance,
             minDate,
             today,
-            {
-              trimBeforeFirstTransaction: true,
-              includeEndPointWhenNoTransactions: true,
-            },
           );
           logger.info(
             {
@@ -1287,10 +1274,10 @@ async function saveBalancesToDatabase(
       create: {
         mainAccountId: mainAccount.id,
         currentName: account.subAccountName,
-        balance: account.balance,
+        balance: Math.trunc(account.balance),
       },
       update: {
-        balance: account.balance,
+        balance: Math.trunc(account.balance),
       },
     });
   }
@@ -1304,6 +1291,7 @@ async function saveBalancesToDatabase(
         providerId,
       },
     },
+    select: { id: true, assetType: true, balance: true },
   });
 
   for (const sa of allSubAccounts) {

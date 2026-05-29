@@ -1,0 +1,21 @@
+import { getAssetBreakdown } from "@/actions/assets";
+import { AssetsContent } from "@/components/assets/assets-content";
+import { PageHeader } from "@/components/page-header";
+
+export const dynamic = "force-dynamic";
+
+/**
+ * 資産ページコンポーネントである．
+ * 資産・負債の内訳，評価損益，バランスシートを表示する．
+ */
+export default async function AssetsPage() {
+  const breakdown = await getAssetBreakdown();
+
+  return (
+    <div className="space-y-6 animate-fade-in">
+      <PageHeader title="資産" description="資産・負債の内訳とバランスシート" />
+
+      <AssetsContent breakdown={breakdown} />
+    </div>
+  );
+}
