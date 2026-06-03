@@ -21,7 +21,12 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useState, useTransition } from "react";
 import { toast } from "sonner";
-import { deleteMainAccount, getAccounts } from "@/actions/accounts";
+import {
+  createMainAccount,
+  deleteMainAccount,
+  getAccounts,
+  updateMainAccount,
+} from "@/actions/accounts";
 import {
   createCategoryRule,
   createMainCategory,
@@ -186,6 +191,11 @@ export function SettingsContent() {
   // Rule Form State
   const [ruleKeywords, setRuleKeywords] = useState("");
   const [ruleSubCategoryId, setRuleSubCategoryId] = useState<string>("");
+
+  // Account Creation Form State
+  const [newAccountLabel, setNewAccountLabel] = useState("");
+  const [newAccountProviderId, setNewAccountProviderId] = useState("");
+  const [isCreatingAccount, setIsCreatingAccount] = useState(false);
 
   /**
    * 必要な初期データをサーバーアクションからまとめて取得する関数である．
@@ -1144,6 +1154,81 @@ export function SettingsContent() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
+            {/* Account Creation Form */}
+            <div className="rounded-md border border-zinc-800 bg-zinc-900/20 p-4 space-y-3">
+              <h3 className="text-sm font-medium text-zinc-400">口座の追加</h3>
+              <div className="flex flex-wrap gap-3">
+                <div className="flex-1 min-w-[160px]">
+                  <Label
+                    htmlFor="new-account-provider"
+                    className="text-xs text-zinc-500"
+                  >
+                    プロバイダー
+                  </Label>
+                  <Select
+                    value={newAccountProviderId}
+                    onValueChange={setNewAccountProviderId}
+                  >
+                    <SelectTrigger id="new-account-provider" className="h-8">
+                      <SelectValue placeholder="プロバイダーを選択" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {providers.map(p => (
+                        <SelectItem key={p.id} value={p.id}>
+                          {p.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex-1 min-w-[160px]">
+                  <Label
+                    htmlFor="new-account-label"
+                    className="text-xs text-zinc-500"
+                  >
+                    金融機関名
+                  </Label>
+                  <Input
+                    id="new-account-label"
+                    placeholder="例: 住信SBIネット銀行"
+                    value={newAccountLabel}
+                    onChange={e => setNewAccountLabel(e.target.value)}
+                    className="h-8"
+                  />
+                </div>
+                <div className="flex items-end">
+                  <Button
+                    size="sm"
+                    onClick={async () => {
+                      if (!newAccountProviderId || !newAccountLabel) return;
+                      setIsCreatingAccount(true);
+                      try {
+                        await createMainAccount({
+                          label: newAccountLabel,
+                          providerId: newAccountProviderId,
+                        });
+                        toast.success("口座を作成しました");
+                        setNewAccountLabel("");
+                        setNewAccountProviderId("");
+                        fetchData();
+                      } catch {
+                        toast.error("口座の作成に失敗しました");
+                      } finally {
+                        setIsCreatingAccount(false);
+                      }
+                    }}
+                    disabled={
+                      !newAccountProviderId ||
+                      !newAccountLabel ||
+                      isCreatingAccount
+                    }
+                  >
+                    {isCreatingAccount ? "作成中..." : "追加"}
+                  </Button>
+                </div>
+              </div>
+            </div>
+
             {/* Account List by Provider */}
             <div className="space-y-4">
               <h3 className="text-sm font-medium text-zinc-400">口座一覧</h3>
@@ -1184,41 +1269,75 @@ export function SettingsContent() {
                                   <div className="font-medium text-sm text-zinc-200 truncate flex-1">
                                     {ac.label}
                                   </div>
-                                  <AlertDialog>
-                                    <AlertDialogTrigger asChild>
-                                      <Button
-                                        variant="ghost"
-                                        size="icon"
-                                        className="h-6 w-6 text-zinc-600 hover:text-red-400 -mt-1 -mr-2"
-                                      >
-                                        <Trash2 className="h-4 w-4" />
-                                      </Button>
-                                    </AlertDialogTrigger>
-                                    <AlertDialogContent>
-                                      <AlertDialogHeader>
-                                        <AlertDialogTitle>
-                                          削除確認
-                                        </AlertDialogTitle>
-                                        <AlertDialogDescription>
-                                          口座「{ac.label}
-                                          」を削除しますか？関連する明細履歴もすべて削除されます。
-                                        </AlertDialogDescription>
-                                      </AlertDialogHeader>
-                                      <AlertDialogFooter>
-                                        <AlertDialogCancel>
-                                          キャンセル
-                                        </AlertDialogCancel>
-                                        <AlertDialogAction
-                                          onClick={() =>
-                                            handleDeleteAccount(ac.id, ac.label)
-                                          }
-                                          className="bg-red-600"
+                                  <div className="flex items-center gap-1 shrink-0">
+                                    <Select
+                                      value={ac.providerId}
+                                      onValueChange={async newId => {
+                                        try {
+                                          await updateMainAccount(ac.id, {
+                                            providerId: newId,
+                                          });
+                                          toast.success(
+                                            "プロバイダーを更新しました",
+                                          );
+                                          fetchData();
+                                        } catch {
+                                          toast.error(
+                                            "プロバイダーの更新に失敗しました",
+                                          );
+                                        }
+                                      }}
+                                    >
+                                      <SelectTrigger className="h-6 w-24">
+                                        <SelectValue />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        {providers.map(p => (
+                                          <SelectItem key={p.id} value={p.id}>
+                                            {p.name}
+                                          </SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+                                    <AlertDialog>
+                                      <AlertDialogTrigger asChild>
+                                        <Button
+                                          variant="ghost"
+                                          size="icon"
+                                          className="h-6 w-6 text-zinc-600 hover:text-red-400 -mt-1 -mr-2"
                                         >
-                                          削除
-                                        </AlertDialogAction>
-                                      </AlertDialogFooter>
-                                    </AlertDialogContent>
-                                  </AlertDialog>
+                                          <Trash2 className="h-4 w-4" />
+                                        </Button>
+                                      </AlertDialogTrigger>
+                                      <AlertDialogContent>
+                                        <AlertDialogHeader>
+                                          <AlertDialogTitle>
+                                            削除確認
+                                          </AlertDialogTitle>
+                                          <AlertDialogDescription>
+                                            口座「{ac.label}
+                                            」を削除しますか？関連する明細履歴もすべて削除されます。
+                                          </AlertDialogDescription>
+                                        </AlertDialogHeader>
+                                        <AlertDialogFooter>
+                                          <AlertDialogCancel>
+                                            キャンセル
+                                          </AlertDialogCancel>
+                                          <AlertDialogAction
+                                            onClick={() =>
+                                              handleDeleteAccount(
+                                                ac.id,
+                                                ac.label,
+                                              )
+                                            }
+                                            className="bg-red-600"
+                                          >
+                                            削除
+                                          </AlertDialogAction>
+                                        </AlertDialogFooter>
+                                      </AlertDialogContent>
+                                    </AlertDialog>
+                                  </div>
                                 </div>
                                 <div className="flex flex-wrap gap-1.5 mt-1.5">
                                   {ac.subAccounts.map(sub => (
@@ -1290,7 +1409,39 @@ export function SettingsContent() {
                                       </div>
                                     </TableCell>
                                     <TableCell className="py-2 text-right whitespace-nowrap">
-                                      <div className="flex justify-end">
+                                      <div className="flex justify-end items-center gap-2">
+                                        <Select
+                                          value={ac.providerId}
+                                          onValueChange={async newId => {
+                                            try {
+                                              await updateMainAccount(ac.id, {
+                                                providerId: newId,
+                                              });
+                                              toast.success(
+                                                "プロバイダーを更新しました",
+                                              );
+                                              fetchData();
+                                            } catch {
+                                              toast.error(
+                                                "プロバイダーの更新に失敗しました",
+                                              );
+                                            }
+                                          }}
+                                        >
+                                          <SelectTrigger className="h-7 w-28">
+                                            <SelectValue />
+                                          </SelectTrigger>
+                                          <SelectContent>
+                                            {providers.map(p => (
+                                              <SelectItem
+                                                key={p.id}
+                                                value={p.id}
+                                              >
+                                                {p.name}
+                                              </SelectItem>
+                                            ))}
+                                          </SelectContent>
+                                        </Select>
                                         <AlertDialog>
                                           <AlertDialogTrigger asChild>
                                             <Button

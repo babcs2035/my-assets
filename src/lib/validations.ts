@@ -84,6 +84,7 @@ export type TransferMarkInput = z.infer<typeof transferMarkSchema>;
  */
 export const mainAccountUpdateSchema = z.object({
   label: z.string().max(255).optional(),
+  providerId: z.string().min(1, "プロバイダーは必須です").optional(),
   mfUrlId: z.string().max(255).nullable().optional(),
 });
 export type MainAccountUpdateInput = z.infer<typeof mainAccountUpdateSchema>;

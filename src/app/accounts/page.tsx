@@ -1,10 +1,7 @@
-import { Plus } from "lucide-react";
 import type { Metadata } from "next";
-import Link from "next/link";
 import { getAccountList } from "@/actions/accounts";
 import { AccountList } from "@/components/accounts/account-list";
 import { PageHeader } from "@/components/page-header";
-import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import logger from "@/lib/logger";
 
@@ -34,14 +31,6 @@ export default async function AccountsPage() {
       <PageHeader
         title="口座管理"
         description="金融機関と配下の口座を管理します"
-        actions={
-          <Link href="/accounts/new">
-            <Button size="sm">
-              <Plus className="mr-1.5 h-4 w-4" />
-              口座を追加
-            </Button>
-          </Link>
-        }
       />
 
       {accounts.length === 0 ? (
@@ -50,12 +39,9 @@ export default async function AccountsPage() {
             <p className="text-sm text-zinc-500">
               まだ口座が登録されていません
             </p>
-            <Link href="/accounts/new" className="mt-4">
-              <Button variant="outline" size="sm">
-                <Plus className="mr-1.5 h-4 w-4" />
-                最初の口座を追加
-              </Button>
-            </Link>
+            <p className="text-xs text-zinc-400 mt-2">
+              設定ページから口座を追加してください
+            </p>
           </CardContent>
         </Card>
       ) : (

@@ -1,4 +1,6 @@
 import "dotenv/config";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { chromium, type Page } from "playwright";
 import { generateTransactionId } from "../lib/hash";
@@ -583,6 +585,8 @@ async function scrapeTransactions(
     partnerSubAccountIdHash?: string;
     partnerInstitutionName?: string;
     partnerSubAccountName?: string;
+    // raw API data for debugging unresolved transfers
+    rawApiData?: Record<string, unknown>;
   }> = [];
   const seenActIds = new Set<number>();
 
@@ -686,11 +690,6 @@ async function scrapeTransactions(
             const partnerAccountIdHash =
               act.partner_account?.partner_account?.account_id_hash;
 
-            const currentSubName =
-              localSubNameByHash.get(subAccountIdHash) ??
-              globalSubAccountNameByHash.get(subAccountIdHash) ??
-              sa.name;
-
             const partnerSubFromPayload = buildSubAccountMergeName(
               act.partner_sub_account?.partner_sub_account?.sub_type ?? "",
               act.partner_sub_account?.partner_sub_account?.sub_name ?? "",
@@ -699,6 +698,21 @@ async function scrapeTransactions(
               act.sub_account?.sub_account?.sub_type ?? "",
               act.sub_account?.sub_account?.sub_name ?? "",
             );
+
+            // 振替取引: subAccountIdHash はクエリ元（振替元）サブアカウントを指すためハッシュベースの名前を優先
+            // 非振替取引: act.sub_account は実際の取引サブアカウントを指す
+            //   - act.sub_account.sub_account が存在し、sub_name が非空 → ペイロード名を優先
+            //   - それ以外（空 / "メイン" プレースホルダー）→ ハッシュベースの名前にフォールバック
+            const currentSubName = act.is_transfer
+              ? (localSubNameByHash.get(subAccountIdHash) ??
+                globalSubAccountNameByHash.get(subAccountIdHash) ??
+                sa.name)
+              : act.sub_account?.sub_account?.sub_name &&
+                  currentSubFromPayload !== "メイン"
+                ? currentSubFromPayload
+                : (localSubNameByHash.get(subAccountIdHash) ??
+                  globalSubAccountNameByHash.get(subAccountIdHash) ??
+                  sa.name);
             const partnerSubName = partnerSubAccountIdHash
               ? globalSubAccountNameByHash.get(partnerSubAccountIdHash)
               : partnerSubFromPayload !== "メイン"
@@ -713,7 +727,24 @@ async function scrapeTransactions(
 
             let transferFromSubAccount: string | undefined;
             let transferToSubAccount: string | undefined;
-            if (act.is_transfer && partnerSubName) {
+            // "残高" などは内部ラベルであり実際の口座ではないため振替として処理しない
+            const isInternalLabel = (name: string) =>
+              [
+                "残高",
+                "残高変更",
+                "利息",
+                "ポイント",
+                "ボーナスポイント",
+              ].includes(name);
+            // transfer_type: "outside" は他サービスへの振替で partner 口座が存在しない
+            // 振替として処理できない場合は isTransfer: false として通常の取引として保存
+            const shouldTreatAsTransfer =
+              act.is_transfer &&
+              partnerSubName &&
+              !isInternalLabel(partnerSubName) &&
+              act.transfer_type !== "outside";
+
+            if (shouldTreatAsTransfer) {
               if (amount < 0) {
                 transferFromSubAccount =
                   currentSubName || currentSubFromPayload || sa.name;
@@ -723,6 +754,25 @@ async function scrapeTransactions(
                 transferToSubAccount =
                   currentSubName || currentSubFromPayload || sa.name;
               }
+            } else if (act.is_transfer && !shouldTreatAsTransfer) {
+              // 振替として処理できない場合はログ出力（isTransfer: false として保存される）
+              logger.info(
+                {
+                  id: act.id,
+                  content: act.content,
+                  amount: act.amount,
+                  isTransfer: act.is_transfer,
+                  transferType: act.transfer_type,
+                  partnerSubName,
+                  reason:
+                    act.transfer_type === "outside"
+                      ? "outside transfer (no partner account)"
+                      : isInternalLabel(partnerSubName ?? "")
+                        ? "internal label partner"
+                        : "missing partner",
+                },
+                "Transfer not treated as transfer — saving as regular transaction.",
+              );
             }
 
             allTransactions.push({
@@ -741,13 +791,26 @@ async function scrapeTransactions(
                 partnerSubName,
                 partnerActId: act.partner_act_id,
               }),
-              isTransfer: Boolean(act.is_transfer),
+              isTransfer: Boolean(shouldTreatAsTransfer),
               transferFromSubAccount,
               transferToSubAccount,
               subAccountIdHash,
               partnerSubAccountIdHash,
               partnerInstitutionName: partnerInstitutionName ?? undefined,
               partnerSubAccountName: partnerSubName ?? undefined,
+              rawApiData: {
+                id: act.id,
+                content: act.content,
+                amount: act.amount,
+                recognized_at: act.recognized_at,
+                is_transfer: act.is_transfer,
+                transfer_type: act.transfer_type,
+                sub_account_id_hash: act.sub_account_id_hash,
+                partner_act: act.partner_act,
+                partner_account: act.partner_account,
+                partner_sub_account: act.partner_sub_account,
+                sub_account: act.sub_account,
+              },
             });
           }
         } catch (error) {
@@ -1687,12 +1750,82 @@ async function saveTransactionsToDatabase(
 
       // 振替先/元が解決できない場合は保存しない（不正確な単独明細を残さない）
       if (!fromSubAccount || !toSubAccount) {
+        // デバッグ用: 解決失敗した振替の生データをJSONに出力
+        const debugDir = join(process.cwd(), "debug");
+        const debugFile = join(debugDir, "unresolved_transfers.json");
+        try {
+          mkdirSync(debugDir, { recursive: true });
+          let records: Array<{
+            date: string;
+            amount: number;
+            desc: string;
+            subAccountName: string;
+            isTransfer: boolean;
+            transferFromSubAccount?: string;
+            transferToSubAccount?: string;
+            subAccountIdHash?: string;
+            partnerSubAccountIdHash?: string;
+            partnerInstitutionName?: string;
+            partnerSubAccountName?: string;
+            rawApiData?: Record<string, unknown>;
+            availableSubAccounts: Array<{
+              id: string;
+              currentName: string;
+              mainAccountLabel: string;
+              assetType: string;
+            }>;
+          }> = [];
+          try {
+            const existing = readFileSync(debugFile, "utf-8");
+            records = JSON.parse(existing);
+          } catch {
+            // file does not exist or invalid JSON
+          }
+          records.push({
+            date: tx.date,
+            amount: tx.amount,
+            desc: tx.desc,
+            subAccountName: tx.subAccountName,
+            isTransfer: tx.isTransfer,
+            transferFromSubAccount: tx.transferFromSubAccount,
+            transferToSubAccount: tx.transferToSubAccount,
+            subAccountIdHash: tx.subAccountIdHash,
+            partnerSubAccountIdHash: tx.partnerSubAccountIdHash,
+            partnerInstitutionName: tx.partnerInstitutionName,
+            partnerSubAccountName: tx.partnerSubAccountName,
+            rawApiData: (tx as { rawApiData?: Record<string, unknown> })
+              .rawApiData,
+            availableSubAccounts: allSubAccountsInDb.map(sa => ({
+              id: sa.id,
+              currentName: sa.currentName,
+              mainAccountLabel: sa.mainAccount.label,
+              assetType: sa.assetType,
+            })),
+          });
+          writeFileSync(debugFile, JSON.stringify(records, null, 2), "utf-8");
+          logger.info(
+            {
+              file: debugFile,
+              totalRecords: records.length,
+            },
+            "Debug: saved unresolved transfer data.",
+          );
+        } catch (error) {
+          logger.warn(
+            { err: error },
+            "⚠️ Failed to write debug JSON for unresolved transfer.",
+          );
+        }
+
         logger.warn(
           {
             sub: tx.subAccountName,
             from: tx.transferFromSubAccount ?? "?",
             to: tx.transferToSubAccount ?? "?",
             msgId: tx.msgUrlId,
+            isTransfer: tx.isTransfer,
+            rawApiData: (tx as { rawApiData?: Record<string, unknown> })
+              .rawApiData,
           },
           "⚠️ Transfer unresolved and skipped.",
         );
@@ -2314,10 +2447,22 @@ export async function runMfScraper(
   }
 }
 
-// 直接実行された場合の処理
+// 直接実行された場合の処理（複数 OP_MF_ITEM_ID 対応）
 if (isEntry && process.env.OP_MF_ITEM_ID) {
-  runMfScraper(process.env.OP_MF_ITEM_ID).catch(err => {
-    logger.error({ err }, "Failed to run MF scraper directly.");
-    process.exit(1);
-  });
+  const itemIds = process.env.OP_MF_ITEM_ID.split(",")
+    .map(s => s.trim())
+    .filter(s => s.length > 0);
+
+  (async () => {
+    for (const itemId of itemIds) {
+      try {
+        logger.info(`🚀 Running scraper for item: ${itemId}`);
+        await runMfScraper(itemId);
+      } catch (err) {
+        logger.error({ err, itemId }, "❌ Failed to run MF scraper.");
+        process.exit(1);
+      }
+    }
+    logger.info("✅ All scrapers completed.");
+  })();
 }
