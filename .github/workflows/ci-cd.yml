@@ -147,80 +147,88 @@ jobs:
 
             mkdir -p data/runtime
 
-            OP_MF_ITEM_ID_VALUE="${OP_MF_ITEM_ID:-MF_Main}"
-            export OP_MF_ITEM_ID_VALUE
             export OP_VAULT="${OP_VAULT:-}"
 
             python3 -c '
             import json, os, subprocess
-            if True:
-                OP_MF_ITEM_ID_VALUE = os.environ.get("OP_MF_ITEM_ID_VALUE", "MF_Main")
-                OP_VAULT_VALUE = os.environ.get("OP_VAULT", "")
-                
-                def extract_item(item_id: str, vault: str) -> dict:
-                    cmd = ["op", "item", "get", item_id]
-                    if vault:
-                        cmd.extend(["--vault", vault])
-                    cmd.append("--reveal")
-                    cmd.extend(["--format", "json"])
-                    result = subprocess.run(cmd, capture_output=True, text=True)
-                    if result.returncode != 0:
-                        print(f"  Warning: Failed to get item {item_id}: {result.stderr.strip()}", flush=True)
-                        return {}
 
-                    item = json.loads(result.stdout)
-                    fields_dict = {}
-                    otp_uri = None
-                    label = ""
+            OP_VAULT_VALUE = os.environ.get("OP_VAULT", "")
+            OP_MF_ITEM_ID_RAW = os.environ.get("OP_MF_ITEM_ID", "MF_Main")
 
-                    # Debug: log all field labels and types (values hidden for security)
-                    for field in item.get("fields", []):
-                        print(f"  Field: label={field.get('label')}, type={field.get('type')}", flush=True)
+            # Split comma-separated item IDs, trim whitespace, filter empty
+            item_ids = [
+                x.strip()
+                for x in OP_MF_ITEM_ID_RAW.split(",")
+                if x.strip()
+            ]
+            if not item_ids:
+                item_ids = ["MF_Main"]
 
+            def extract_item(item_id: str, vault: str) -> dict:
+                cmd = ["op", "item", "get", item_id]
+                if vault:
+                    cmd.extend(["--vault", vault])
+                cmd.append("--reveal")
+                cmd.extend(["--format", "json"])
+                result = subprocess.run(cmd, capture_output=True, text=True)
+                if result.returncode != 0:
+                    print(f"  Warning: Failed to get item {item_id}: {result.stderr.strip()}", flush=True)
+                    return {}
+
+                item = json.loads(result.stdout)
+                fields_dict = {}
+                otp_uri = None
+                label = ""
+
+                # Debug: log all field labels and types (values hidden for security)
+                for field in item.get("fields", []):
+                    print(f"  Field: label={field.get('label')}, type={field.get('type')}", flush=True)
+
+                for field in item.get("fields", []):
+                    label = str(field.get("label", "")).strip().lower()
+                    ftype = str(field.get("type", "")).strip().upper()
+                    value = field.get("value")
+
+                    if ftype == "PASSWORD" and str(field.get("purpose", "")).lower() != "otp":
+                        fields_dict["password"] = str(value) if value else None
+                    elif label == "username" or label == "email" or label == "acct_id":
+                        fields_dict["username"] = str(value) if value else None
+
+                    if ftype == "OTP" and isinstance(value, str):
+                        otp_uri = value
+                    elif label in ("otp", "totp") and isinstance(value, str) and value.startswith("otpauth://"):
+                        otp_uri = value
+
+                # Fallback: if no PASSWORD type field found, use label-based matching
+                if "password" not in fields_dict:
                     for field in item.get("fields", []):
                         label = str(field.get("label", "")).strip().lower()
-                        ftype = str(field.get("type", "")).strip().upper()
                         value = field.get("value")
+                        if label == "password" and value is not None:
+                            fields_dict["password"] = str(value)
+                            break
 
-                        if ftype == "PASSWORD" and str(field.get("purpose", "")).lower() != "otp":
-                            fields_dict["password"] = str(value) if value else None
-                        elif label == "username" or label == "email" or label == "acct_id":
-                            fields_dict["username"] = str(value) if value else None
+                if otp_uri:
+                    fields_dict["otp_uri"] = otp_uri
 
-                        if ftype == "OTP" and isinstance(value, str):
-                            otp_uri = value
-                        elif label in ("otp", "totp") and isinstance(value, str) and value.startswith("otpauth://"):
-                            otp_uri = value
+                return {k: v for k, v in fields_dict.items() if v is not None}
 
-                    # Fallback: if no PASSWORD type field found, use label-based matching
-                    if "password" not in fields_dict:
-                        for field in item.get("fields", []):
-                            label = str(field.get("label", "")).strip().lower()
-                            value = field.get("value")
-                            if label == "password" and value is not None:
-                                fields_dict["password"] = str(value)
-                                break
-
-                    if otp_uri:
-                        fields_dict["otp_uri"] = otp_uri
-
-                    return {k: v for k, v in fields_dict.items() if v is not None}
-                
-                items = {}
-                print(f"Fetching item {OP_MF_ITEM_ID_VALUE} from 1Password...", flush=True)
-                mf = extract_item(OP_MF_ITEM_ID_VALUE, OP_VAULT_VALUE)
+            items = {}
+            for item_id in item_ids:
+                print(f"Fetching item {item_id} from 1Password...", flush=True)
+                mf = extract_item(item_id, OP_VAULT_VALUE)
                 if mf:
-                    items[OP_MF_ITEM_ID_VALUE] = mf
+                    items[item_id] = mf
                     print(f"  Got: {list(mf.keys())}", flush=True)
                 else:
-                    print("  WARNING: MF item is empty!", flush=True)
-                    
-                payload = {"items": items}
-                with open("data/runtime/op-secrets.json", "w", encoding="utf-8") as f:
-                    json.dump(payload, f, ensure_ascii=False)
-                    
-                os.chmod("data/runtime/op-secrets.json", 0o644)
-                print(f"Saved op-secrets.json with items: {list(items.keys())}", flush=True)
+                    print(f"  WARNING: MF item {item_id} is empty!", flush=True)
+
+            payload = {"items": items}
+            with open("data/runtime/op-secrets.json", "w", encoding="utf-8") as f:
+                json.dump(payload, f, ensure_ascii=False)
+
+            os.chmod("data/runtime/op-secrets.json", 0o644)
+            print(f"Saved op-secrets.json with items: {list(items.keys())}", flush=True)
             '
 
             docker compose pull --quiet || true
