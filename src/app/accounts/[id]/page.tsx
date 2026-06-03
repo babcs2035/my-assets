@@ -1,4 +1,5 @@
 import { ArrowLeft, Coins, CreditCard, TrendingUp } from "lucide-react";
+import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getAccountDetail } from "@/actions/accounts";
@@ -16,6 +17,22 @@ import {
 } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
+
+/**
+ * 口座詳細ページメタデータを生成する．
+ * 口座名が動的にタイトルに反映される．
+ */
+export async function generateMetadata({ params }: Props): Promise<Metadata> {
+  const { id } = await params;
+  const account = await getAccountDetail(id);
+  if (!account) {
+    return { title: "口座詳細 | My Assets" };
+  }
+  return {
+    title: `${account.label} | My Assets`,
+    description: `${account.provider.name} - ${account.label} の詳細`,
+  };
+}
 
 type Props = {
   params: Promise<{ id: string }>;

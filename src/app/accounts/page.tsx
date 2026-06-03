@@ -1,4 +1,5 @@
 import { Plus } from "lucide-react";
+import type { Metadata } from "next";
 import Link from "next/link";
 import { getAccountList } from "@/actions/accounts";
 import { AccountList } from "@/components/accounts/account-list";
@@ -11,6 +12,14 @@ import logger from "@/lib/logger";
  * 動的レンダリングを強制するための設定である．
  */
 export const dynamic = "force-dynamic";
+
+/**
+ * 口座管理ページメタデータである．
+ */
+export const metadata: Metadata = {
+  title: "口座管理 | My Assets",
+  description: "金融機関と口座の一覧を管理するページ",
+};
 
 /**
  * 口座管理ページコンポーネントである．

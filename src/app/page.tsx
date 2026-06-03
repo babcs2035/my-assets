@@ -4,6 +4,7 @@ import {
   ArrowUpRight,
   Minus,
 } from "lucide-react";
+import type { Metadata } from "next";
 import { getCurrentMonthIncomeExpense } from "@/actions/assets";
 import {
   getAssetHistory,
@@ -39,6 +40,11 @@ export const dynamic = "force-dynamic";
  *   - 比較対象を提供（前日比）
  *   - メタ情報を記載（最終更新日時）
  */
+export const metadata: Metadata = {
+  title: "ダッシュボード | My Assets",
+  description: "資産全体の概況と推移を表示するダッシュボード",
+};
+
 export default async function DashboardPage() {
   logger.info("🏠 Rendering DashboardPage...");
 

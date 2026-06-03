@@ -1,9 +1,18 @@
+import type { Metadata } from "next";
 import { Suspense } from "react";
 import { PageHeader } from "@/components/page-header";
 import { TransactionsContent } from "@/components/transactions/transactions-content";
 import { Skeleton } from "@/components/ui/skeleton";
 
 export const dynamic = "force-dynamic";
+
+/**
+ * 入出金明細ページメタデータである．
+ */
+export const metadata: Metadata = {
+  title: "入出金明細 | My Assets",
+  description: "日々のキャッシュフローを管理し、自動分類ルールを育てる",
+};
 
 /**
  * 入出金明細ページコンポーネントである．

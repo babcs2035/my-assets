@@ -1,8 +1,17 @@
+import type { Metadata } from "next";
 import { getAssetBreakdown } from "@/actions/assets";
 import { AssetsContent } from "@/components/assets/assets-content";
 import { PageHeader } from "@/components/page-header";
 
 export const dynamic = "force-dynamic";
+
+/**
+ * 資産ページメタデータである．
+ */
+export const metadata: Metadata = {
+  title: "資産 | My Assets",
+  description: "資産・負債の内訳とバランスシートを表示するページ",
+};
 
 /**
  * 資産ページコンポーネントである．
