@@ -39,6 +39,7 @@ async function getAssetBreakdownInternal() {
     type: AssetType;
     amount: number;
     holdings?: Array<{
+      id: string;
       name: string;
       quantity: number;
       avgCostBasis: number;
@@ -78,6 +79,7 @@ async function getAssetBreakdownInternal() {
         holdings:
           sa.holdings.length > 0
             ? sa.holdings.map(h => ({
+                id: h.id,
                 name: h.name,
                 quantity: h.quantity,
                 avgCostBasis: h.avgCostBasis,

@@ -313,13 +313,17 @@ async function saveHoldingsFromAccountPage(
     if (!holdingName) continue;
 
     const qty = holding.qty ?? 0;
-    const avgCostBasis = holding.entried_price ?? 0;
     const unitPrice = holding.current_price ?? 0;
     const valuation = holding.value ?? 0;
     const profit = holding.profit ?? 0;
-    // MF page data: entried_price is cumulative cost (総取得コスト), not per-unit
+    // Derive total cost from valuation and profit for gainLossRate calculation.
+    // valuation = profit + totalCost => totalCost = valuation - profit
+    const derivedTotalCost = valuation - profit;
+    const avgCostBasis = qty > 0 ? Math.round(derivedTotalCost / qty) : 0;
     const gainLossRate =
-      avgCostBasis > 0 ? Number(((profit / avgCostBasis) * 100).toFixed(4)) : 0;
+      derivedTotalCost > 0
+        ? Number(((profit / derivedTotalCost) * 100).toFixed(4))
+        : 0;
 
     try {
       await prisma.$transaction(async tx => {
@@ -379,6 +383,48 @@ async function saveHoldingsFromAccountPage(
     { count: savedCount, subAccount: subAccountName },
     "✅ Holdings saved from account detail page.",
   );
+}
+
+/**
+ * 投資信託の保有銘柄履歴（HoldingHistory）について、各日の valuation と gainLoss から
+ * totalCost = valuation - gainLoss を逆算し、gainLossRate と avgCostBasis を再計算する。
+ */
+async function recalculateHoldingHistory() {
+  const allHistories = await prisma.holdingHistory.findMany({
+    select: {
+      id: true,
+      subAccountId: true,
+      name: true,
+      quantity: true,
+      valuation: true,
+      gainLoss: true,
+    },
+  });
+
+  if (allHistories.length === 0) return 0;
+
+  let updatedCount = 0;
+  for (const h of allHistories) {
+    const derivedTotalCost = h.valuation - h.gainLoss;
+    if (derivedTotalCost <= 0) continue;
+    const newGainLossRate = Number(
+      ((h.gainLoss / derivedTotalCost) * 100).toFixed(4),
+    );
+    const newAvgCostBasis =
+      h.quantity > 0 ? Math.round(derivedTotalCost / h.quantity) : 0;
+
+    await prisma.holdingHistory.update({
+      where: { id: h.id },
+      data: {
+        avgCostBasis: newAvgCostBasis,
+        gainLossRate: newGainLossRate,
+      },
+    });
+    updatedCount++;
+  }
+
+  logger.info({ count: updatedCount }, "🔄 HoldingHistory recalculated.");
+  return updatedCount;
 }
 
 /**
@@ -839,62 +885,6 @@ async function scrapeBalanceHistory(page: Page, options: MfScraperOptions) {
   const toJstMidnight = (dateStr: string) =>
     new Date(`${dateStr}T00:00:00+09:00`);
   const formatYmd = (d: Date) => formatJSTDate(d);
-  const buildHistoryFromTransactions = async (
-    subAccountId: string,
-    endDateBalance: number,
-    startDate: Date,
-    endDate: Date,
-  ) => {
-    const txs = await prisma.transaction.findMany({
-      where: {
-        subAccountId,
-        date: { gte: startDate, lte: endDate },
-      },
-      select: {
-        date: true,
-        amount: true,
-      },
-    });
-
-    const dailyNetByDate = new Map<string, number>();
-    for (const tx of txs) {
-      const dateKey = formatJSTDate(tx.date);
-      dailyNetByDate.set(
-        dateKey,
-        (dailyNetByDate.get(dateKey) ?? 0) + tx.amount,
-      );
-    }
-
-    const txDateKeys = Array.from(dailyNetByDate.keys()).sort();
-
-    if (txDateKeys.length === 0) {
-      return new Map<string, number>([
-        [formatYmd(endDate), Math.trunc(endDateBalance)],
-      ]);
-    }
-
-    const inferredHistory = new Map<string, number>();
-    // 今日(endDate)のend balanceはendDateBalanceそのまま
-    inferredHistory.set(formatYmd(endDate), Math.trunc(endDateBalance));
-
-    // endDate-1からstartDateまで逆算
-    // 負債: 0から始まり取引があるときのみ負になる
-    // runningBalance > 0 なら0（取引前の負債は0）
-    let runningBalance = Math.trunc(endDateBalance);
-    for (
-      let cursor = new Date(endDate);
-      cursor.getTime() > startDate.getTime();
-      cursor = new Date(cursor.getTime() - 24 * 60 * 60 * 1000)
-    ) {
-      const _prevDateKey = formatYmd(cursor); // D+1 (unused - kept for reference)
-      const prevDate = new Date(cursor);
-      const currDate = new Date(prevDate.getTime() - 24 * 60 * 60 * 1000); // D
-      const currDateKey = formatYmd(currDate);
-      runningBalance -= dailyNetByDate.get(currDateKey) ?? 0;
-      inferredHistory.set(currDateKey, runningBalance);
-    }
-    return inferredHistory;
-  };
   const parseMergedHistory = (
     detail?: MfServiceDetailResponse["account_detail"],
     options?: { preferLiabilitySeries?: boolean },
@@ -1043,6 +1033,7 @@ async function scrapeBalanceHistory(page: Page, options: MfScraperOptions) {
                 mfDetails,
                 todayStr,
               );
+              await recalculateHoldingHistory();
             }
           }
         } catch (error) {
@@ -1149,80 +1140,62 @@ async function scrapeBalanceHistory(page: Page, options: MfScraperOptions) {
       totalSubAccounts++;
 
       try {
-        let mergedHistoryByDate = new Map<string, number>();
+        const mergedHistoryByDate = new Map<string, number>();
 
-        if (isLiabilitySubAccount) {
-          // MFのbalanceは既に負の値
-          mergedHistoryByDate = await buildHistoryFromTransactions(
-            subAccount.id,
-            subAccount.balance,
-            minDate,
-            today,
-          );
-          logger.info(
+        for (const subSummary of uniqueCandidateSubSummaries) {
+          // range: "all" で全履歴を1回のAPI呼び出しで取得
+          logger.debug(
             {
               label: mainAccount.label,
               subAccount: subAccount.currentName,
-              points: mergedHistoryByDate.size,
+              subHash: subSummary.sub_account_id_hash,
             },
-            "📈 Liability history rebuilt from transactions.",
+            "🔗 Calling service_detail API.",
           );
-        } else {
-          for (const subSummary of uniqueCandidateSubSummaries) {
-            // range: "all" で全履歴を1回のAPI呼び出しで取得
-            logger.debug(
-              {
-                label: mainAccount.label,
-                subAccount: subAccount.currentName,
-                subHash: subSummary.sub_account_id_hash,
-              },
-              "🔗 Calling service_detail API.",
-            );
-            const payload = await fetchServiceDetailBySubAccount(
-              page,
-              summary.account_id_hash,
-              subSummary.sub_account_id_hash,
-              "all",
-            );
-            const parsed = parseMergedHistory(payload.account_detail, {
-              preferLiabilitySeries: false,
-            });
-            if (!parsed) continue;
+          const payload = await fetchServiceDetailBySubAccount(
+            page,
+            summary.account_id_hash,
+            subSummary.sub_account_id_hash,
+            "all",
+          );
+          const parsed = parseMergedHistory(payload.account_detail, {
+            preferLiabilitySeries: isLiabilitySubAccount,
+          });
+          if (!parsed) continue;
 
-            const toDate = toJstMidnight(parsed.toDateStr);
-            const inferredFromDate = new Date(toDate);
-            inferredFromDate.setDate(
-              toDate.getDate() - (parsed.mergedSeries.length - 1),
+          const toDate = toJstMidnight(parsed.toDateStr);
+          const inferredFromDate = new Date(toDate);
+          inferredFromDate.setDate(
+            toDate.getDate() - (parsed.mergedSeries.length - 1),
+          );
+
+          logger.debug(
+            {
+              label: mainAccount.label,
+              subAccount: subAccount.currentName,
+              subHash: subSummary.sub_account_id_hash,
+              range: "all",
+              points: parsed.mergedSeries.length,
+              from: formatYmd(inferredFromDate),
+              to: parsed.toDateStr,
+            },
+            "History fetched with range=all.",
+          );
+
+          // minDate 〜 today の範囲にクリップしてマージ
+          for (let i = 0; i < parsed.mergedSeries.length; i++) {
+            const day = new Date(
+              inferredFromDate.getTime() + i * 24 * 60 * 60 * 1000,
             );
+            if (day < minDate || day > today) continue;
 
-            logger.debug(
-              {
-                label: mainAccount.label,
-                subAccount: subAccount.currentName,
-                subHash: subSummary.sub_account_id_hash,
-                range: "all",
-                points: parsed.mergedSeries.length,
-                from: formatYmd(inferredFromDate),
-                to: parsed.toDateStr,
-              },
-              "History fetched with range=all.",
+            const dateKey = formatYmd(day);
+            const balance = parsed.mergedSeries[i];
+            if (!Number.isFinite(balance)) continue;
+            mergedHistoryByDate.set(
+              dateKey,
+              Math.trunc((mergedHistoryByDate.get(dateKey) ?? 0) + balance),
             );
-
-            // minDate 〜 today の範囲にクリップしてマージ
-            for (let i = 0; i < parsed.mergedSeries.length; i++) {
-              const day = new Date(
-                inferredFromDate.getTime() + i * 24 * 60 * 60 * 1000,
-              );
-              if (day < minDate || day > today) continue;
-
-              const dateKey = formatYmd(day);
-              const balance = parsed.mergedSeries[i];
-              if (!Number.isFinite(balance)) continue;
-              mergedHistoryByDate.set(
-                dateKey,
-                Math.trunc((mergedHistoryByDate.get(dateKey) ?? 0) + balance),
-              );
-            }
           }
         }
 

@@ -25,7 +25,7 @@ import {
   filterByUnifiedTimeRange,
   type UnifiedTimeRange,
 } from "@/lib/chart-time-range";
-import { formatCurrency, formatPercent } from "@/lib/utils";
+import { formatCurrency } from "@/lib/utils";
 
 type HoldingHistoryItem = {
   date: Date | string;
@@ -141,7 +141,7 @@ export function HoldingTrendChart({ holdings }: Props) {
                 className={`font-mono font-medium ${isPositive ? "text-success" : "text-destructive"}`}
               >
                 {selectedHolding.gainLoss != null &&
-                  formatPercent(selectedHolding.gainLossRate)}
+                  `${selectedHolding.gainLossRate >= 0 ? "+" : ""}${selectedHolding.gainLossRate.toFixed(2)}%`}
               </span>
             </div>
           </div>
@@ -251,7 +251,7 @@ export function HoldingTrendChart({ holdings }: Props) {
                           <span
                             className={`font-mono font-bold ${p.gainLossRate >= 0 ? "text-success" : "text-destructive"}`}
                           >
-                            {formatPercent(p.gainLossRate)}
+                            {`${p.gainLossRate >= 0 ? "+" : ""}${p.gainLossRate.toFixed(2)}%`}
                           </span>
                         </div>
                       </div>

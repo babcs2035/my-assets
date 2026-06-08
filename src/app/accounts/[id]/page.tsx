@@ -5,16 +5,12 @@ import { notFound } from "next/navigation";
 import { getAccountDetail } from "@/actions/accounts";
 import { AccountSubAccountManager } from "@/components/account-sub-account-manager";
 import { AccountBalanceChart } from "@/components/accounts/account-balance-chart";
+import { HoldingTable } from "@/components/accounts/holding-table";
 import { HoldingTrendChart } from "@/components/accounts/holding-trend-chart";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  formatCurrency,
-  formatJSTDate,
-  formatPercent,
-  formatSignedAmount,
-} from "@/lib/utils";
+import { formatCurrency, formatJSTDate, formatSignedAmount } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
@@ -147,7 +143,10 @@ export default async function AccountDetailPage({ params }: Props) {
     0,
   );
 
-  const allHoldings = visibleSubAccounts.flatMap(sa => sa.holdings);
+  const allHoldings = visibleSubAccounts.flatMap(sa =>
+    (sa.holdings ?? []).map(h => ({ ...h, account: sa.mainAccount.label })),
+  );
+
   const allCryptos = visibleSubAccounts.flatMap(sa => sa.cryptos);
 
   // 全 subAccount の holdingHistories を銘柄名でグループ化
@@ -294,62 +293,7 @@ export default async function AccountDetailPage({ params }: Props) {
           </CardHeader>
           <CardContent>
             <div className="overflow-x-auto">
-              <table className="data-table min-w-full">
-                <thead>
-                  <tr>
-                    <th className="whitespace-nowrap">銘柄名</th>
-                    <th className="text-right whitespace-nowrap">保有数</th>
-                    <th className="text-right whitespace-nowrap">
-                      平均取得単価
-                    </th>
-                    <th className="text-right whitespace-nowrap">基準価額</th>
-                    <th className="text-right whitespace-nowrap">評価額</th>
-                    <th className="text-right whitespace-nowrap">前日比</th>
-                    <th className="text-right whitespace-nowrap">評価損益</th>
-                    <th className="text-right whitespace-nowrap">損益率</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {allHoldings.map(h => (
-                    <tr key={h.id}>
-                      <td className="font-medium text-zinc-200">{h.name}</td>
-                      <td className="text-right font-mono text-zinc-300">
-                        {h.quantity.toLocaleString()}
-                      </td>
-                      <td className="text-right font-mono text-zinc-300">
-                        {formatCurrency(h.avgCostBasis)}
-                      </td>
-                      <td className="text-right font-mono text-zinc-300">
-                        {formatCurrency(h.unitPrice)}
-                      </td>
-                      <td className="text-right font-mono font-medium text-zinc-100">
-                        {formatCurrency(h.valuation)}
-                      </td>
-                      <td
-                        className={`text-right font-mono ${h.dayBeforeRatio != null && h.dayBeforeRatio >= 0 ? "text-success" : "text-destructive"}`}
-                      >
-                        {h.dayBeforeRatio != null
-                          ? formatSignedAmount(h.dayBeforeRatio)
-                          : "N/A"}
-                      </td>
-                      <td
-                        className={`text-right font-mono ${h.gainLoss != null && h.gainLoss >= 0 ? "text-success" : "text-destructive"}`}
-                      >
-                        {h.gainLoss != null
-                          ? formatSignedAmount(h.gainLoss)
-                          : "N/A"}
-                      </td>
-                      <td
-                        className={`text-right font-mono ${h.gainLossRate != null && h.gainLossRate >= 0 ? "text-success" : "text-destructive"}`}
-                      >
-                        {h.gainLossRate != null
-                          ? formatPercent(h.gainLossRate)
-                          : "N/A"}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              <HoldingTable holdings={allHoldings} showDetails />
             </div>
           </CardContent>
         </Card>

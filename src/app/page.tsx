@@ -248,7 +248,7 @@ export default async function DashboardPage() {
       </div>
 
       {/* ── グラフエリア ────────────────────────── */}
-      <div className="grid gap-4 lg:grid-cols-7">
+      <div className="grid gap-4 lg:grid-cols-5">
         {/* 資産推移（積み上げ面グラフ） */}
         <Card className="col-span-1 lg:col-span-5 overflow-hidden">
           <CardHeader className="pb-2">
@@ -258,22 +258,6 @@ export default async function DashboardPage() {
           </CardHeader>
           <CardContent className="pl-0 sm:pl-2">
             <DashboardAreaWrapper data={chartData} />
-          </CardContent>
-        </Card>
-
-        {/* 資産構成（ドーナツチャート） */}
-        <Card className="col-span-1 lg:col-span-2 overflow-hidden">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base font-medium text-zinc-200">
-              資産構成
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <DashboardDonutChart
-              assetOnlySeries={assetOnlySeries}
-              totalAssets={totalAssets}
-              kpiByAssetType={kpi.byAssetType}
-            />
           </CardContent>
         </Card>
       </div>

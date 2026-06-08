@@ -80,6 +80,7 @@ export async function getAccountDetail(id: string) {
       provider: true,
       subAccounts: {
         include: {
+          mainAccount: { select: { label: true } },
           holdings: {
             orderBy: { valuation: "desc" },
           },
