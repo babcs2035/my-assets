@@ -887,7 +887,6 @@ async function scrapeBalanceHistory(page: Page, options: MfScraperOptions) {
   const formatYmd = (d: Date) => formatJSTDate(d);
   const parseMergedHistory = (
     detail?: MfServiceDetailResponse["account_detail"],
-    options?: { preferLiabilitySeries?: boolean },
   ) => {
     const toDateStr = detail?.to_date;
     const fromDateStr = detail?.from_date;
@@ -896,15 +895,7 @@ async function scrapeBalanceHistory(page: Page, options: MfScraperOptions) {
       (entry): entry is [string, number[]] =>
         Array.isArray(entry[1]) && entry[1].length > 0,
     );
-    const preferredSeriesByType = options?.preferLiabilitySeries
-      ? historyEntries
-          .filter(([key]) => key.toUpperCase().includes("LIA"))
-          .map(([, series]) => series)
-      : [];
-    const seriesByType =
-      preferredSeriesByType.length > 0
-        ? preferredSeriesByType
-        : historyEntries.map(([, series]) => series);
+    const seriesByType = historyEntries.map(([, series]) => series);
     if (!toDateStr || seriesByType.length === 0) return null;
 
     const seriesLen = Math.max(...seriesByType.map(arr => arr.length));
@@ -1065,7 +1056,10 @@ async function scrapeBalanceHistory(page: Page, options: MfScraperOptions) {
     }
 
     for (const subAccount of mainAccount.subAccounts) {
-      const isLiabilitySubAccount = subAccount.assetType === "LIABILITY";
+      // 負債口座の履歴スクレイピングはスキップ
+      // （MF API が負債口座の履歴データを正確に返さないため）
+      // 負債口座の BalanceHistory は recalculateLiabilityHistory で逆算
+      if (subAccount.assetType === "LIABILITY") continue;
       let candidateSubSummaries =
         subSummaryByDisplayName.get(subAccount.currentName) ??
         subSummaryByNormalizedDisplay.get(
@@ -1104,17 +1098,6 @@ async function scrapeBalanceHistory(page: Page, options: MfScraperOptions) {
       }
       if (
         (!candidateSubSummaries || candidateSubSummaries.length === 0) &&
-        subAccount.assetType === "LIABILITY"
-      ) {
-        const liabilityCandidates = (summary.sub_accounts ?? []).filter(
-          sa => sa.includes_liability,
-        );
-        if (liabilityCandidates.length > 0) {
-          candidateSubSummaries = liabilityCandidates;
-        }
-      }
-      if (
-        (!candidateSubSummaries || candidateSubSummaries.length === 0) &&
         (summary.sub_accounts?.length ?? 0) === 1
       ) {
         candidateSubSummaries = summary.sub_accounts ?? [];
@@ -1126,14 +1109,14 @@ async function scrapeBalanceHistory(page: Page, options: MfScraperOptions) {
             .map(sa => [sa.sub_account_id_hash, sa]),
         ).values(),
       );
-      if (!isLiabilitySubAccount && uniqueCandidateSubSummaries.length === 0) {
+      if (uniqueCandidateSubSummaries.length === 0) {
         logger.debug(
           {
             label: mainAccount.label,
             subAccount: subAccount.currentName,
             assetType: subAccount.assetType,
           },
-          "⏭️ No candidate subSummary for non-liability subAccount.",
+          "⏭️ No candidate subSummary.",
         );
         continue;
       }
@@ -1158,9 +1141,7 @@ async function scrapeBalanceHistory(page: Page, options: MfScraperOptions) {
             subSummary.sub_account_id_hash,
             "all",
           );
-          const parsed = parseMergedHistory(payload.account_detail, {
-            preferLiabilitySeries: isLiabilitySubAccount,
-          });
+          const parsed = parseMergedHistory(payload.account_detail);
           if (!parsed) continue;
 
           const toDate = toJstMidnight(parsed.toDateStr);
@@ -2084,6 +2065,225 @@ async function saveTransactionsToDatabase(
   );
 }
 
+/**
+ * 負債口座の BalanceHistory を最新残高と入出金明細から逆算して更新する。
+ *
+ * MF API が負債口座の履歴データを正確に返さないため、以下のロジックで日次残高を再計算する：
+ * 1. 最新残高（subAccount.balance）を取得
+ * 2. スクレイピングした取引（DB に保存済み）を取得
+ * 3. 銀行口座からの振替（返済）も追加
+ * 4. 取引を日付ごとに集約（同日の購入と返済をネット化して合計）
+ * 5. 最新残高から遡り、日付ごとに逆算して各日の残高を計算
+ * 6. 最古取引の日〜今日まで全日を前方に順算して埋める
+ * 7. BalanceHistory を upsert
+ *
+ * 符号の規則:
+ * - amount > 0 (返済) → 負債減少。逆算: 返済前 = 返済後 - 返済額（返済前で大きい負債）
+ * - amount < 0 (購入) → 負債増加。逆算: 購入前 = 購入後 - 購入額（購入前で小さい負債）
+ *
+ * 同日の購入と返済が両方存在する場合、それらをネット化して1日の正味変化量として扱う。
+ * これにより、同日の複数取引が逆算結果に重複して影響するのを防ぐ。
+ */
+async function recalculateLiabilityHistory(
+  _transactions: Awaited<ReturnType<typeof scrapeTransactions>>,
+  providerId: string,
+) {
+  logger.info("🔄 Recalculating liability balance history...");
+
+  const subAccounts = await prisma.subAccount.findMany({
+    where: {
+      mainAccount: { providerId },
+      assetType: "LIABILITY",
+    },
+    select: { id: true, currentName: true, balance: true },
+  });
+
+  if (subAccounts.length === 0) {
+    logger.info("ℹ️ No liability subAccounts found for recalculation.");
+    return;
+  }
+
+  const today = todayJST();
+  const todayStr = formatJSTDate(today);
+
+  // 既存のBalanceHistoryを全削除（ゼロからやり直す）
+  for (const sa of subAccounts) {
+    await prisma.balanceHistory.deleteMany({
+      where: { subAccountId: sa.id },
+    });
+  }
+
+  // DBから全取引を取得（スクレイピング結果に依存しない）
+  const liabilityTransferIds = subAccounts.map(sa => sa.id);
+  const allTransactions = await prisma.transaction.findMany({
+    where: {
+      subAccountId: { in: liabilityTransferIds },
+      isTransfer: false,
+    },
+    select: {
+      id: true,
+      date: true,
+      amount: true,
+      subAccount: { select: { currentName: true } },
+    },
+  });
+
+  // DBから全振替を取得（返済）
+  const allTransfers = await prisma.transaction.findMany({
+    where: {
+      subAccountId: { in: liabilityTransferIds },
+      isTransfer: true,
+    },
+    select: {
+      subAccountId: true,
+      date: true,
+      amount: true,
+      subAccount: { select: { currentName: true } },
+    },
+  });
+
+  // 負債口座名 → 日付ごとの返済額をグループ化
+  // 振替（負債→銀行）の amount は正の値（返済額）
+  const incomingTransfers = new Map<string, number>(); // subName::date → 返済額
+  for (const tx of allTransfers) {
+    const dateStr = formatJSTDate(tx.date);
+    const key = `${tx.subAccount.currentName}::${dateStr}`;
+    const existing = incomingTransfers.get(key) ?? 0;
+    incomingTransfers.set(key, existing + tx.amount);
+  }
+
+  let totalSaved = 0;
+
+  for (const sa of subAccounts) {
+    // 1. 通常取引を日付→合計額の Map に集約
+    const txMap = new Map<string, number>(); // date → 同日の合計 amount
+    for (const tx of allTransactions) {
+      if (tx.subAccount.currentName !== sa.currentName) continue;
+      const dateStr = formatJSTDate(tx.date);
+      if (dateStr > todayStr) continue;
+      const existing = txMap.get(dateStr) ?? 0;
+      txMap.set(dateStr, existing + tx.amount);
+    }
+
+    // 2. 銀行口座からの振替（返済）を追加
+    //    同日のスクレイピング取引（購入など）と返済をネット化して合計する
+    //    （同日に購入と返済の両方が存在する場合、別々に処理すると逆算時に重複計算になる）
+    for (const [key, amount] of incomingTransfers) {
+      const [subName, dateStr] = key.split("::");
+      if (subName !== sa.currentName) continue;
+      const existing = txMap.get(dateStr) ?? 0;
+      txMap.set(dateStr, existing + amount);
+    }
+
+    // 日付ごとの集約済み取引を配列に変換
+    const txsByDate: Array<{ date: string; amount: number }> = Array.from(
+      txMap.entries(),
+    ).map(([date, amount]) => ({ date, amount }));
+
+    // 日付昇順でソート
+    txsByDate.sort((a, b) => a.date.localeCompare(b.date));
+
+    if (txsByDate.length === 0) {
+      logger.debug(
+        { subAccount: sa.currentName },
+        "⏭️ No transactions — skip liability history recalculation.",
+      );
+      continue;
+    }
+
+    // 逆算: 最新残高から日付ごとに遡る
+    // 負債口座: 取引前の残高 = 取引後の残高 - amount
+    //   amount > 0 (返済) → 返済前 = 返済後 - 返済額（返済前で大きい負債）
+    //   amount < 0 (購入) → 購入前 = 購入後 - 購入額（購入前で小さい負債）
+    const dateBalances = new Map<string, number>(); // date → その日の残高
+    let balance = sa.balance;
+
+    // 日付降順に処理
+    const sortedDesc = [...txsByDate].sort((a, b) =>
+      b.date.localeCompare(a.date),
+    );
+
+    for (const tx of sortedDesc) {
+      dateBalances.set(tx.date, balance);
+      balance -= tx.amount; // 取引前（前日終い）の残高
+    }
+
+    // gap-filling: 最古取引日〜今日まで
+    const entries = new Map<string, number>();
+    const sortedAsc = [...txsByDate].sort((a, b) =>
+      a.date.localeCompare(b.date),
+    );
+    let currentBalance: number | null = null;
+
+    const todayDate = new Date(`${todayStr}T00:00:00+09:00`);
+    const cursor = new Date(`${sortedAsc[0].date}T00:00:00+09:00`);
+
+    for (const tx of sortedAsc) {
+      const txDate = new Date(`${tx.date}T00:00:00+09:00`);
+
+      // cursor〜取引日の前日までを現在の残高で埋める
+      while (cursor.getTime() < txDate.getTime()) {
+        const d = formatJSTDate(cursor);
+        if (currentBalance !== null) {
+          entries.set(d, currentBalance);
+        }
+        cursor.setDate(cursor.getDate() + 1);
+      }
+
+      // 取引日の残高を記録
+      const dayBalance = dateBalances.get(tx.date);
+      if (dayBalance === undefined) continue;
+      entries.set(tx.date, dayBalance);
+      currentBalance = dayBalance;
+      cursor.setDate(cursor.getDate() + 1);
+    }
+
+    // 今日までを埋める
+    while (cursor.getTime() <= todayDate.getTime()) {
+      const d = formatJSTDate(cursor);
+      if (!entries.has(d) && currentBalance !== null) {
+        entries.set(d, currentBalance);
+      }
+      cursor.setDate(cursor.getDate() + 1);
+    }
+
+    // 全エントリを日付昇順に upsert
+    for (const [dateStr, bal] of Array.from(entries.entries()).sort((a, b) =>
+      a[0].localeCompare(b[0]),
+    )) {
+      const historyDate = new Date(`${dateStr}T08:00:00+09:00`);
+      await prisma.balanceHistory.upsert({
+        where: {
+          subAccountId_date: {
+            subAccountId: sa.id,
+            date: historyDate,
+          },
+        },
+        create: {
+          subAccountId: sa.id,
+          date: historyDate,
+          balance: bal,
+        },
+        update: {
+          balance: bal,
+        },
+      });
+      totalSaved++;
+    }
+
+    logger.info(
+      {
+        subAccount: sa.currentName,
+        txCount: txsByDate.length,
+        historySaved: entries.size,
+      },
+      "✅ Recalculated liability history.",
+    );
+  }
+
+  logger.info({ totalSaved }, "✅ Liability history recalculation complete.");
+}
+
 // アクティブなブラウザインスタンスを追跡（中止用）
 const activeBrowsers = new Map<
   string,
@@ -2404,8 +2604,12 @@ export async function runMfScraper(
     logger.info("📋 Phase 4: Saving transactions to database...");
     await saveTransactionsToDatabase(transactions, provider.id);
 
-    // Phase 5: 残高履歴を過去から取得
-    logger.info("📋 Phase 5: Scraping balance history...");
+    // Phase 5: 負債口座の BalanceHistory を逆算（最新残高 + 入出金明細）
+    logger.info("📋 Phase 5: Recalculating liability balance history...");
+    await recalculateLiabilityHistory(transactions, provider.id);
+
+    // Phase 6: 残高履歴を過去から取得（非負債口座のみ）
+    logger.info("📋 Phase 6: Scraping balance history...");
     await scrapeBalanceHistory(page, options);
 
     logger.info("🎉 MF Scraping process completed successfully!");
