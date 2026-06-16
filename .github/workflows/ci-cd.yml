@@ -70,7 +70,9 @@ jobs:
         with:
           context: .
           push: true
-          platforms: linux/arm64
+          platforms:
+            - linux/arm64
+            - linux/amd64
           tags: ghcr.io/babcs2035/my-assets:latest,ghcr.io/babcs2035/my-assets:${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
