@@ -10,7 +10,6 @@ import {
   Cell,
   Legend,
   Line,
-  LineChart,
   Pie,
   PieChart,
   XAxis,
@@ -20,9 +19,17 @@ import {
   getAnnualIncomeExpense,
   getMonthlyIncomeExpense,
 } from "@/actions/income-expense";
+import { CashflowSankey } from "@/components/income-expense/cashflow-sankey";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ChartContainer, ChartTooltip } from "@/components/ui/chart";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { formatCurrency } from "@/lib/utils";
 
 type TrendData = Awaited<ReturnType<typeof getMonthlyIncomeExpense>>;
@@ -38,7 +45,6 @@ interface IncomeExpenseContentProps {
     cumulativeIncome: number;
     cumulativeExpense: number;
     cumulativeBalance: number;
-    liabilityChange?: number;
   }>;
 }
 
@@ -127,9 +133,8 @@ export function IncomeExpenseContent({
       .map(d => ({
         month: d.period.split("-")[1],
         income: d.income,
-        expense: d.expense,
+        expense: -d.expense,
         balance: d.balance,
-        liabilityChange: d.liabilityChange ?? 0,
       }));
   }, [trendData, year]);
 
@@ -164,7 +169,7 @@ export function IncomeExpenseContent({
     return annualData.map(d => ({
       year: d.year,
       income: d.income,
-      expense: d.expense,
+      expense: -d.expense,
       balance: d.balance,
     }));
   }, [annualData]);
@@ -185,28 +190,36 @@ export function IncomeExpenseContent({
               <span className="text-lg">‹</span>
             </Button>
             <div className="flex items-center gap-2">
-              <select
-                value={year}
-                onChange={e => setYear(Number(e.target.value))}
-                className="h-9 w-20 rounded-md border border-zinc-700 bg-zinc-900 px-2 text-sm text-zinc-200"
+              <Select
+                value={String(year)}
+                onValueChange={v => setYear(Number(v))}
               >
-                {yearOptions.map(y => (
-                  <option key={y} value={y}>
-                    {y}年
-                  </option>
-                ))}
-              </select>
-              <select
-                value={month}
-                onChange={e => setMonth(Number(e.target.value))}
-                className="h-9 w-20 rounded-md border border-zinc-700 bg-zinc-900 px-2 text-sm text-zinc-200"
+                <SelectTrigger size="sm" className="h-9 w-32">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {yearOptions.map(y => (
+                    <SelectItem key={y} value={String(y)}>
+                      {y}年
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select
+                value={String(month)}
+                onValueChange={v => setMonth(Number(v))}
               >
-                {Array.from({ length: 12 }, (_, i) => i + 1).map(m => (
-                  <option key={m} value={m}>
-                    {m}月
-                  </option>
-                ))}
-              </select>
+                <SelectTrigger size="sm" className="h-9 w-20">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {Array.from({ length: 12 }, (_, i) => i + 1).map(m => (
+                    <SelectItem key={m} value={String(m)}>
+                      {m}月
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <Button
               type="button"
@@ -271,8 +284,8 @@ export function IncomeExpenseContent({
         )}
       </div>
 
-      {/* キャッシュフロー可視化（リング型） */}
-      {monthlyData && (
+      {/* キャッシュフロー可視化（Sankey ダイアグラム・3 カラム構成） */}
+      {monthlyData && monthlyData.expenseByCategory.length > 0 && (
         <Card>
           <CardHeader>
             <CardTitle className="text-base font-medium text-zinc-200">
@@ -280,104 +293,7 @@ export function IncomeExpenseContent({
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="flex items-center justify-center gap-6 py-4">
-              {(() => {
-                const maxAmount = Math.max(
-                  monthlyData.totalIncome,
-                  monthlyData.totalExpense,
-                  Math.abs(monthlyData.balance),
-                  1,
-                );
-                const rings = [
-                  {
-                    name: "収入",
-                    amount: monthlyData.totalIncome,
-                    color: "#10b981",
-                    radius: Math.max(
-                      20,
-                      (monthlyData.totalIncome / maxAmount) * 50,
-                    ),
-                  },
-                  {
-                    name: "支出",
-                    amount: monthlyData.totalExpense,
-                    color: "#ef4444",
-                    radius: Math.max(
-                      20,
-                      (monthlyData.totalExpense / maxAmount) * 50,
-                    ),
-                  },
-                  {
-                    name: "純流動",
-                    amount: monthlyData.balance,
-                    color: monthlyData.balance >= 0 ? "#3b82f6" : "#f97316",
-                    radius: Math.max(
-                      20,
-                      (Math.abs(monthlyData.balance) / maxAmount) * 50,
-                    ),
-                  },
-                ];
-                return rings.map(ring => (
-                  <div
-                    key={ring.name}
-                    className="flex flex-col items-center gap-1"
-                  >
-                    <div className="relative w-28 h-28 shrink-0">
-                      <ChartContainer
-                        config={{
-                          [ring.name]: {
-                            label: ring.name,
-                            color: ring.color,
-                          },
-                        }}
-                        className="w-full h-full"
-                      >
-                        <PieChart>
-                          <Pie
-                            data={[
-                              {
-                                name: ring.name,
-                                value: Math.max(ring.radius, 1),
-                              },
-                              { name: "empty", value: 999 },
-                            ]}
-                            dataKey="value"
-                            nameKey="name"
-                            innerRadius={ring.radius * 0.55}
-                            outerRadius={ring.radius}
-                            startAngle={90}
-                            endAngle={-270}
-                            strokeWidth={2}
-                            stroke="transparent"
-                          >
-                            <Cell key="ring" fill={ring.color} />
-                            <Cell key="empty" fill="transparent" />
-                          </Pie>
-                        </PieChart>
-                      </ChartContainer>
-                      <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                        <span className="text-[10px] text-zinc-400">
-                          {ring.name}
-                        </span>
-                        <span
-                          className={`text-xs font-bold font-mono ${
-                            ring.name === "収入"
-                              ? "text-emerald-400"
-                              : ring.name === "支出"
-                                ? "text-red-400"
-                                : ring.amount >= 0
-                                  ? "text-blue-400"
-                                  : "text-orange-400"
-                          }`}
-                        >
-                          {formatCurrency(ring.amount)}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                ));
-              })()}
-            </div>
+            <CashflowSankey data={monthlyData} />
           </CardContent>
         </Card>
       )}
@@ -393,8 +309,11 @@ export function IncomeExpenseContent({
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="flex items-center gap-6">
-                  <div className="w-48 h-48 shrink-0">
+                <div
+                  className="flex items-center gap-6"
+                  style={{ flexDirection: "column" }}
+                >
+                  <div className="w-48 h-48 shrink-0 overflow-hidden">
                     <ChartContainer
                       config={Object.fromEntries(
                         incomePieData.map((d, i) => [
@@ -424,8 +343,8 @@ export function IncomeExpenseContent({
                             if (!active || !payload?.length) return null;
                             const item = payload[0];
                             return (
-                              <div className="rounded-lg border border-zinc-700 bg-zinc-900 p-2 shadow-sm relative z-50">
-                                <div className="mb-1 text-[10px] text-zinc-400">
+                              <div className="rounded-lg border border-zinc-700 bg-zinc-900 p-2 shadow-sm relative z-50 max-w-[280px]">
+                                <div className="mb-1 text-[10px] text-zinc-400 truncate whitespace-nowrap">
                                   {String(item.name ?? "")}
                                 </div>
                                 <div className="font-mono text-sm font-bold text-zinc-100">
@@ -438,7 +357,7 @@ export function IncomeExpenseContent({
                       </PieChart>
                     </ChartContainer>
                   </div>
-                  <div className="flex-1 space-y-1.5 overflow-y-auto max-h-[200px]">
+                  <div className="w-full space-y-1.5">
                     {incomePieData
                       .sort((a, b) => b.value - a.value)
                       .map(item => {
@@ -481,8 +400,11 @@ export function IncomeExpenseContent({
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="flex items-center gap-6">
-                  <div className="w-48 h-48 shrink-0">
+                <div
+                  className="flex items-center gap-6"
+                  style={{ flexDirection: "column" }}
+                >
+                  <div className="w-48 h-48 shrink-0 overflow-hidden">
                     <ChartContainer
                       config={Object.fromEntries(
                         expensePieData.map((d, i) => [
@@ -512,8 +434,8 @@ export function IncomeExpenseContent({
                             if (!active || !payload?.length) return null;
                             const item = payload[0];
                             return (
-                              <div className="rounded-lg border border-zinc-700 bg-zinc-900 p-2 shadow-sm relative z-50">
-                                <div className="mb-1 text-[10px] text-zinc-400">
+                              <div className="rounded-lg border border-zinc-700 bg-zinc-900 p-2 shadow-sm relative z-50 max-w-[280px]">
+                                <div className="mb-1 text-[10px] text-zinc-400 truncate whitespace-nowrap">
                                   {String(item.name ?? "")}
                                 </div>
                                 <div className="font-mono text-sm font-bold text-zinc-100">
@@ -526,7 +448,7 @@ export function IncomeExpenseContent({
                       </PieChart>
                     </ChartContainer>
                   </div>
-                  <div className="flex-1 space-y-1.5 overflow-y-auto max-h-[200px]">
+                  <div className="w-full space-y-1.5">
                     {expensePieData
                       .sort((a, b) => b.value - a.value)
                       .map(item => {
@@ -589,10 +511,6 @@ export function IncomeExpenseContent({
                     label: "収支",
                     color: "#3b82f6",
                   },
-                  liability: {
-                    label: "負債増減",
-                    color: "#a855f7",
-                  },
                 }}
                 className="h-full w-full"
               >
@@ -618,13 +536,15 @@ export function IncomeExpenseContent({
                     fontSize={12}
                     tickLine={false}
                     axisLine={false}
-                    tickFormatter={value =>
-                      value >= 100000000
-                        ? `${(value / 100000000).toFixed(1)}億`
-                        : value >= 10000
-                          ? `${Math.round(value / 10000)}万`
-                          : `${value}`
-                    }
+                    tickFormatter={value => {
+                      const abs = Math.abs(value);
+                      const sign = value < 0 ? "-" : "";
+                      if (abs >= 100000000)
+                        return `${sign}${(abs / 100000000).toFixed(1)}億`;
+                      if (abs >= 10000)
+                        return `${sign}${Math.round(abs / 10000)}万`;
+                      return `${sign}${abs}`;
+                    }}
                     width={80}
                   />
                   <ChartTooltip
@@ -636,7 +556,6 @@ export function IncomeExpenseContent({
                         income: "収入",
                         expense: "支出",
                         balance: "収支",
-                        liabilityChange: "負債増減",
                       };
                       return (
                         <div className="rounded-lg border border-zinc-700 bg-zinc-900 p-2 shadow-sm relative z-50">
@@ -673,7 +592,6 @@ export function IncomeExpenseContent({
                         income: "収入",
                         expense: "支出",
                         balance: "収支",
-                        liability: "負債増減",
                       };
                       return labels[value] ?? value;
                     }}
@@ -689,12 +607,6 @@ export function IncomeExpenseContent({
                     dataKey="expense"
                     fill="var(--color-expense)"
                     radius={[4, 4, 0, 0]}
-                    stackId="positive"
-                  />
-                  <Bar
-                    dataKey="liabilityChange"
-                    fill="var(--color-liability)"
-                    radius={[0, 0, 4, 4]}
                     stackId="negative"
                   />
                   <Line
@@ -739,7 +651,7 @@ export function IncomeExpenseContent({
                 }}
                 className="h-full w-full"
               >
-                <LineChart
+                <BarChart
                   data={annualTrendData}
                   margin={{ top: 10, right: 10, left: 10, bottom: 0 }}
                 >
@@ -760,13 +672,15 @@ export function IncomeExpenseContent({
                     fontSize={12}
                     tickLine={false}
                     axisLine={false}
-                    tickFormatter={value =>
-                      value >= 100000000
-                        ? `${(value / 100000000).toFixed(1)}億`
-                        : value >= 10000
-                          ? `${Math.round(value / 10000)}万`
-                          : `${value}`
-                    }
+                    tickFormatter={value => {
+                      const abs = Math.abs(value);
+                      const sign = value < 0 ? "-" : "";
+                      if (abs >= 100000000)
+                        return `${sign}${(abs / 100000000).toFixed(1)}億`;
+                      if (abs >= 10000)
+                        return `${sign}${Math.round(abs / 10000)}万`;
+                      return `${sign}${abs}`;
+                    }}
                     width={80}
                   />
                   <ChartTooltip
@@ -819,21 +733,15 @@ export function IncomeExpenseContent({
                     }}
                     wrapperStyle={{ fontSize: "12px" }}
                   />
-                  <Line
-                    type="monotone"
+                  <Bar
                     dataKey="income"
-                    stroke="var(--color-income)"
-                    strokeWidth={2}
-                    dot={false}
-                    activeDot={{ r: 4 }}
+                    fill="var(--color-income)"
+                    radius={[4, 4, 0, 0]}
                   />
-                  <Line
-                    type="monotone"
+                  <Bar
                     dataKey="expense"
-                    stroke="var(--color-expense)"
-                    strokeWidth={2}
-                    dot={false}
-                    activeDot={{ r: 4 }}
+                    fill="var(--color-expense)"
+                    radius={[4, 4, 0, 0]}
                   />
                   <Line
                     type="monotone"
@@ -843,7 +751,7 @@ export function IncomeExpenseContent({
                     dot={false}
                     activeDot={{ r: 4 }}
                   />
-                </LineChart>
+                </BarChart>
               </ChartContainer>
             </div>
           </CardContent>

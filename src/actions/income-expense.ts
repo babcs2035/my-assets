@@ -145,56 +145,6 @@ async function getIncomeExpenseTrendInternal(
     cumulativeBalance = cumulativeIncome - cumulativeExpense;
   }
 
-  // 負債の月間増減を計算（balanceHistory から LIABILITY サブアカウントの残高変化を取得）
-  const liabilitySubAccounts = await prisma.subAccount.findMany({
-    where: {
-      isHidden: false,
-      assetType: "LIABILITY",
-      ...(mainAccountId ? { mainAccountId } : {}),
-      ...(subAccountId ? { id: subAccountId } : {}),
-    },
-    select: { id: true },
-  });
-
-  const liabilityMonthlyMap = new Map<string, number>();
-  if (liabilitySubAccounts.length > 0) {
-    const liabilityHistories = await prisma.balanceHistory.findMany({
-      where: {
-        subAccountId: { in: liabilitySubAccounts.map(s => s.id) },
-      },
-      select: { date: true, balance: true },
-      orderBy: { date: "asc" },
-    });
-
-    // 日別残高をマージ
-    const dailyBalanceMap = new Map<string, number>();
-    for (const h of liabilityHistories) {
-      const d = new Date(h.date);
-      const dateKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-      dailyBalanceMap.set(dateKey, h.balance);
-    }
-
-    // 月別増減を計算
-    const sortedDates = Array.from(dailyBalanceMap.keys()).sort();
-    let prevBalance: number | null = null;
-    for (const dateKey of sortedDates) {
-      const d = new Date(dateKey);
-      const monthKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-      const currentBalance = dailyBalanceMap.get(dateKey) ?? 0;
-      if (prevBalance !== null) {
-        const change = currentBalance - prevBalance;
-        if (!liabilityMonthlyMap.has(monthKey)) {
-          liabilityMonthlyMap.set(monthKey, 0);
-        }
-        liabilityMonthlyMap.set(
-          monthKey,
-          (liabilityMonthlyMap.get(monthKey) ?? 0) + change,
-        );
-      }
-      prevBalance = currentBalance;
-    }
-  }
-
   const trend = Array.from(monthlyMap.entries())
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([key, values]) => ({
@@ -203,7 +153,6 @@ async function getIncomeExpenseTrendInternal(
       cumulativeIncome,
       cumulativeExpense,
       cumulativeBalance,
-      liabilityChange: liabilityMonthlyMap.get(key) ?? 0,
     }));
 
   return trend;

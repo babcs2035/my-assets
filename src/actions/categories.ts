@@ -6,12 +6,17 @@ import { prisma } from "@/lib/prisma";
 import {
   type CategoryRuleCreateInput,
   type CategoryRuleUpdateInput,
+  categoryImportSchema,
   categoryRuleCreateSchema,
   categoryRuleUpdateSchema,
   type MainCategoryCreateInput,
+  type MainCategoryUpdateInput,
   mainCategoryCreateSchema,
+  mainCategoryUpdateSchema,
   type SubCategoryCreateInput,
+  type SubCategoryUpdateInput,
   subCategoryCreateSchema,
+  subCategoryUpdateSchema,
 } from "@/lib/validations";
 
 /**
@@ -54,6 +59,44 @@ export async function createMainCategory(input: MainCategoryCreateInput) {
       ...data,
       sortOrder: nextOrder,
     },
+  });
+  revalidatePath("/settings");
+  revalidatePath("/transactions");
+  return result;
+}
+
+/**
+ * メインカテゴリーの名前を更新する関数である．
+ * 同じ type 内で同名が存在する場合，Error をスローする．
+ */
+export async function updateMainCategory(
+  id: string,
+  input: MainCategoryUpdateInput,
+) {
+  const data = mainCategoryUpdateSchema.parse(input);
+  logger.info(`📝 Updating main category ${id} to "${data.name}"`);
+
+  // 既存カテゴリーを取得（type は一意制約のチェックに必要）
+  const existing = await prisma.mainCategory.findUnique({ where: { id } });
+  if (!existing) throw new Error("カテゴリーが見つかりません");
+
+  // 同じ type 内で同名のカテゴリーが存在するかチェック（自分自身は除外）
+  const duplicate = await prisma.mainCategory.findFirst({
+    where: {
+      name: data.name,
+      type: existing.type,
+      id: { not: id },
+    },
+  });
+  if (duplicate) {
+    throw new Error(
+      `同じ"${existing.type}"カテゴリーに"${data.name}"は既に存在します`,
+    );
+  }
+
+  const result = await prisma.mainCategory.update({
+    where: { id },
+    data: { name: data.name },
   });
   revalidatePath("/settings");
   revalidatePath("/transactions");
@@ -109,6 +152,42 @@ export async function createSubCategory(input: SubCategoryCreateInput) {
       ...data,
       sortOrder: nextOrder,
     },
+  });
+  revalidatePath("/settings");
+  revalidatePath("/transactions");
+  return result;
+}
+
+/**
+ * サブカテゴリーの名前を更新する関数である．
+ * 同じメインカテゴリー内で同名が存在する場合，Error をスローする．
+ */
+export async function updateSubCategory(
+  id: string,
+  input: SubCategoryUpdateInput,
+) {
+  const data = subCategoryUpdateSchema.parse(input);
+  logger.info(`📝 Updating sub category ${id} to "${data.name}"`);
+
+  // 既存カテゴリーを取得（mainCategoryId は一意制約のチェックに必要）
+  const existing = await prisma.subCategoryItem.findUnique({ where: { id } });
+  if (!existing) throw new Error("サブカテゴリーが見つかりません");
+
+  // 同じ mainCategoryId 内で同名のサブカテゴリーが存在するかチェック（自分自身は除外）
+  const duplicate = await prisma.subCategoryItem.findFirst({
+    where: {
+      name: data.name,
+      mainCategoryId: existing.mainCategoryId,
+      id: { not: id },
+    },
+  });
+  if (duplicate) {
+    throw new Error(`同じ親カテゴリーに"${data.name}"は既に存在します`);
+  }
+
+  const result = await prisma.subCategoryItem.update({
+    where: { id },
+    data: { name: data.name },
   });
   revalidatePath("/settings");
   revalidatePath("/transactions");
@@ -363,4 +442,94 @@ export async function reorderSubCategories(
     ),
   );
   revalidatePath("/settings");
+}
+
+/**
+ * カテゴリー・ルールデータを JSON 形式でエクスポートする関数である．
+ * すべての MainCategory，SubCategoryItem，CategoryRule をネスト構造で取得する．
+ */
+export async function exportCategories() {
+  logger.info("Exporting categories...");
+  const categories = await prisma.mainCategory.findMany({
+    include: {
+      subCategories: {
+        include: {
+          rules: {
+            select: { keyword: true, priority: true },
+          },
+        },
+        orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+      },
+    },
+    orderBy: [{ type: "asc" }, { sortOrder: "asc" }, { name: "asc" }],
+  });
+
+  const exportData = {
+    exportedAt: new Date().toISOString(),
+    categories: categories.map(mc => ({
+      name: mc.name,
+      type: mc.type,
+      subCategories: mc.subCategories.map(sc => ({
+        name: sc.name,
+        rules: sc.rules.map(r => ({
+          keyword: r.keyword,
+          priority: r.priority,
+        })),
+      })),
+    })),
+  };
+
+  return exportData;
+}
+
+/**
+ * カテゴリー・ルールデータを JSON からインポートする関数である．
+ * 既存の MainCategory，SubCategoryItem，CategoryRule を全削除後，インポートデータで上書きする．
+ * Transaction の subCategoryId は保持される．
+ */
+export async function importCategories(data: unknown) {
+  const parsed = categoryImportSchema.parse(data);
+  logger.info(
+    `Importing categories with ${parsed.categories.length} main categories`,
+  );
+
+  // 既存データを全削除（Transaction は保持）
+  await prisma.$transaction([
+    prisma.categoryRule.deleteMany(),
+    prisma.subCategoryItem.deleteMany(),
+    prisma.mainCategory.deleteMany(),
+  ]);
+
+  // 各 type 内の sortOrder をインデックスで計算（DB は空なので自前で管理）
+  const typeCounter: Record<string, number> = { INCOME: 0, EXPENSE: 0 };
+  const createPromises = parsed.categories.map(mc => {
+    const sortOrder = typeCounter[mc.type]++;
+
+    return prisma.mainCategory.create({
+      data: {
+        name: mc.name,
+        type: mc.type,
+        sortOrder: sortOrder,
+        subCategories: {
+          create: mc.subCategories.map((sc, scIndex) => ({
+            name: sc.name,
+            sortOrder: scIndex,
+            rules: {
+              create: sc.rules.map(r => ({
+                keyword: r.keyword,
+                priority: r.priority,
+              })),
+            },
+          })),
+        },
+      },
+    });
+  });
+
+  // トランザクションで新規作成
+  await prisma.$transaction(createPromises);
+
+  revalidatePath("/settings");
+  revalidatePath("/transactions");
+  logger.info("Categories imported successfully.");
 }

@@ -6,6 +6,7 @@ import {
   ChevronDown,
   ChevronRight,
   CreditCard,
+  Edit2,
   GripVertical,
   Loader2,
   Minus,
@@ -17,6 +18,7 @@ import {
   Trash2,
   TrendingDown,
   TrendingUp,
+  Upload,
   XCircle,
 } from "lucide-react";
 import { useCallback, useEffect, useState, useTransition } from "react";
@@ -34,10 +36,14 @@ import {
   deleteCategoryRule,
   deleteMainCategory,
   deleteSubCategory,
+  exportCategories,
   getCategories,
   getCategoryRules,
+  importCategories,
   reorderMainCategories,
   reorderSubCategories,
+  updateMainCategory,
+  updateSubCategory,
 } from "@/actions/categories";
 import {
   abortSyncProvider,
@@ -191,6 +197,19 @@ export function SettingsContent() {
   // Rule Form State
   const [ruleKeywords, setRuleKeywords] = useState("");
   const [ruleSubCategoryId, setRuleSubCategoryId] = useState<string>("");
+
+  // Category Edit State
+  const [editingMainCategory, setEditingMainCategory] = useState<{
+    id: string;
+    name: string;
+  } | null>(null);
+  const [editingSubCategory, setEditingSubCategory] = useState<{
+    id: string;
+    name: string;
+  } | null>(null);
+
+  // Category Import State
+  const [isImporting, setIsImporting] = useState(false);
 
   // Account Creation Form State
   const [newAccountLabel, setNewAccountLabel] = useState("");
@@ -360,6 +379,86 @@ export function SettingsContent() {
     }
   };
 
+  const handleUpdateMainCategory = async (id: string, name: string) => {
+    try {
+      await updateMainCategory(id, { name });
+      toast.success("カテゴリー名を更新しました．");
+      setEditingMainCategory(null);
+      fetchData();
+    } catch (e: unknown) {
+      const message =
+        e instanceof Error ? e.message : "カテゴリー名の更新に失敗しました．";
+      toast.error(message);
+    }
+  };
+
+  const handleDeleteSubCategory = async (id: string) => {
+    try {
+      await deleteSubCategory(id);
+      toast.success("サブカテゴリーを削除しました．");
+      fetchData();
+    } catch {
+      toast.error("サブカテゴリーの削除に失敗しました．");
+    }
+  };
+
+  const handleUpdateSubCategory = async (id: string, name: string) => {
+    try {
+      await updateSubCategory(id, { name });
+      toast.success("サブカテゴリー名を更新しました．");
+      setEditingSubCategory(null);
+      fetchData();
+    } catch (e: unknown) {
+      const message =
+        e instanceof Error
+          ? e.message
+          : "サブカテゴリー名の更新に失敗しました．";
+      toast.error(message);
+    }
+  };
+
+  const handleExportCategories = async () => {
+    try {
+      const data = await exportCategories();
+      const blob = new Blob([JSON.stringify(data, null, 2)], {
+        type: "application/json",
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `categories-export-${new Date().toISOString().slice(0, 10)}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      toast.success("エクスポートしました．");
+    } catch {
+      toast.error("エクスポートに失敗しました．");
+    }
+  };
+
+  const handleImportCategories = async (
+    event: React.ChangeEvent<HTMLInputElement>,
+  ) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setIsImporting(true);
+    try {
+      const text = await file.text();
+      const data = JSON.parse(text);
+      await importCategories(data);
+      toast.success("インポートしました．");
+      fetchData();
+    } catch (e: unknown) {
+      const message =
+        e instanceof Error ? e.message : "インポートに失敗しました．";
+      toast.error(message);
+    } finally {
+      setIsImporting(false);
+      event.target.value = "";
+    }
+  };
+
   const handleAddSubCategory = async () => {
     if (!selectedMainCategory || !newSubCategoryName) return;
     try {
@@ -373,16 +472,6 @@ export function SettingsContent() {
       fetchData();
     } catch {
       toast.error("サブカテゴリーの追加に失敗しました．");
-    }
-  };
-
-  const handleDeleteSubCategory = async (id: string) => {
-    try {
-      await deleteSubCategory(id);
-      toast.success("サブカテゴリーを削除しました．");
-      fetchData();
-    } catch {
-      toast.error("サブカテゴリーの削除に失敗しました．");
     }
   };
 
@@ -622,6 +711,63 @@ export function SettingsContent() {
               </Badge>
             </div>
             <div className="flex items-center gap-1 shrink-0">
+              <Dialog
+                open={editingMainCategory?.id === mc.id}
+                onOpenChange={open => {
+                  if (!open) setEditingMainCategory(null);
+                }}
+              >
+                <DialogTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7 text-zinc-500 hover:text-blue-400"
+                    onClick={() =>
+                      setEditingMainCategory({ id: mc.id, name: mc.name })
+                    }
+                  >
+                    <Edit2 className="h-3.5 w-3.5" />
+                  </Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>メインカテゴリー名の変更</DialogTitle>
+                  </DialogHeader>
+                  <div className="space-y-3">
+                    <Label htmlFor="edit-main-category-name">
+                      カテゴリー名
+                    </Label>
+                    <Input
+                      id="edit-main-category-name"
+                      defaultValue={mc.name}
+                      onKeyDown={e => {
+                        if (e.key === "Enter") {
+                          const input = e.currentTarget;
+                          handleUpdateMainCategory(mc.id, input.value);
+                        }
+                      }}
+                    />
+                  </div>
+                  <DialogFooter>
+                    <Button
+                      variant="outline"
+                      onClick={() => setEditingMainCategory(null)}
+                    >
+                      キャンセル
+                    </Button>
+                    <Button
+                      onClick={() => {
+                        const input = document.getElementById(
+                          "edit-main-category-name",
+                        ) as HTMLInputElement;
+                        if (input) handleUpdateMainCategory(mc.id, input.value);
+                      }}
+                    >
+                      変更
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
               <AlertDialog>
                 <AlertDialogTrigger asChild>
                   <Button
@@ -681,6 +827,64 @@ export function SettingsContent() {
                     </span>
                   </div>
                   <div className="flex items-center gap-1 shrink-0 ml-2">
+                    <Dialog
+                      open={editingSubCategory?.id === sc.id}
+                      onOpenChange={open => {
+                        if (!open) setEditingSubCategory(null);
+                      }}
+                    >
+                      <DialogTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6 text-zinc-600 hover:text-blue-400"
+                          onClick={() =>
+                            setEditingSubCategory({ id: sc.id, name: sc.name })
+                          }
+                        >
+                          <Edit2 className="h-3 w-3" />
+                        </Button>
+                      </DialogTrigger>
+                      <DialogContent>
+                        <DialogHeader>
+                          <DialogTitle>サブカテゴリー名の変更</DialogTitle>
+                        </DialogHeader>
+                        <div className="space-y-3">
+                          <Label htmlFor="edit-sub-category-name">
+                            カテゴリー名
+                          </Label>
+                          <Input
+                            id="edit-sub-category-name"
+                            defaultValue={sc.name}
+                            onKeyDown={e => {
+                              if (e.key === "Enter") {
+                                const input = e.currentTarget;
+                                handleUpdateSubCategory(sc.id, input.value);
+                              }
+                            }}
+                          />
+                        </div>
+                        <DialogFooter>
+                          <Button
+                            variant="outline"
+                            onClick={() => setEditingSubCategory(null)}
+                          >
+                            キャンセル
+                          </Button>
+                          <Button
+                            onClick={() => {
+                              const input = document.getElementById(
+                                "edit-sub-category-name",
+                              ) as HTMLInputElement;
+                              if (input)
+                                handleUpdateSubCategory(sc.id, input.value);
+                            }}
+                          >
+                            変更
+                          </Button>
+                        </DialogFooter>
+                      </DialogContent>
+                    </Dialog>
                     <AlertDialog>
                       <AlertDialogTrigger asChild>
                         <Button
@@ -1518,6 +1722,38 @@ export function SettingsContent() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
+            {/* Export/Import Buttons */}
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleExportCategories}
+                className="text-zinc-400 hover:text-zinc-200"
+              >
+                <Upload className="mr-2 h-3.5 w-3.5" />
+                カテゴリーをエクスポート
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() =>
+                  document.getElementById("category-import-input")?.click()
+                }
+                disabled={isImporting}
+                className="text-zinc-400 hover:text-zinc-200"
+              >
+                <Upload className="mr-2 h-3.5 w-3.5" />
+                {isImporting ? "インポート中..." : "カテゴリーをインポート"}
+              </Button>
+              <input
+                id="category-import-input"
+                type="file"
+                accept=".json"
+                className="hidden"
+                onChange={handleImportCategories}
+              />
+            </div>
+
             <div className="grid gap-6 md:grid-cols-2 md:gap-4">
               <div className="space-y-2">
                 <Label>メインカテゴリー追加</Label>

@@ -40,6 +40,14 @@ export const mainCategoryCreateSchema = z.object({
 export type MainCategoryCreateInput = z.infer<typeof mainCategoryCreateSchema>;
 
 /**
+ * メインカテゴリー (MainCategory) 更新時のバリデーションスキーマである．
+ */
+export const mainCategoryUpdateSchema = z.object({
+  name: z.string().min(1, "カテゴリー名は必須です"),
+});
+export type MainCategoryUpdateInput = z.infer<typeof mainCategoryUpdateSchema>;
+
+/**
  * サブカテゴリー (SubCategoryItem) 作成時のバリデーションスキーマである．
  */
 export const subCategoryCreateSchema = z.object({
@@ -47,6 +55,14 @@ export const subCategoryCreateSchema = z.object({
   mainCategoryId: z.string().min(1, "メインカテゴリーは必須です"),
 });
 export type SubCategoryCreateInput = z.infer<typeof subCategoryCreateSchema>;
+
+/**
+ * サブカテゴリー (SubCategoryItem) 更新時のバリデーションスキーマである．
+ */
+export const subCategoryUpdateSchema = z.object({
+  name: z.string().min(1, "サブカテゴリー名は必須です"),
+});
+export type SubCategoryUpdateInput = z.infer<typeof subCategoryUpdateSchema>;
 
 /**
  * カテゴリールール (CategoryRule) 作成時のバリデーションスキーマである．
@@ -98,5 +114,37 @@ export const categoryRuleUpdateSchema = z.object({
   subCategoryId: z.string().optional(),
 });
 export type CategoryRuleUpdateInput = z.infer<typeof categoryRuleUpdateSchema>;
+
+/**
+ * カテゴリエクスポートデータのスキーマである．
+ */
+export const categoryExportSchema = z.object({
+  exportedAt: z.string(),
+  categories: z.array(
+    z.object({
+      name: z.string(),
+      type: z.enum(["INCOME", "EXPENSE"]),
+      subCategories: z.array(
+        z.object({
+          name: z.string(),
+          rules: z.array(
+            z.object({
+              keyword: z.string(),
+              priority: z.number().int(),
+            }),
+          ),
+        }),
+      ),
+    }),
+  ),
+});
+export type CategoryExportData = z.infer<typeof categoryExportSchema>;
+
+/**
+ * カテゴリインポートデータのスキーマである．
+ * エクスポートデータと同じ構造．
+ */
+export const categoryImportSchema = categoryExportSchema;
+export type CategoryImportData = z.infer<typeof categoryImportSchema>;
 
 // providerCreateSchema を流用する．既存の ProviderCreateInput 型で十分である．

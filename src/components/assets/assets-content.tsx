@@ -8,7 +8,6 @@ import {
   Cell,
   Pie,
   PieChart,
-  XAxis,
   YAxis,
 } from "recharts";
 import { HoldingTable } from "@/components/accounts/holding-table";

@@ -13,7 +13,6 @@ import {
 } from "@/actions/dashboard";
 import { getLastSyncInfo } from "@/actions/system";
 import { DashboardAreaWrapper } from "@/components/dashboard/dashboard-area-wrapper";
-import { DashboardDonutChart } from "@/components/dashboard/dashboard-donut-chart";
 import { PageHeader } from "@/components/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {

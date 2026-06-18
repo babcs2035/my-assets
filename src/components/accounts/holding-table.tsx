@@ -72,7 +72,7 @@ export function HoldingTable({
     <Table>
       <TableHeader>
         <TableRow>
-          <TableHead className="w-[140px]">銘柄名</TableHead>
+          <TableHead className="min-w-[240px]">銘柄名</TableHead>
           <TableHead className="w-[100px]">口座</TableHead>
           <TableHead className="text-right">保有数</TableHead>
           {showDetails && (
