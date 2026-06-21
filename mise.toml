@@ -42,17 +42,7 @@ run = "pnpm start"
 [tasks.check]
 description = "Run type check and linter"
 depends = ["install"]
-run = "pnpm check"
-
-[tasks.format]
-description = "Format code with Biome"
-depends = ["install"]
-run = "pnpm biome format --write src"
-
-[tasks."lint:fix"]
-description = "Lint and fix code with Biome"
-depends = ["install"]
-run = "pnpm biome check --write --unsafe src"
+run = "pnpm format && pnpm lint && pnpm typecheck"
 
 [tasks."db:up"]
 description = "Start database container"

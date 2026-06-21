@@ -435,7 +435,7 @@ export function TransactionsContent() {
                   {transactions.map(tx => (
                     <div
                       key={tx.id}
-                      className={`p-3 ${tx.isTransfer ? "opacity-70" : ""}`}
+                      className={`p-3 ${tx.isTransfer ? "opacity-70" : ""} ${!tx.subCategoryId && !tx.isTransfer ? "!bg-amber-500/10" : ""}`}
                     >
                       <div className="flex justify-between items-start gap-2 min-w-0">
                         <div className="flex-1 min-w-0">
@@ -583,7 +583,7 @@ export function TransactionsContent() {
                       {transactions.map(tx => (
                         <TableRow
                           key={tx.id}
-                          className={tx.isTransfer ? "opacity-60" : ""}
+                          className={`${tx.isTransfer ? "opacity-60" : ""} ${!tx.subCategoryId && !tx.isTransfer ? "hover:!bg-amber-500/10 bg-amber-500/10" : ""}`}
                         >
                           <TableCell className="whitespace-nowrap text-zinc-300">
                             {formatJSTDate(tx.date).slice(5).replace("-", "/")}

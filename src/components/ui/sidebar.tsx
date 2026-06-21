@@ -132,7 +132,7 @@ export function Sidebar({
     <aside
       className={cn(
         "group sticky top-0 z-30 hidden h-svh flex-col border-r border-zinc-800 bg-zinc-950 text-zinc-50 transition-[width] duration-300 ease-in-out md:flex",
-        expanded ? "w-64" : "w-[60px]", // 256px vs 60px
+        expanded ? "w-48" : "w-[60px]", // 192px vs 60px
         className,
       )}
       {...props}

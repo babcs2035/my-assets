@@ -116,29 +116,31 @@ export function HoldingTable({
       <TableBody>
         {sortedHoldings.map(h => (
           <TableRow key={h.id}>
-            <TableCell className="font-medium text-zinc-200">
+            <TableCell className="whitespace-nowrap font-medium text-zinc-200">
               {h.name}
             </TableCell>
-            <TableCell className="text-zinc-400 text-sm">{h.account}</TableCell>
-            <TableCell className="text-right font-mono text-zinc-300">
+            <TableCell className="whitespace-nowrap text-zinc-400 text-sm">
+              {h.account}
+            </TableCell>
+            <TableCell className="whitespace-nowrap text-right font-mono text-zinc-300">
               {h.quantity.toLocaleString()}
             </TableCell>
             {showDetails && (
               <>
-                <TableCell className="text-right font-mono text-zinc-300">
+                <TableCell className="whitespace-nowrap text-right font-mono text-zinc-300">
                   {formatCurrency(h.avgCostBasis)}
                 </TableCell>
-                <TableCell className="text-right font-mono text-zinc-300">
+                <TableCell className="whitespace-nowrap text-right font-mono text-zinc-300">
                   {formatCurrency(h.unitPrice)}
                 </TableCell>
               </>
             )}
-            <TableCell className="text-right font-mono font-medium text-zinc-100">
+            <TableCell className="whitespace-nowrap text-right font-mono font-medium text-zinc-100">
               {formatCurrency(h.valuation)}
             </TableCell>
             {showDetails && (
               <TableCell
-                className={`text-right font-mono ${h.dayBeforeRatio != null && h.dayBeforeRatio >= 0 ? "text-emerald-400" : "text-zinc-500"}`}
+                className={`whitespace-nowrap text-right font-mono ${h.dayBeforeRatio != null && h.dayBeforeRatio >= 0 ? "text-emerald-400" : "text-zinc-500"}`}
               >
                 {h.dayBeforeRatio != null
                   ? `${h.dayBeforeRatio >= 0 ? "+" : ""}${h.dayBeforeRatio.toLocaleString()}%`
@@ -146,13 +148,13 @@ export function HoldingTable({
               </TableCell>
             )}
             <TableCell
-              className={`text-right font-mono ${h.gainLoss >= 0 ? "text-emerald-400" : "text-red-400"}`}
+              className={`whitespace-nowrap text-right font-mono ${h.gainLoss >= 0 ? "text-emerald-400" : "text-red-400"}`}
             >
               {h.gainLoss >= 0 && "+"}
               {formatCurrency(h.gainLoss)}
             </TableCell>
             <TableCell
-              className={`text-right font-mono ${h.gainLossRate >= 0 ? "text-emerald-400" : "text-red-400"}`}
+              className={`whitespace-nowrap text-right font-mono ${h.gainLossRate >= 0 ? "text-emerald-400" : "text-red-400"}`}
             >
               {h.gainLossRate >= 0 && "+"}
               {h.gainLossRate.toFixed(2)}%

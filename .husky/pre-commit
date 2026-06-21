@@ -1,2 +1,6 @@
-pnpm lint-staged
-mise run check
+export PATH="$HOME/.local/share/mise/installs/npm-pnpm/latest/bin:$PATH"
+
+cd "$(dirname "$0")/.."
+pnpm format
+pnpm lint
+pnpm typecheck

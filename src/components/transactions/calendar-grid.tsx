@@ -18,16 +18,16 @@ import { cn, formatJSTDate } from "@/lib/utils";
 function getHeatmapColor(expense: number, maxExpense: number): string {
   if (maxExpense === 0) return "bg-zinc-950";
   const ratio = Math.min(expense / maxExpense, 1);
-  if (ratio < 0.1) return "bg-red-950/20";
-  if (ratio < 0.2) return "bg-red-950/30";
-  if (ratio < 0.3) return "bg-red-900/35";
-  if (ratio < 0.4) return "bg-red-900/45";
-  if (ratio < 0.5) return "bg-red-800/50";
-  if (ratio < 0.6) return "bg-red-700/55";
-  if (ratio < 0.7) return "bg-red-700/65";
-  if (ratio < 0.8) return "bg-red-600/70";
-  if (ratio < 0.9) return "bg-red-600/80";
-  return "bg-red-500/85";
+  if (ratio < 0.1) return "bg-red-400/10";
+  if (ratio < 0.2) return "bg-red-400/15";
+  if (ratio < 0.3) return "bg-red-400/20";
+  if (ratio < 0.4) return "bg-red-400/25";
+  if (ratio < 0.5) return "bg-red-400/30";
+  if (ratio < 0.6) return "bg-red-500/30";
+  if (ratio < 0.7) return "bg-red-500/35";
+  if (ratio < 0.8) return "bg-red-500/40";
+  if (ratio < 0.9) return "bg-red-500/45";
+  return "bg-red-500/50";
 }
 
 type CalendarData = {
@@ -243,7 +243,6 @@ export function CalendarGrid({
 
             return (
               <button
-                /* biome-ignore lint/suspicious/noArrayIndexKey: calendar cells never reorder */
                 key={idx}
                 type="button"
                 onClick={() => {
@@ -267,17 +266,12 @@ export function CalendarGrid({
                   // 当月以外の日付
                   !cell.isCurrentMonth &&
                     "cursor-default bg-zinc-950/50 text-zinc-600",
+                  // ヒートマップ背景
+                  cell.isCurrentMonth &&
+                    data &&
+                    data.expense > 0 &&
+                    getHeatmapColor(data.expense, maxExpense),
                 )}
-                style={
-                  cell.isCurrentMonth && data && data.expense > 0
-                    ? {
-                        backgroundColor: getHeatmapColor(
-                          data.expense,
-                          maxExpense,
-                        ),
-                      }
-                    : undefined
-                }
               >
                 {/* 日付番号 */}
                 <span
@@ -293,14 +287,10 @@ export function CalendarGrid({
                 {cell.isCurrentMonth && data && data.expense > 0 && (
                   <div className="flex w-full flex-col items-end gap-0.5 min-w-0 mt-0.5">
                     <span
-                      className={cn(
-                        "font-mono font-bold truncate w-full text-right",
-                        data.expense >= 10000
-                          ? "text-xs text-red-200"
-                          : "text-sm text-red-100",
-                      )}
+                      className="font-mono text-xs font-bold truncate w-full text-right text-red-400"
                       title={`支出: ¥${data.expense.toLocaleString()}`}
                     >
+                      -
                       {data.expense >= 100000
                         ? `${(data.expense / 10000).toFixed(0)}万`
                         : data.expense.toLocaleString()}

@@ -180,10 +180,10 @@ export function SyncStatus() {
 
   // サイドバーが開いている時の通常表示内容である．
   return (
-    <div className="px-2 py-2">
+    <div className="px-2 py-2 overflow-hidden">
       <div
         className={cn(
-          "flex items-center justify-between rounded-md border p-2 text-xs transition-colors",
+          "flex flex-col gap-1 rounded-md border p-2 text-xs transition-colors",
           getStatusColor(),
         )}
       >

@@ -17,6 +17,7 @@ import {
 } from "recharts";
 import {
   getAnnualIncomeExpense,
+  getIncomeExpenseTrend,
   getMonthlyIncomeExpense,
 } from "@/actions/income-expense";
 import { CashflowSankey } from "@/components/income-expense/cashflow-sankey";
@@ -37,16 +38,17 @@ type TrendData = Awaited<ReturnType<typeof getMonthlyIncomeExpense>>;
 interface IncomeExpenseContentProps {
   initialYear: number;
   initialMonth: number;
-  trendData: Array<{
-    period: string;
-    income: number;
-    expense: number;
-    balance: number;
-    cumulativeIncome: number;
-    cumulativeExpense: number;
-    cumulativeBalance: number;
-  }>;
 }
+
+type TrendRow = {
+  period: string;
+  income: number;
+  expense: number;
+  balance: number;
+  cumulativeIncome: number;
+  cumulativeExpense: number;
+  cumulativeBalance: number;
+};
 
 const expenseColors = [
   "#ef4444",
@@ -75,7 +77,6 @@ const incomeColors = [
 export function IncomeExpenseContent({
   initialYear,
   initialMonth,
-  trendData,
 }: IncomeExpenseContentProps) {
   const [year, setYear] = useState(initialYear);
   const [month, setMonth] = useState(initialMonth);
@@ -83,6 +84,7 @@ export function IncomeExpenseContent({
   const [annualData, setAnnualData] = useState<
     Array<{ year: number; income: number; expense: number; balance: number }>
   >([]);
+  const [trendData, setTrendData] = useState<TrendRow[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
   const yearOptions = Array.from(
@@ -94,12 +96,14 @@ export function IncomeExpenseContent({
     setIsLoading(true);
     (async () => {
       try {
-        const [data, annual] = await Promise.all([
+        const [data, annual, trend] = await Promise.all([
           getMonthlyIncomeExpense(year, month),
           getAnnualIncomeExpense(),
+          getIncomeExpenseTrend(year),
         ]);
         setMonthlyData(data);
         setAnnualData(annual);
+        setTrendData(trend);
       } finally {
         setIsLoading(false);
       }
@@ -136,7 +140,7 @@ export function IncomeExpenseContent({
         expense: -d.expense,
         balance: d.balance,
       }));
-  }, [trendData, year]);
+  }, [year, trendData]);
 
   const totalMonthlyIncome = monthlyData?.totalIncome ?? 0;
   const totalMonthlyExpense = monthlyData?.totalExpense ?? 0;

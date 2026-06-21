@@ -1,13 +1,9 @@
 import type { Metadata } from "next";
-import { getAccountList } from "@/actions/accounts";
-import { AccountList } from "@/components/accounts/account-list";
+import { Suspense } from "react";
+import { AccountsPageContent } from "@/components/accounts/accounts-page-content";
 import { PageHeader } from "@/components/page-header";
-import { Card, CardContent } from "@/components/ui/card";
-import logger from "@/lib/logger";
+import { Skeleton } from "@/components/ui/skeleton";
 
-/**
- * 動的レンダリングを強制するための設定である．
- */
 export const dynamic = "force-dynamic";
 
 /**
@@ -22,10 +18,7 @@ export const metadata: Metadata = {
  * 口座管理ページコンポーネントである．
  * ガイドブック: タイトルにページの内容を正確に表記する．
  */
-export default async function AccountsPage() {
-  logger.info("📂 Rendering AccountsPage...");
-  const accounts = await getAccountList();
-
+export default function AccountsPage() {
   return (
     <div className="space-y-6 animate-fade-in">
       <PageHeader
@@ -33,20 +26,22 @@ export default async function AccountsPage() {
         description="金融機関と配下の口座を管理します"
       />
 
-      {accounts.length === 0 ? (
-        <Card>
-          <CardContent className="flex flex-col items-center justify-center py-16">
-            <p className="text-sm text-zinc-500">
-              まだ口座が登録されていません
-            </p>
-            <p className="text-xs text-zinc-400 mt-2">
-              設定ページから口座を追加してください
-            </p>
-          </CardContent>
-        </Card>
-      ) : (
-        <AccountList accounts={accounts} />
-      )}
+      <Suspense fallback={<AccountsPageSkeleton />}>
+        <AccountsPageContent />
+      </Suspense>
+    </div>
+  );
+}
+
+/**
+ * 口座管理ページのスケルトンローディングである．
+ */
+function AccountsPageSkeleton() {
+  return (
+    <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+      {Array.from({ length: 6 }).map((_, i) => (
+        <Skeleton key={i} className="h-48 w-full" />
+      ))}
     </div>
   );
 }
