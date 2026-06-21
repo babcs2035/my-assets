@@ -6,7 +6,7 @@
 FROM node:24-slim AS base
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME/bin:$PNPM_HOME:$PATH"
-RUN npm install -g pnpm@11.2.2
+RUN npm install -g pnpm@11.8.0
 WORKDIR /app
 
 # ==============================================================================
@@ -60,7 +60,7 @@ RUN groupadd --system --gid 1001 nodejs && \
     useradd --system --uid 1001 --gid nodejs nextjs
 
 # Install global tools (needed for CMD: prisma migrate deploy, seed)
-RUN pnpm add -g prisma@7.8.0 tsx@4.21.0
+RUN pnpm add -g prisma@7.8.0 tsx@4.22.4
 
 # Copy standalone build
 COPY --from=build-cache --chown=nextjs:nodejs /app/.next/standalone ./

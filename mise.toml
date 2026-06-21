@@ -1,6 +1,6 @@
 [tools]
 node = "24"
-pnpm = "latest"
+"npm:pnpm" = "11.8.0"
 
 [tasks.install]
 description = "Install dependencies"

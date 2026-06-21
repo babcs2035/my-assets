@@ -16,9 +16,11 @@ onlyBuiltDependencies:
   - prisma
 
 overrides:
-  "@hono/node-server": "^1.19.13"
-  hono: "^4.12.18"
-  postcss: "^8.5.10"
-  qs: "^6.15.2"
-  fast-uri: "^3.1.2"
-  "ip-address": "^10.1.1"
+  tailwind-merge: "^3.6.0"
+  reselect: "^5.2.0"
+  semver: "^7.7.1"
+
+strictDepBuilds: true
+minimumReleaseAge: 1440
+blockExoticSubdeps: true
+trustPolicy: no-downgrade
