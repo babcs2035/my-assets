@@ -1,3 +1,4 @@
+import { TrendingUp } from "lucide-react";
 import type { Metadata } from "next";
 import { getAssetBreakdown } from "@/actions/assets";
 import { AssetsContent } from "@/components/assets/assets-content";
@@ -22,7 +23,7 @@ export default async function AssetsPage() {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <PageHeader title="資産" description="資産・負債の内訳とバランスシート" />
+      <PageHeader title="資産" icon={TrendingUp} />
 
       <AssetsContent breakdown={breakdown} />
     </div>

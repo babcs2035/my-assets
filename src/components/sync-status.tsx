@@ -56,7 +56,7 @@ export function SyncStatus() {
         if (isToday) {
           setStatus(info.success ? "success" : "error");
           setLastSyncText(
-            `${last.getHours().toString().padStart(2, "0")}:${last
+            `${last.getFullYear()}/${String(last.getMonth() + 1).padStart(2, "0")}/${String(last.getDate()).padStart(2, "0")} ${last.getHours().toString().padStart(2, "0")}:${last
               .getMinutes()
               .toString()
               .padStart(2, "0")} ${info.success ? "完了" : "失敗"}`,
@@ -71,10 +71,20 @@ export function SyncStatus() {
             setLastSyncText("実行中...");
           } else if ((hour === 8 && minute >= 10) || hour > 8) {
             setStatus(info.success ? "idle" : "error");
-            setLastSyncText("未実行");
+            setLastSyncText(
+              `${last.getFullYear()}/${String(last.getMonth() + 1).padStart(2, "0")}/${String(last.getDate()).padStart(2, "0")} ${last.getHours().toString().padStart(2, "0")}:${last
+                .getMinutes()
+                .toString()
+                .padStart(2, "0")} ${info.success ? "完了" : "失敗"}`,
+            );
           } else {
             setStatus("idle");
-            setLastSyncText("待機中");
+            setLastSyncText(
+              `${last.getFullYear()}/${String(last.getMonth() + 1).padStart(2, "0")}/${String(last.getDate()).padStart(2, "0")} ${last.getHours().toString().padStart(2, "0")}:${last
+                .getMinutes()
+                .toString()
+                .padStart(2, "0")} ${info.success ? "完了" : "失敗"}`,
+            );
           }
         }
       } catch {

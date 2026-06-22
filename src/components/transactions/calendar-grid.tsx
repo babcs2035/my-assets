@@ -180,7 +180,7 @@ export function CalendarGrid({
                 {/* 日付番号 */}
                 <span
                   className={cn(
-                    "text-sm font-semibold",
+                    "text-base font-semibold",
                     cell.isCurrentMonth ? "text-zinc-200" : "text-zinc-600",
                   )}
                 >
@@ -191,7 +191,7 @@ export function CalendarGrid({
                 {cell.isCurrentMonth && data && data.expense > 0 && (
                   <div className="flex w-full flex-col items-end gap-0.5 min-w-0 mt-0.5">
                     <span
-                      className="font-mono text-xs font-bold truncate w-full text-right text-red-400"
+                      className="font-mono text-sm font-bold truncate w-full text-right text-red-400"
                       title={`支出: ¥${data.expense.toLocaleString()}`}
                     >
                       -
@@ -201,7 +201,7 @@ export function CalendarGrid({
                     </span>
                     {data.income > 0 && (
                       <span
-                        className="text-emerald-400 text-xs font-mono font-semibold truncate w-full text-right"
+                        className="text-emerald-400 text-sm font-mono font-semibold truncate w-full text-right"
                         title={`収入: ¥${data.income.toLocaleString()}`}
                       >
                         +{data.income.toLocaleString()}

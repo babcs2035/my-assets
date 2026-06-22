@@ -1,3 +1,4 @@
+import { ArrowDownUp } from "lucide-react";
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import { PageHeader } from "@/components/page-header";
@@ -21,10 +22,7 @@ export const metadata: Metadata = {
 export default function TransactionsPage() {
   return (
     <div className="space-y-6 animate-fade-in">
-      <PageHeader
-        title="入出金明細"
-        description="日々のキャッシュフローを管理し、自動分類ルールを育てます"
-      />
+      <PageHeader title="入出金明細" icon={ArrowDownUp} />
 
       <Suspense
         fallback={

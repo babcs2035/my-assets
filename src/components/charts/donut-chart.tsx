@@ -26,7 +26,7 @@ function CustomTooltip({
   if (!active || !payload?.[0]) return null;
   const data = payload[0].payload;
   return (
-    <div className="glass-card p-3 text-xs">
+    <div className="glass-card p-3 text-[var(--font-size-chart)]">
       <p className="font-medium text-zinc-300">{data.name}</p>
       <p className="font-mono text-zinc-100">{formatCurrency(data.value)}</p>
     </div>
@@ -83,7 +83,9 @@ export function DonutChart({ data }: { data: Record<string, number> }) {
         <Legend
           verticalAlign="bottom"
           formatter={value => (
-            <span className="text-xs text-zinc-300">{String(value)}</span>
+            <span className="text-[var(--font-size-chart)] text-zinc-300">
+              {String(value)}
+            </span>
           )}
           wrapperStyle={{ paddingTop: "12px" }}
         />

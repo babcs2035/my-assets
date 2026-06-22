@@ -6,9 +6,8 @@ import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import { reorderMainAccounts } from "@/actions/accounts";
-import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { assetTypeColor, assetTypeLabel, formatCurrency } from "@/lib/utils";
+import { assetTypeColor, formatCurrency } from "@/lib/utils";
 
 type BillingSummary = {
   totalBilling: number;
@@ -112,10 +111,10 @@ export function AccountList({ accounts }: { accounts: AccountListItem[] }) {
             } ${draggedIndex === idx ? "opacity-50 scale-[0.98]" : ""}`}
           >
             <Card
-              className="kpi-card cursor-grab active:cursor-grabbing"
+              className="kpi-card cursor-grab active:cursor-grabbing gap-0"
               style={{ animationDelay: `${idx * 50}ms` }}
             >
-              <CardHeader className="pb-2">
+              <CardHeader className="gap-0 py-2">
                 <div className="flex items-start justify-between">
                   <div className="flex items-center gap-2 min-w-0">
                     <GripVertical className="h-4 w-4 text-zinc-600 shrink-0" />
@@ -123,10 +122,6 @@ export function AccountList({ accounts }: { accounts: AccountListItem[] }) {
                       <CardTitle className="text-base">
                         {account.label}
                       </CardTitle>
-                      <p className="text-xs text-zinc-500">
-                        {account.provider.name} · {account.subAccounts.length}{" "}
-                        子口座
-                      </p>
                     </div>
                   </div>
                   <Link
@@ -137,71 +132,34 @@ export function AccountList({ accounts }: { accounts: AccountListItem[] }) {
                   </Link>
                 </div>
               </CardHeader>
-              <CardContent>
+              <CardContent className="pt-0">
                 <Link href={`/accounts/${account.id}`}>
                   {/* ガイドブック: 数値を最も目立たせる */}
                   <p className="text-2xl font-bold tracking-tight text-zinc-50 font-mono">
                     {formatCurrency(totalBalance)}
                   </p>
 
-                  {/* 子口座タグ */}
-                  <div className="mt-2.5 flex flex-wrap gap-1.5">
-                    {account.subAccounts.slice(0, 5).map(sa => (
-                      <Badge
-                        key={sa.id}
-                        variant="secondary"
-                        className="text-xs max-w-[180px] truncate"
-                        style={{
-                          background: `${assetTypeColor(sa.assetType)}15`,
-                          borderColor: `${assetTypeColor(sa.assetType)}60`,
-                          color: assetTypeColor(sa.assetType),
-                        }}
-                      >
-                        {sa.currentName}
-                      </Badge>
-                    ))}
-                    {account.subAccounts.length > 5 && (
-                      <Badge variant="outline" className="text-xs">
-                        +{account.subAccounts.length - 5}
-                      </Badge>
-                    )}
-                  </div>
-
-                  {/* 資産タイプ別の内訳 */}
+                  {/* 子口座別の残高 */}
                   <div className="mt-3 space-y-1">
-                    {(
-                      [
-                        "CASH",
-                        "INVESTMENT",
-                        "CRYPTO",
-                        "POINT",
-                        "LIABILITY",
-                      ] as const
-                    ).map(type => {
-                      const typeBalance = account.subAccounts
-                        .filter(sa => sa.assetType === type)
-                        .reduce((s, sa) => s + sa.balance, 0);
-                      if (typeBalance === 0) return null;
-                      return (
-                        <div
-                          key={type}
-                          className="flex items-center justify-between text-sm"
-                        >
-                          <span className="flex items-center gap-1.5">
-                            <span
-                              className="inline-block h-2 w-2 rounded-full"
-                              style={{ background: assetTypeColor(type) }}
-                            />
-                            <span className="text-zinc-400">
-                              {assetTypeLabel(type)}
-                            </span>
+                    {account.subAccounts.map(sa => (
+                      <div
+                        key={sa.id}
+                        className="flex items-center justify-between text-sm"
+                      >
+                        <span className="flex items-center gap-1.5">
+                          <span
+                            className="inline-block h-2 w-2 rounded-full"
+                            style={{ background: assetTypeColor(sa.assetType) }}
+                          />
+                          <span className="text-zinc-400 truncate">
+                            {sa.currentName}
                           </span>
-                          <span className="font-mono text-zinc-300">
-                            {formatCurrency(typeBalance)}
-                          </span>
-                        </div>
-                      );
-                    })}
+                        </span>
+                        <span className="font-mono text-zinc-300">
+                          {formatCurrency(sa.balance)}
+                        </span>
+                      </div>
+                    ))}
                   </div>
 
                   {/* クレジットカード請求情報 */}

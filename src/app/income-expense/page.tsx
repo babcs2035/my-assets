@@ -1,3 +1,4 @@
+import { ArrowLeftRight } from "lucide-react";
 import type { Metadata } from "next";
 import { IncomeExpenseContent } from "@/components/income-expense/income-expense-content";
 import { PageHeader } from "@/components/page-header";
@@ -23,10 +24,7 @@ export default async function IncomeExpensePage() {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <PageHeader
-        title="収支"
-        description="月ごとの収入・支出・収支の推移とカテゴリ別内訳"
-      />
+      <PageHeader title="収支" icon={ArrowLeftRight} />
 
       <IncomeExpenseContent
         initialYear={now.getFullYear()}

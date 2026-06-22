@@ -212,7 +212,6 @@ export function AccountBalanceChart({
             <XAxis
               dataKey="date"
               stroke="#52525b"
-              fontSize={12}
               tickLine={false}
               axisLine={false}
               tickFormatter={value => {
@@ -224,7 +223,6 @@ export function AccountBalanceChart({
             />
             <YAxis
               stroke="#52525b"
-              fontSize={12}
               tickLine={false}
               axisLine={false}
               tickFormatter={value => formatYAxisCurrency(Number(value))}
@@ -243,11 +241,11 @@ export function AccountBalanceChart({
                       liabilityTotal?: number;
                     };
                     return (
-                      <div className="rounded-lg border border-zinc-700 bg-zinc-900 p-2 shadow-sm">
-                        <div className="mb-1 text-[10px] text-zinc-400">
+                      <div className="rounded-lg border border-zinc-700 bg-zinc-900 p-3 shadow-sm">
+                        <div className="mb-1.5 text-sm text-zinc-400">
                           {String(p.date).replaceAll("-", "/")}
                         </div>
-                        <div className="space-y-1 text-xs">
+                        <div className="space-y-1.5 text-sm">
                           <div className="flex items-center justify-between gap-4">
                             <span className="text-zinc-300">資産</span>
                             <span className="font-mono font-bold text-zinc-100">
@@ -271,8 +269,8 @@ export function AccountBalanceChart({
                     );
                   }
                   return (
-                    <div className="rounded-lg border border-zinc-700 bg-zinc-900 p-2 shadow-sm">
-                      <div className="mb-1 text-[10px] text-zinc-400">
+                    <div className="rounded-lg border border-zinc-700 bg-zinc-900 p-3 shadow-sm">
+                      <div className="mb-1.5 text-sm text-zinc-400">
                         {String(payload[0].payload.date).replaceAll("-", "/")}
                       </div>
                       <div className="font-mono text-sm font-bold text-zinc-100">

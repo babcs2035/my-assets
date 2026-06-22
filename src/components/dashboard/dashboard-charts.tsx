@@ -53,7 +53,7 @@ const valueFormatter = (number: number) =>
   `¥ ${Intl.NumberFormat("ja-JP").format(number)}`;
 
 const tooltipCardClassName =
-  "rounded-lg border border-zinc-700 bg-zinc-900 p-2 shadow-sm relative z-50";
+  "rounded-lg border border-zinc-700 bg-zinc-900 p-3 shadow-sm relative z-50";
 
 interface DashboardAreaChartProps {
   data: Array<{
@@ -242,7 +242,6 @@ export function DashboardAreaChart({ data }: DashboardAreaChartProps) {
             <XAxis
               dataKey="date"
               stroke="#52525b"
-              fontSize={11}
               tickLine={false}
               axisLine={false}
               tickFormatter={value => dayjs(value).format("MM/DD")}
@@ -251,7 +250,6 @@ export function DashboardAreaChart({ data }: DashboardAreaChartProps) {
             {/* ガイドブック: Y軸原点を0に */}
             <YAxis
               stroke="#52525b"
-              fontSize={12}
               tickLine={false}
               axisLine={false}
               tickFormatter={value => formatYAxisCurrency(Number(value))}
@@ -267,10 +265,10 @@ export function DashboardAreaChart({ data }: DashboardAreaChartProps) {
 
                 return (
                   <div className={tooltipCardClassName}>
-                    <div className="mb-1.5 text-[10px] text-zinc-400">
+                    <div className="mb-1.5 text-sm text-zinc-400">
                       {dayjs(date).format("YYYY/MM/DD")}
                     </div>
-                    <div className="space-y-1">
+                    <div className="space-y-1.5">
                       {activeSeries
                         .map(series =>
                           payload.find(
@@ -295,7 +293,7 @@ export function DashboardAreaChart({ data }: DashboardAreaChartProps) {
                           return (
                             <div
                               key={String(item.dataKey)}
-                              className="flex items-center justify-between gap-4 text-xs"
+                              className="flex items-center justify-between gap-4 text-sm"
                             >
                               <span className="flex items-center gap-1.5 text-zinc-300">
                                 <span
@@ -482,15 +480,13 @@ export function DashboardDonutChart({ data }: DashboardDonutChartProps) {
                     : "0";
                 return (
                   <div className={tooltipCardClassName}>
-                    <div className="mb-1 text-[10px] text-zinc-400">
+                    <div className="mb-1.5 text-sm text-zinc-400">
                       {String(item.name ?? "")}
                     </div>
-                    <div className="font-mono text-sm font-bold text-zinc-100">
+                    <div className="font-mono text-base font-bold text-zinc-100">
                       {valueFormatter(actualValue)}
                     </div>
-                    <div className="text-[10px] text-zinc-500 mt-0.5">
-                      {pct}%
-                    </div>
+                    <div className="text-sm text-zinc-500 mt-0.5">{pct}%</div>
                   </div>
                 );
               }}

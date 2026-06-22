@@ -189,12 +189,9 @@ function AccountDetailContent({
           </Button>
         </Link>
         <div className="min-w-0">
-          <h1 className="text-xl font-bold tracking-tight text-zinc-50 sm:text-2xl truncate">
+          <h1 className="flex items-center gap-2 text-xl font-bold tracking-tight text-zinc-50 sm:text-2xl truncate">
             {account.label}
           </h1>
-          <p className="text-sm text-zinc-500">
-            {account.provider.name} · {visibleSubAccounts.length} 子口座
-          </p>
         </div>
       </div>
 

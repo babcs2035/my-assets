@@ -59,6 +59,9 @@
   --radius-lg: 0.625rem;
   --radius-md: calc(0.625rem - 2px);
   --radius-sm: calc(0.625rem - 4px);
+
+  /* ── チャートタイポグラフィ (統一管理) ──────── */
+  --font-size-chart: 0.875rem; /* 14px — ツールチップ・凡例・軸ラベル共通 */
 }
 
 @layer base {
@@ -69,6 +72,17 @@
     @apply bg-background text-foreground antialiased;
     -webkit-tap-highlight-color: transparent;
     font-feature-settings: "palt";
+  }
+
+  /* ── ガラス風カード (チャートツールチップ用) ── */
+  .glass-card {
+    @apply rounded-lg border border-zinc-700/50 bg-zinc-800/80 backdrop-blur-sm;
+  }
+
+  /* ── Recharts 統一起能 — タイポグラフィ ───── */
+  .recharts-wrapper,
+  .recharts-tooltip-wrapper {
+    font-size: var(--font-size-chart);
   }
 }
 

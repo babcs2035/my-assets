@@ -38,7 +38,7 @@ function CustomTooltip({
 }) {
   if (!active || !payload) return null;
   return (
-    <div className="glass-card p-3 text-xs">
+    <div className="glass-card p-3 text-[var(--font-size-chart)]">
       <p className="mb-2 font-medium text-zinc-300">{label}</p>
       {payload.map(p => (
         <div
@@ -101,7 +101,6 @@ export function AssetChart({ data }: { data: AssetHistoryEntry[] }) {
         <XAxis
           dataKey="date"
           stroke="#52525b"
-          fontSize={12}
           tickLine={false}
           axisLine={false}
           tickFormatter={v => v.slice(5)}
@@ -109,7 +108,6 @@ export function AssetChart({ data }: { data: AssetHistoryEntry[] }) {
         />
         <YAxis
           stroke="#52525b"
-          fontSize={12}
           tickLine={false}
           axisLine={false}
           tickFormatter={v => formatYAxisCurrency(Number(v))}
@@ -120,7 +118,10 @@ export function AssetChart({ data }: { data: AssetHistoryEntry[] }) {
         <Tooltip content={<CustomTooltip />} />
         <Legend
           verticalAlign="bottom"
-          wrapperStyle={{ paddingTop: "12px", fontSize: "12px" }}
+          wrapperStyle={{
+            paddingTop: "12px",
+            fontSize: "var(--font-size-chart)",
+          }}
         />
         {assetTypes.map(type => (
           <Area

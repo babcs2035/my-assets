@@ -264,12 +264,12 @@ export function CashflowSankey({ data }: CashflowSankeyProps) {
           }
 
           return (
-            <div className="rounded-lg border border-zinc-700 bg-zinc-900 p-2 shadow-sm relative z-50 max-w-[280px]">
-              <div className="mb-1.5 text-[10px] text-zinc-400 truncate whitespace-nowrap">
+            <div className="rounded-lg border border-zinc-700 bg-zinc-900 p-3 shadow-sm relative z-50 max-w-[280px]">
+              <div className="mb-1.5 text-sm text-zinc-400 truncate whitespace-nowrap">
                 {displayName}
               </div>
-              <div className="space-y-1">
-                <div className="flex items-center justify-between gap-4 text-xs">
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between gap-4 text-sm">
                   <span className="flex items-center gap-1.5 text-zinc-300 min-w-0">
                     <span
                       className="h-2 w-2 rounded-full shrink-0"
@@ -312,12 +312,12 @@ export function CashflowSankey({ data }: CashflowSankeyProps) {
           if (tgtId === "ratio") tgtId = `収入合計`;
 
           return (
-            <div className="rounded-lg border border-zinc-700 bg-zinc-900 p-2 shadow-sm relative z-50 max-w-[280px]">
-              <div className="mb-1.5 text-[10px] text-zinc-400 truncate whitespace-nowrap">
+            <div className="rounded-lg border border-zinc-700 bg-zinc-900 p-3 shadow-sm relative z-50 max-w-[280px]">
+              <div className="mb-1.5 text-sm text-zinc-400 truncate whitespace-nowrap">
                 {srcId} → {tgtId}
               </div>
-              <div className="space-y-1">
-                <div className="flex items-center justify-between gap-4 text-xs">
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between gap-4 text-sm">
                   <span className="flex items-center gap-1.5 text-zinc-300 min-w-0">
                     <span
                       className="h-2 w-2 rounded-full shrink-0"

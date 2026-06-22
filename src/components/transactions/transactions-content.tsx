@@ -8,7 +8,7 @@ import {
   Loader2,
   SlidersHorizontal,
 } from "lucide-react";
-import { useEffect, useState, useTransition } from "react";
+import { useCallback, useEffect, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { getCategories } from "@/actions/categories";
 import {
@@ -77,7 +77,7 @@ type FilterOption = Awaited<
  * 明細管理ページのメインコンテンツコンポーネントである．
  * カレンダー表示と一覧表示の 2 つの形式で取引明細を確認・管理できる．
  */
-export type SortKey = "date" | "desc" | "amount" | "account";
+export type SortKey = "date" | "amount";
 export type SortDirection = "asc" | "desc";
 
 export function TransactionsContent() {
@@ -120,7 +120,7 @@ export function TransactionsContent() {
    * 現在の年・月・日・ページに基づいてデータをフェッチする関数である．
    * ローカルなローディング状態を管理しながら実行する．
    */
-  const fetchData = () => {
+  const fetchData = useCallback(() => {
     setIsLoading(true);
     startTransition(async () => {
       try {
@@ -146,15 +146,8 @@ export function TransactionsContent() {
           let cmp = 0;
           if (sortKey === "date") {
             cmp = new Date(a.date).getTime() - new Date(b.date).getTime();
-          } else if (sortKey === "desc") {
-            cmp = (a.desc ?? "").localeCompare(b.desc ?? "");
           } else if (sortKey === "amount") {
             cmp = a.amount - b.amount;
-          } else if (sortKey === "account") {
-            cmp =
-              `${a.subAccount.mainAccount.label}-${a.subAccount.currentName}`.localeCompare(
-                `${b.subAccount.mainAccount.label}-${b.subAccount.currentName}`,
-              );
           }
           return sortDir === "asc" ? cmp : -cmp;
         });
@@ -168,15 +161,23 @@ export function TransactionsContent() {
         setIsLoading(false);
       }
     });
-  };
+  }, [
+    activeMainAccountId,
+    activeSubAccountId,
+    year,
+    month,
+    selectedDay,
+    page,
+    sortKey,
+    sortDir,
+  ]);
 
   /**
    * 年，月，日，またはページが変更された際にデータを再取得する．
    */
-  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional dependencies
   useEffect(() => {
     fetchData();
-  }, [year, month, selectedDay, page, activeMainAccountId, activeSubAccountId]);
+  }, [fetchData]);
 
   useEffect(() => {
     startTransition(async () => {
@@ -268,8 +269,8 @@ export function TransactionsContent() {
         />
 
         {/* カレンダー表示エリア */}
-        <Card className="relative">
-          <CardHeader>
+        <Card className="relative gap-0">
+          <CardHeader className="gap-0 pb-0 px-4">
             <CardTitle className="flex items-center gap-2 text-base">
               カレンダー
               {selectedDay && (
@@ -311,7 +312,6 @@ export function TransactionsContent() {
         <Card className="relative">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
-              <List className="h-4 w-4" />
               明細一覧
             </CardTitle>
             <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-[1fr_auto]">
@@ -474,7 +474,7 @@ export function TransactionsContent() {
                         </div>
                         <div className="flex flex-col items-end shrink-0 gap-1">
                           <div
-                            className={`font-mono font-medium text-sm ${
+                            className={`font-mono font-bold text-base ${
                               tx.isTransfer
                                 ? "text-blue-400"
                                 : tx.amount >= 0
@@ -539,24 +539,8 @@ export function TransactionsContent() {
                             <SortIcon columnKey="date" />
                           </div>
                         </TableHead>
-                        <TableHead
-                          className="cursor-pointer select-none hover:text-zinc-300"
-                          onClick={() => handleSort("account")}
-                        >
-                          <div className="flex items-center gap-1">
-                            口座
-                            <SortIcon columnKey="account" />
-                          </div>
-                        </TableHead>
-                        <TableHead
-                          className="cursor-pointer select-none hover:text-zinc-300"
-                          onClick={() => handleSort("desc")}
-                        >
-                          <div className="flex items-center gap-1">
-                            摘要
-                            <SortIcon columnKey="desc" />
-                          </div>
-                        </TableHead>
+                        <TableHead className="select-none">口座</TableHead>
+                        <TableHead className="select-none">摘要</TableHead>
                         <TableHead
                           className="w-[120px] text-right cursor-pointer select-none hover:text-zinc-300"
                           onClick={() => handleSort("amount")}
@@ -624,7 +608,7 @@ export function TransactionsContent() {
                             )}
                           </TableCell>
                           <TableCell
-                            className={`text-right font-mono font-medium ${
+                            className={`text-right font-mono font-bold ${
                               tx.isTransfer
                                 ? "text-blue-400"
                                 : tx.amount >= 0

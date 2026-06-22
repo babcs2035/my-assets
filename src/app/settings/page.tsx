@@ -1,3 +1,4 @@
+import { Settings as SettingsLucideIcon } from "lucide-react";
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import { PageHeader } from "@/components/page-header";
@@ -21,10 +22,7 @@ export const metadata: Metadata = {
 export default function SettingsPage() {
   return (
     <div className="space-y-6 animate-fade-in">
-      <PageHeader
-        title="設定"
-        description="カテゴリーと自動分類ルールを管理します"
-      />
+      <PageHeader title="設定" icon={SettingsLucideIcon} />
 
       <Suspense
         fallback={

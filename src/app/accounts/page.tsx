@@ -1,3 +1,4 @@
+import { Building2 } from "lucide-react";
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import { AccountsPageContent } from "@/components/accounts/accounts-page-content";
@@ -21,10 +22,7 @@ export const metadata: Metadata = {
 export default function AccountsPage() {
   return (
     <div className="space-y-6 animate-fade-in">
-      <PageHeader
-        title="口座管理"
-        description="金融機関と配下の口座を管理します"
-      />
+      <PageHeader title="口座管理" icon={Building2} />
 
       <Suspense fallback={<AccountsPageSkeleton />}>
         <AccountsPageContent />

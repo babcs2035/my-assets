@@ -41,14 +41,14 @@ export function DashboardDonutChart({
                   ? ((actualValue / totalAssets) * 100).toFixed(1)
                   : "0";
               return (
-                <div className="rounded-lg border border-zinc-700 bg-zinc-900 p-2 shadow-sm relative z-50">
-                  <div className="mb-1 text-[10px] text-zinc-400">
+                <div className="rounded-lg border border-zinc-700 bg-zinc-900 p-3 shadow-sm relative z-50">
+                  <div className="mb-1.5 text-sm text-zinc-400">
                     {String(item.name ?? "")}
                   </div>
-                  <div className="font-mono text-sm font-bold text-zinc-100">
+                  <div className="font-mono text-base font-bold text-zinc-100">
                     {formatCurrency(actualValue)}
                   </div>
-                  <div className="text-[10px] text-zinc-500 mt-0.5">{pct}%</div>
+                  <div className="text-sm text-zinc-500 mt-0.5">{pct}%</div>
                 </div>
               );
             }}
@@ -74,7 +74,7 @@ export function DashboardDonutChart({
       </ChartContainer>
       <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
         <div className="text-center">
-          <div className="text-[10px] text-zinc-500">合計</div>
+          <div className="text-sm text-zinc-500">合計</div>
           <div className="text-sm font-bold text-zinc-100 font-mono">
             {formatCurrency(totalAssets)}
           </div>

@@ -1,11 +1,9 @@
 "use client";
 
 import {
-  BookOpen,
   CheckCircle2,
   ChevronDown,
   ChevronRight,
-  CreditCard,
   Edit2,
   GripVertical,
   Loader2,
@@ -13,7 +11,6 @@ import {
   Plus,
   RefreshCw,
   Search,
-  SlidersHorizontal,
   Square,
   Trash2,
   TrendingDown,
@@ -65,13 +62,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Collapsible,
   CollapsibleContent,
@@ -706,7 +697,7 @@ export function SettingsContent() {
                   </span>
                 </Button>
               </CollapsibleTrigger>
-              <Badge variant="secondary" className="text-[10px] shrink-0">
+              <Badge variant="secondary" className="text-xs shrink-0">
                 {mc.subCategories.length}
               </Badge>
             </div>
@@ -822,7 +813,7 @@ export function SettingsContent() {
                     <span className="text-sm text-zinc-300 truncate">
                       {sc.name}
                     </span>
-                    <span className="text-[10px] text-zinc-600 shrink-0">
+                    <span className="text-xs text-zinc-600 shrink-0">
                       ({sc._count.transactions} 明細, {sc._count.rules} ルール)
                     </span>
                   </div>
@@ -935,13 +926,8 @@ export function SettingsContent() {
         <Card className="relative">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
-              <CreditCard className="h-4 w-4 text-blue-400" />
               プロバイダー設定
             </CardTitle>
-            <CardDescription>
-              外部サービス (MoneyForward など)
-              との連携や，データ取得元の設定を行います．
-            </CardDescription>
           </CardHeader>
           <CardContent className="relative space-y-4">
             {isLoading && (
@@ -1220,7 +1206,7 @@ export function SettingsContent() {
                               return (
                                 <Badge
                                   variant="outline"
-                                  className="bg-blue-500/10 text-blue-400 border-blue-500/20 text-[10px]"
+                                  className="bg-blue-500/10 text-blue-400 border-blue-500/20 text-xs"
                                 >
                                   <Loader2 className="mr-1 h-3 w-3 animate-spin" />
                                   同期中
@@ -1231,7 +1217,7 @@ export function SettingsContent() {
                               return (
                                 <Badge
                                   variant="outline"
-                                  className="bg-emerald-500/10 text-emerald-400 border-emerald-500/20 text-[10px]"
+                                  className="bg-emerald-500/10 text-emerald-400 border-emerald-500/20 text-xs"
                                 >
                                   <CheckCircle2 className="mr-1 h-3 w-3" />
                                   成功
@@ -1242,7 +1228,7 @@ export function SettingsContent() {
                               return (
                                 <Badge
                                   variant="outline"
-                                  className="bg-red-500/10 text-red-400 border-red-500/20 text-[10px]"
+                                  className="bg-red-500/10 text-red-400 border-red-500/20 text-xs"
                                 >
                                   <XCircle className="mr-1 h-3 w-3" />
                                   失敗
@@ -1350,12 +1336,8 @@ export function SettingsContent() {
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
-              <BookOpen className="h-4 w-4 text-orange-400" />
               保有口座管理
             </CardTitle>
-            <CardDescription>
-              登録されている金融機関・口座の一覧です。手動での口座追加も可能です。
-            </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
             {/* Account Creation Form */}
@@ -1452,7 +1434,7 @@ export function SettingsContent() {
                         </span>
                         <Badge
                           variant="outline"
-                          className="text-[10px] h-5 px-1.5 text-zinc-500 border-zinc-700 shrink-0"
+                          className="text-xs h-5 px-1.5 text-zinc-500 border-zinc-700 shrink-0"
                         >
                           {getProviderTypeLabel(provider.type)}
                         </Badge>
@@ -1714,12 +1696,8 @@ export function SettingsContent() {
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
-              <BookOpen className="h-4 w-4 text-green-400" />
               カテゴリー管理
             </CardTitle>
-            <CardDescription>
-              支出・収入それぞれのカテゴリーを管理します．上下ボタンで並び替えが可能です．
-            </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             {/* Export/Import Buttons */}
@@ -1832,8 +1810,7 @@ export function SettingsContent() {
 
             {/* 支出カテゴリー */}
             <div className="space-y-2">
-              <h3 className="text-sm font-medium text-red-400 flex items-center gap-1.5">
-                <TrendingDown className="h-4 w-4" />
+              <h3 className="text-sm font-medium text-red-400">
                 支出カテゴリー
               </h3>
               <div className="rounded-md border border-zinc-800 p-2">
@@ -1843,8 +1820,7 @@ export function SettingsContent() {
 
             {/* 収入カテゴリー */}
             <div className="space-y-2">
-              <h3 className="text-sm font-medium text-emerald-400 flex items-center gap-1.5">
-                <TrendingUp className="h-4 w-4" />
+              <h3 className="text-sm font-medium text-emerald-400">
                 収入カテゴリー
               </h3>
               <div className="rounded-md border border-zinc-800 p-2">
@@ -1858,7 +1834,6 @@ export function SettingsContent() {
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
-              <SlidersHorizontal className="h-4 w-4 text-purple-400" />
               ルール管理
             </CardTitle>
           </CardHeader>
@@ -1923,7 +1898,7 @@ export function SettingsContent() {
                         </div>
                         <Badge
                           variant="secondary"
-                          className="text-[10px] truncate max-w-full"
+                          className="text-xs truncate max-w-full"
                         >
                           {rule.subCategory.mainCategory.name} /{" "}
                           {rule.subCategory.name}
@@ -1960,7 +1935,7 @@ export function SettingsContent() {
                   <TableBody>
                     {rules.map(rule => (
                       <TableRow key={rule.id}>
-                        <TableCell className="font-mono text-zinc-300">
+                        <TableCell className="font-mono text-zinc-300 truncate max-w-[200px]">
                           {rule.keyword}
                         </TableCell>
                         <TableCell>

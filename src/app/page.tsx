@@ -2,6 +2,7 @@ import {
   AlertTriangle,
   ArrowDownRight,
   ArrowUpRight,
+  LayoutDashboard,
   Minus,
 } from "lucide-react";
 import type { Metadata } from "next";
@@ -11,7 +12,6 @@ import {
   getDashboardKPI,
   getExpiringPoints,
 } from "@/actions/dashboard";
-import { getLastSyncInfo } from "@/actions/system";
 import { DashboardAreaWrapper } from "@/components/dashboard/dashboard-area-wrapper";
 import { PageHeader } from "@/components/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -24,7 +24,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import logger from "@/lib/logger";
-import { formatCurrency, formatJSTDateTime } from "@/lib/utils";
+import { formatCurrency } from "@/lib/utils";
 
 /**
  * 常に最新のデータを表示させるため，動的レンダリングを強制する設定である．
@@ -47,12 +47,11 @@ export const metadata: Metadata = {
 export default async function DashboardPage() {
   logger.info("🏠 Rendering DashboardPage...");
 
-  const [kpi, history, expiringPoints, syncInfo, monthlyIncomeExpense] =
+  const [kpi, history, expiringPoints, monthlyIncomeExpense] =
     await Promise.all([
       getDashboardKPI(),
       getAssetHistory(),
       getExpiringPoints(),
-      getLastSyncInfo(),
       getCurrentMonthIncomeExpense(),
     ]);
 
@@ -72,35 +71,26 @@ export default async function DashboardPage() {
       (kpi.byAssetType.CRYPTO ?? 0) +
       (kpi.byAssetType.POINT ?? 0);
 
-  const lastSyncDate = syncInfo?.date
-    ? formatJSTDateTime(new Date(syncInfo.date))
-    : null;
-
   return (
     <div className="space-y-6 animate-fade-in">
-      {/* ガイドブック: ページヘッダーにデータ更新日を明示 */}
-      <PageHeader
-        title="ダッシュボード"
-        description="資産全体の概況と推移"
-        meta={lastSyncDate ? `最終更新: ${lastSyncDate}` : undefined}
-      />
+      <PageHeader title="ダッシュボード" icon={LayoutDashboard} />
 
       {/* ── KPI 指標エリア ──────────────────────── */}
       {/* 純資産のみ表示（総資産・総負債は削除） */}
       <div className="grid gap-4 md:grid-cols-1">
         <Card className="kpi-card" style={{ animationDelay: "0ms" }}>
           <CardContent className="pt-2 pb-1">
-            <p className="text-[11px] font-medium text-zinc-400 mb-0.5">
+            <p className="text-[13px] font-medium text-zinc-400 mb-0.5">
               純資産
             </p>
             <div
-              className="text-3xl sm:text-4xl font-bold text-zinc-50 font-mono"
+              className="text-2xl sm:text-3xl font-bold text-zinc-50 font-mono tracking-tight"
               title={formatCurrency(kpi.netWorth)}
             >
               {formatCurrency(kpi.netWorth)}
             </div>
             {/* 前日比 – ガイドブック: 比較対象を提供する */}
-            <div className="flex items-center text-xs text-muted-foreground mt-2 gap-1.5">
+            <div className="flex items-center text-sm text-muted-foreground mt-2.5 gap-1.5">
               {kpi.dailyChange > 0 ? (
                 <ArrowUpRight className="h-4 w-4 text-emerald-500 shrink-0" />
               ) : kpi.dailyChange < 0 ? (
@@ -130,7 +120,7 @@ export default async function DashboardPage() {
       <div className="grid gap-4 md:grid-cols-3">
         <Card>
           <CardContent className="pt-2 pb-1">
-            <p className="text-[11px] font-medium text-zinc-400 mb-0.5">
+            <p className="text-[13px] font-medium text-zinc-400 mb-0.5">
               今月の収入
             </p>
             <div className="text-2xl sm:text-3xl font-bold text-emerald-400 font-mono">
@@ -168,7 +158,7 @@ export default async function DashboardPage() {
         </Card>
         <Card>
           <CardContent className="pt-2 pb-1">
-            <p className="text-[11px] font-medium text-zinc-400 mb-0.5">
+            <p className="text-[13px] font-medium text-zinc-400 mb-0.5">
               今月の支出
             </p>
             <div className="text-2xl sm:text-3xl font-bold text-red-400 font-mono">
@@ -206,7 +196,7 @@ export default async function DashboardPage() {
         </Card>
         <Card>
           <CardContent className="pt-2 pb-1">
-            <p className="text-[11px] font-medium text-zinc-400 mb-0.5">
+            <p className="text-[13px] font-medium text-zinc-400 mb-0.5">
               今月の収支
             </p>
             <div
@@ -333,13 +323,13 @@ export default async function DashboardPage() {
                           </span>
                         </div>
                       </TableCell>
-                      <TableCell className="text-right font-mono text-sm font-medium text-zinc-100">
+                      <TableCell className="text-right font-mono text-base font-medium text-zinc-100">
                         {formatCurrency(current)}
                       </TableCell>
-                      <TableCell className="text-right font-mono text-xs text-zinc-300">
+                      <TableCell className="text-right font-mono text-sm text-zinc-300">
                         {pct}%
                       </TableCell>
-                      <TableCell className="text-right font-mono text-xs">
+                      <TableCell className="text-right font-mono text-sm">
                         <span
                           className={
                             yd.num >= 0 ? "text-emerald-400" : "text-red-400"
@@ -353,7 +343,7 @@ export default async function DashboardPage() {
                           {yd.pct}%)
                         </span>
                       </TableCell>
-                      <TableCell className="text-right font-mono text-xs">
+                      <TableCell className="text-right font-mono text-sm">
                         <span
                           className={
                             wk.num >= 0 ? "text-emerald-400" : "text-red-400"
@@ -367,7 +357,7 @@ export default async function DashboardPage() {
                           {wk.pct}%)
                         </span>
                       </TableCell>
-                      <TableCell className="text-right font-mono text-xs">
+                      <TableCell className="text-right font-mono text-sm">
                         <span
                           className={
                             mo.num >= 0 ? "text-emerald-400" : "text-red-400"
@@ -381,7 +371,7 @@ export default async function DashboardPage() {
                           {mo.pct}%)
                         </span>
                       </TableCell>
-                      <TableCell className="text-right font-mono text-xs">
+                      <TableCell className="text-right font-mono text-sm">
                         <span
                           className={
                             yr.num >= 0 ? "text-emerald-400" : "text-red-400"

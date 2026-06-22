@@ -11,6 +11,7 @@ import {
   YAxis,
 } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { formatYAxisCurrency } from "@/lib/chart-format";
 import { formatCurrency } from "@/lib/utils";
 
 /**
@@ -81,66 +82,99 @@ export function CreditCardBillingSection({
           クレジットカード請求履歴
         </CardTitle>
       </CardHeader>
-      <CardContent>
-        <div className="space-y-4">
-          <ResponsiveContainer width="100%" height={360}>
-            <BarChart
-              data={chartData}
-              margin={{ top: 10, right: 30, left: 20, bottom: 5 }}
-            >
-              <CartesianGrid strokeDasharray="3 3" stroke="#3f3f46" />
-              <XAxis
-                dataKey="month"
-                tick={{ fill: "#a1a1aa", fontSize: 13 }}
-                tickFormatter={value => {
-                  const [y, m] = value.split("-");
-                  return `${y}/${m}`;
-                }}
-              />
-              <YAxis
-                tick={{ fill: "#a1a1aa", fontSize: 13 }}
-                tickFormatter={value => formatCurrency(value)}
-              />
-              <Tooltip
-                formatter={value =>
-                  formatCurrency(typeof value === "number" ? value : 0)
-                }
-                labelFormatter={label => {
-                  const [y, m] = (label as string).split("-");
-                  return `${y}/${m} お支払い分`;
-                }}
-                contentStyle={{
-                  backgroundColor: "rgb(39 39 42 / 0.95)",
-                  border: "1px solid rgb(63 63 70)",
-                  borderRadius: "8px",
-                  color: "#e4e4e7",
-                  fontSize: "13px",
-                }}
-              />
-              <Legend
-                formatter={value => value}
-                wrapperStyle={{
-                  fontSize: "13px",
-                  color: "#a1a1aa",
-                }}
-              />
+      <CardContent className="h-[360px] w-full p-0 pb-4 pr-4">
+        <ResponsiveContainer width="100%" height="100%">
+          <BarChart
+            data={chartData}
+            margin={{ top: 10, right: 10, left: 30, bottom: 0 }}
+          >
+            <defs>
               {cardNames.map((card, index) => (
-                <Bar
-                  key={card}
-                  dataKey={card}
-                  stackId="amount"
-                  fill={index % 2 === 0 ? "#ef4444" : "#f97316"}
-                  radius={[
-                    index === cardNames.length - 1 ? 4 : 0,
-                    index === cardNames.length - 1 ? 4 : 0,
-                    0,
-                    0,
-                  ]}
-                />
+                <linearGradient
+                  key={`gradient-${card}`}
+                  id={`gradient-${card}`}
+                  x1="0"
+                  y1="0"
+                  x2="0"
+                  y2="1"
+                >
+                  <stop
+                    offset="5%"
+                    stopColor={index % 2 === 0 ? "#ef4444" : "#f97316"}
+                    stopOpacity={0.35}
+                  />
+                  <stop
+                    offset="95%"
+                    stopColor={index % 2 === 0 ? "#ef4444" : "#f97316"}
+                    stopOpacity={0}
+                  />
+                </linearGradient>
               ))}
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
+            </defs>
+            <CartesianGrid
+              strokeDasharray="3 3"
+              vertical={false}
+              stroke="#27272a"
+            />
+            <XAxis
+              dataKey="month"
+              stroke="#52525b"
+              tickLine={false}
+              axisLine={false}
+              tickFormatter={value => {
+                const [y, m] = value.split("-");
+                return `${y}/${m}`;
+              }}
+              minTickGap={30}
+            />
+            <YAxis
+              stroke="#52525b"
+              tickLine={false}
+              axisLine={false}
+              tickFormatter={value => formatYAxisCurrency(Number(value))}
+              width={70}
+            />
+            <Tooltip
+              formatter={value =>
+                formatCurrency(typeof value === "number" ? value : 0)
+              }
+              labelFormatter={label => {
+                const [y, m] = (label as string).split("-");
+                return `${y}/${m} お支払い分`;
+              }}
+              contentStyle={{
+                backgroundColor: "#27272a",
+                border: "1px solid #3f3f46",
+                borderRadius: "8px",
+                color: "#e4e4e7",
+                fontSize: "var(--font-size-chart)",
+              }}
+            />
+            <Legend
+              formatter={value => value}
+              wrapperStyle={{
+                fontSize: "var(--font-size-chart)",
+                color: "#a1a1aa",
+                paddingTop: "12px",
+              }}
+            />
+            {cardNames.map((card, index) => (
+              <Bar
+                key={card}
+                dataKey={card}
+                stackId="amount"
+                fill={index % 2 === 0 ? "#ef4444" : "#f97316"}
+                strokeWidth={2}
+                radius={[
+                  index === cardNames.length - 1 ? 4 : 0,
+                  index === cardNames.length - 1 ? 4 : 0,
+                  0,
+                  0,
+                ]}
+              />
+            ))}
+          </BarChart>
+        </ResponsiveContainer>
       </CardContent>
     </Card>
   );

@@ -175,7 +175,7 @@ export function IncomeExpenseContent({
                 <p className="text-xs font-medium text-zinc-400 mb-0.5">
                   当月収入
                 </p>
-                <div className="text-xl sm:text-2xl font-bold text-emerald-400 font-mono">
+                <div className="text-2xl font-bold text-emerald-400 font-mono tracking-tight">
                   {formatCurrency(totalMonthlyIncome)}
                 </div>
               </CardContent>
@@ -185,7 +185,7 @@ export function IncomeExpenseContent({
                 <p className="text-xs font-medium text-zinc-400 mb-0.5">
                   当月支出
                 </p>
-                <div className="text-xl sm:text-2xl font-bold text-red-400 font-mono">
+                <div className="text-2xl font-bold text-red-400 font-mono tracking-tight">
                   {formatCurrency(totalMonthlyExpense)}
                 </div>
               </CardContent>
@@ -196,7 +196,7 @@ export function IncomeExpenseContent({
                   当月収支
                 </p>
                 <div
-                  className={`text-xl sm:text-2xl font-bold font-mono ${monthlyBalance >= 0 ? "text-emerald-400" : "text-red-400"}`}
+                  className={`text-2xl font-bold font-mono tracking-tight ${monthlyBalance >= 0 ? "text-emerald-400" : "text-red-400"}`}
                 >
                   {formatCurrency(monthlyBalance)}
                 </div>
@@ -265,11 +265,11 @@ export function IncomeExpenseContent({
                             if (!active || !payload?.length) return null;
                             const item = payload[0];
                             return (
-                              <div className="rounded-lg border border-zinc-700 bg-zinc-900 p-2 shadow-sm relative z-50 max-w-[280px]">
-                                <div className="mb-1 text-[10px] text-zinc-400 truncate whitespace-nowrap">
+                              <div className="rounded-lg border border-zinc-700 bg-zinc-900 p-3 shadow-sm relative z-50 max-w-[280px]">
+                                <div className="mb-1.5 text-sm text-zinc-400 truncate whitespace-nowrap">
                                   {String(item.name ?? "")}
                                 </div>
-                                <div className="font-mono text-sm font-bold text-zinc-100">
+                                <div className="font-mono text-base font-bold text-zinc-100">
                                   {formatCurrency(Number(item.value ?? 0))}
                                 </div>
                               </div>
@@ -356,11 +356,11 @@ export function IncomeExpenseContent({
                             if (!active || !payload?.length) return null;
                             const item = payload[0];
                             return (
-                              <div className="rounded-lg border border-zinc-700 bg-zinc-900 p-2 shadow-sm relative z-50 max-w-[280px]">
-                                <div className="mb-1 text-[10px] text-zinc-400 truncate whitespace-nowrap">
+                              <div className="rounded-lg border border-zinc-700 bg-zinc-900 p-3 shadow-sm relative z-50 max-w-[280px]">
+                                <div className="mb-1.5 text-sm text-zinc-400 truncate whitespace-nowrap">
                                   {String(item.name ?? "")}
                                 </div>
-                                <div className="font-mono text-sm font-bold text-zinc-100">
+                                <div className="font-mono text-base font-bold text-zinc-100">
                                   {formatCurrency(Number(item.value ?? 0))}
                                 </div>
                               </div>
@@ -448,14 +448,12 @@ export function IncomeExpenseContent({
                   <XAxis
                     dataKey="month"
                     stroke="#52525b"
-                    fontSize={11}
                     tickLine={false}
                     axisLine={false}
                     tickFormatter={v => `${v}月`}
                   />
                   <YAxis
                     stroke="#52525b"
-                    fontSize={12}
                     tickLine={false}
                     axisLine={false}
                     tickFormatter={value => {
@@ -480,11 +478,11 @@ export function IncomeExpenseContent({
                         balance: "収支",
                       };
                       return (
-                        <div className="rounded-lg border border-zinc-700 bg-zinc-900 p-2 shadow-sm relative z-50">
-                          <div className="mb-1.5 text-[10px] text-zinc-400">
+                        <div className="rounded-lg border border-zinc-700 bg-zinc-900 p-3 shadow-sm relative z-50">
+                          <div className="mb-1.5 text-sm text-zinc-400">
                             {month ? `${month}月` : ""}
                           </div>
-                          <div className="space-y-1">
+                          <div className="space-y-1.5">
                             {payload.map(item => (
                               <div
                                 key={String(item.dataKey)}
@@ -585,13 +583,11 @@ export function IncomeExpenseContent({
                   <XAxis
                     dataKey="year"
                     stroke="#52525b"
-                    fontSize={12}
                     tickLine={false}
                     axisLine={false}
                   />
                   <YAxis
                     stroke="#52525b"
-                    fontSize={12}
                     tickLine={false}
                     axisLine={false}
                     tickFormatter={value => {
@@ -616,15 +612,15 @@ export function IncomeExpenseContent({
                         balance: "収支",
                       };
                       return (
-                        <div className="rounded-lg border border-zinc-700 bg-zinc-900 p-2 shadow-sm relative z-50">
-                          <div className="mb-1.5 text-[10px] text-zinc-400">
+                        <div className="rounded-lg border border-zinc-700 bg-zinc-900 p-3 shadow-sm relative z-50">
+                          <div className="mb-1.5 text-sm text-zinc-400">
                             {year ? `${year}年` : ""}
                           </div>
-                          <div className="space-y-1">
+                          <div className="space-y-1.5">
                             {payload.map(item => (
                               <div
                                 key={String(item.dataKey)}
-                                className="flex items-center justify-between gap-4 text-xs"
+                                className="flex items-center justify-between gap-4 text-sm"
                               >
                                 <span className="flex items-center gap-1.5 text-zinc-300">
                                   <span

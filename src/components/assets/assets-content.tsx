@@ -96,7 +96,7 @@ export function AssetsContent({ breakdown }: AssetsContentProps) {
         <Card>
           <CardContent className="pt-5 pb-4">
             <p className="text-sm font-medium text-zinc-400 mb-1">総資産</p>
-            <div className="text-2xl sm:text-3xl font-bold text-blue-400 font-mono">
+            <div className="text-3xl font-bold text-blue-400 font-mono tracking-tight">
               {formatCurrency(totalAssets)}
             </div>
           </CardContent>
@@ -104,7 +104,7 @@ export function AssetsContent({ breakdown }: AssetsContentProps) {
         <Card>
           <CardContent className="pt-5 pb-4">
             <p className="text-sm font-medium text-zinc-400 mb-1">総負債</p>
-            <div className="text-2xl sm:text-3xl font-bold text-red-400 font-mono">
+            <div className="text-3xl font-bold text-red-400 font-mono tracking-tight">
               {formatCurrency(totalLiabilities)}
             </div>
           </CardContent>
@@ -113,7 +113,7 @@ export function AssetsContent({ breakdown }: AssetsContentProps) {
           <CardContent className="pt-5 pb-4">
             <p className="text-sm font-medium text-zinc-400 mb-1">純資産</p>
             <div
-              className={`text-2xl sm:text-3xl font-bold font-mono ${netWorth >= 0 ? "text-emerald-400" : "text-red-400"}`}
+              className={`text-3xl font-bold font-mono tracking-tight ${netWorth >= 0 ? "text-emerald-400" : "text-red-400"}`}
             >
               {formatCurrency(netWorth)}
             </div>
@@ -163,11 +163,11 @@ export function AssetsContent({ breakdown }: AssetsContentProps) {
                           if (!active || !payload?.length) return null;
                           const item = payload[0];
                           return (
-                            <div className="rounded-lg border border-zinc-700 bg-zinc-900 p-2 shadow-sm relative z-50">
-                              <div className="mb-1 text-[10px] text-zinc-400">
+                            <div className="rounded-lg border border-zinc-700 bg-zinc-900 p-3 shadow-sm relative z-50">
+                              <div className="mb-1.5 text-sm text-zinc-400">
                                 {String(item.name ?? "")}
                               </div>
-                              <div className="font-mono text-sm font-bold text-zinc-100">
+                              <div className="font-mono text-base font-bold text-zinc-100">
                                 {formatCurrency(Number(item.value ?? 0))}
                               </div>
                             </div>
@@ -256,11 +256,11 @@ export function AssetsContent({ breakdown }: AssetsContentProps) {
                           if (!active || !payload?.length) return null;
                           const item = payload[0];
                           return (
-                            <div className="rounded-lg border border-zinc-700 bg-zinc-900 p-2 shadow-sm relative z-50">
-                              <div className="mb-1 text-[10px] text-zinc-400">
+                            <div className="rounded-lg border border-zinc-700 bg-zinc-900 p-3 shadow-sm relative z-50">
+                              <div className="mb-1.5 text-sm text-zinc-400">
                                 {String(item.name ?? "")}
                               </div>
-                              <div className="font-mono text-sm font-bold text-zinc-100">
+                              <div className="font-mono text-base font-bold text-zinc-100">
                                 {formatCurrency(Number(item.value ?? 0))}
                               </div>
                             </div>
@@ -441,7 +441,6 @@ export function AssetsContent({ breakdown }: AssetsContentProps) {
                 />
                 <YAxis
                   stroke="#52525b"
-                  fontSize={12}
                   tickLine={false}
                   axisLine={false}
                   tickFormatter={value => formatCurrency(Number(value))}
@@ -453,12 +452,12 @@ export function AssetsContent({ breakdown }: AssetsContentProps) {
                   content={({ active, payload }) => {
                     if (!active || !payload?.length) return null;
                     return (
-                      <div className="rounded-lg border border-zinc-700 bg-zinc-900 p-2 shadow-sm relative z-50">
-                        <div className="space-y-1">
+                      <div className="rounded-lg border border-zinc-700 bg-zinc-900 p-3 shadow-sm relative z-50">
+                        <div className="space-y-1.5">
                           {payload.map(item => (
                             <div
                               key={String(item.dataKey)}
-                              className="flex items-center justify-between gap-4 text-xs"
+                              className="flex items-center justify-between gap-4 text-sm"
                             >
                               <span className="flex items-center gap-1.5 text-zinc-300">
                                 <span
