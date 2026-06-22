@@ -21,16 +21,9 @@ import {
   getMonthlyIncomeExpense,
 } from "@/actions/income-expense";
 import { CashflowSankey } from "@/components/income-expense/cashflow-sankey";
-import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ChartContainer, ChartTooltip } from "@/components/ui/chart";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { MonthNavigator } from "@/components/ui/month-navigator";
 import { formatCurrency } from "@/lib/utils";
 
 type TrendData = Awaited<ReturnType<typeof getMonthlyIncomeExpense>>;
@@ -87,11 +80,6 @@ export function IncomeExpenseContent({
   const [trendData, setTrendData] = useState<TrendRow[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
-  const yearOptions = Array.from(
-    { length: dayjs().year() - 2023 + 2 },
-    (_, i) => 2023 + i,
-  );
-
   useEffect(() => {
     setIsLoading(true);
     (async () => {
@@ -109,26 +97,6 @@ export function IncomeExpenseContent({
       }
     })();
   }, [year, month]);
-
-  const changeMonth = (direction: -1 | 1) => {
-    let newYear = year;
-    let newMonth = month + direction;
-    if (newMonth < 1) {
-      newMonth = 12;
-      newYear--;
-    } else if (newMonth > 12) {
-      newMonth = 1;
-      newYear++;
-    }
-    setYear(newYear);
-    setMonth(newMonth);
-  };
-
-  const goThisMonth = () => {
-    const now = dayjs();
-    setYear(now.year());
-    setMonth(now.month() + 1);
-  };
 
   // 月別推移データ（表示用）
   const monthlyTrend = useMemo(() => {
@@ -182,69 +150,19 @@ export function IncomeExpenseContent({
     <div className="space-y-6">
       {/* 年月セレクターと累計表示 */}
       <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              size="icon"
-              className="h-8 w-8"
-              onClick={() => changeMonth(-1)}
-            >
-              <span className="text-lg">‹</span>
-            </Button>
-            <div className="flex items-center gap-2">
-              <Select
-                value={String(year)}
-                onValueChange={v => setYear(Number(v))}
-              >
-                <SelectTrigger size="sm" className="h-9 w-32">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {yearOptions.map(y => (
-                    <SelectItem key={y} value={String(y)}>
-                      {y}年
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Select
-                value={String(month)}
-                onValueChange={v => setMonth(Number(v))}
-              >
-                <SelectTrigger size="sm" className="h-9 w-20">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {Array.from({ length: 12 }, (_, i) => i + 1).map(m => (
-                    <SelectItem key={m} value={String(m)}>
-                      {m}月
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <Button
-              type="button"
-              variant="outline"
-              size="icon"
-              className="h-8 w-8"
-              onClick={() => changeMonth(1)}
-            >
-              <span className="text-lg">›</span>
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="h-8 text-xs"
-              onClick={goThisMonth}
-            >
-              今月
-            </Button>
-          </div>
-        </div>
+        <MonthNavigator
+          year={year}
+          month={month}
+          onMonthChange={(newYear, newMonth) => {
+            setYear(newYear);
+            setMonth(newMonth);
+          }}
+          onThisMonth={() => {
+            const now = dayjs();
+            setYear(now.year());
+            setMonth(now.month() + 1);
+          }}
+        />
 
         {isLoading ? (
           <div className="flex items-center justify-center py-8">

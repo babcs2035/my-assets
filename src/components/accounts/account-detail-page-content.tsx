@@ -4,9 +4,10 @@ import { ArrowLeft, Coins, CreditCard, TrendingUp } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
-import { getAccountDetail } from "@/actions/accounts";
+import { getAccountDetail, getCreditCardBillings } from "@/actions/accounts";
 import { AccountSubAccountManager } from "@/components/account-sub-account-manager";
 import { AccountBalanceChart } from "@/components/accounts/account-balance-chart";
+import { CreditCardBillingSection } from "@/components/accounts/credit-card-billing-section";
 import { HoldingTable } from "@/components/accounts/holding-table";
 import { HoldingTrendChart } from "@/components/accounts/holding-trend-chart";
 import { Badge } from "@/components/ui/badge";
@@ -24,14 +25,23 @@ export function AccountDetailPageContent() {
   const [account, setAccount] = useState<Awaited<
     ReturnType<typeof getAccountDetail>
   > | null>(null);
+  const [billings, setBillings] = useState<Awaited<
+    ReturnType<typeof getCreditCardBillings>
+  > | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        const data = await getAccountDetail(id);
-        if (!cancelled) setAccount(data);
+        const [accountData, billingData] = await Promise.all([
+          getAccountDetail(id),
+          getCreditCardBillings(id),
+        ]);
+        if (!cancelled) {
+          setAccount(accountData);
+          setBillings(billingData);
+        }
       } catch {
         if (!cancelled) setError("データの取得に失敗しました．");
       }
@@ -53,7 +63,7 @@ export function AccountDetailPageContent() {
     return <AccountDetailPageSkeleton />;
   }
 
-  return <AccountDetailContent account={account} />;
+  return <AccountDetailContent account={account} billings={billings ?? []} />;
 }
 
 /**
@@ -61,8 +71,10 @@ export function AccountDetailPageContent() {
  */
 function AccountDetailContent({
   account,
+  billings,
 }: {
   account: NonNullable<Awaited<ReturnType<typeof getAccountDetail>>>;
+  billings: Awaited<ReturnType<typeof getCreditCardBillings>>;
 }) {
   const visibleSubAccounts = account.subAccounts.filter(sa => !sa.isHidden);
 
@@ -193,6 +205,9 @@ function AccountDetailContent({
           defaultAssetType={defaultAssetType}
         />
       </div>
+
+      {/* クレジットカード請求履歴 */}
+      {billings.length > 0 && <CreditCardBillingSection billings={billings} />}
 
       {/* 子口座一覧 */}
       <div className="space-y-4">

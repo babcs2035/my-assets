@@ -10,6 +10,15 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { assetTypeColor, assetTypeLabel, formatCurrency } from "@/lib/utils";
 
+type BillingSummary = {
+  totalBilling: number;
+  recentBillings: Array<{
+    subAccountName: string;
+    amount: number;
+    billingDate: Date;
+  }>;
+};
+
 type AccountListItem = {
   id: string;
   label: string;
@@ -23,6 +32,7 @@ type AccountListItem = {
     mainAccountId: string;
     sortOrder: number;
   }>;
+  billingSummary: BillingSummary | null;
 };
 
 /**
@@ -33,6 +43,8 @@ type AccountListItem = {
  *   - 意味のある順列（ドラッグ並び替え維持）
  */
 export function AccountList({ accounts }: { accounts: AccountListItem[] }) {
+  const fmtDate = (d: Date) =>
+    `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, "0")}/${String(d.getDate()).padStart(2, "0")}`;
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [items, setItems] = useState(accounts);
@@ -100,7 +112,7 @@ export function AccountList({ accounts }: { accounts: AccountListItem[] }) {
             } ${draggedIndex === idx ? "opacity-50 scale-[0.98]" : ""}`}
           >
             <Card
-              className="h-full kpi-card cursor-grab active:cursor-grabbing"
+              className="kpi-card cursor-grab active:cursor-grabbing"
               style={{ animationDelay: `${idx * 50}ms` }}
             >
               <CardHeader className="pb-2">
@@ -191,6 +203,60 @@ export function AccountList({ accounts }: { accounts: AccountListItem[] }) {
                       );
                     })}
                   </div>
+
+                  {/* クレジットカード請求情報 */}
+                  {account.billingSummary &&
+                    account.billingSummary.recentBillings.length > 0 &&
+                    (() => {
+                      const now = new Date();
+                      const thisMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+                      const thisMonthBillings =
+                        account.billingSummary.recentBillings.filter(b => {
+                          const d = new Date(b.billingDate);
+                          return (
+                            `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}` ===
+                            thisMonthKey
+                          );
+                        });
+                      const thisMonthTotal = thisMonthBillings.reduce(
+                        (sum, b) => sum + b.amount,
+                        0,
+                      );
+
+                      return (
+                        <div className="mt-3 pt-3 border-t border-zinc-700/50">
+                          <div className="mb-1.5 text-xs font-medium text-zinc-400">
+                            クレジットカード請求
+                          </div>
+                          {account.billingSummary.recentBillings.map(b => (
+                            <div
+                              key={b.subAccountName}
+                              className="flex items-center justify-between text-sm"
+                            >
+                              <div className="min-w-0 flex-1">
+                                <span className="text-zinc-400 truncate">
+                                  {b.subAccountName}
+                                </span>
+                                <span className="ml-1.5 text-[11px] text-zinc-500">
+                                  {fmtDate(new Date(b.billingDate))}
+                                </span>
+                              </div>
+                              <span className="font-mono text-red-400 text-sm shrink-0 ml-2">
+                                {formatCurrency(b.amount)}
+                              </span>
+                            </div>
+                          ))}
+                          {thisMonthBillings.length > 0 && (
+                            <div className="mt-1.5 pt-1.5 border-t border-zinc-700/30 flex items-center justify-between text-sm font-medium">
+                              <span className="text-zinc-300">今月合計</span>
+                              <span className="font-mono text-red-300">
+                                {formatCurrency(thisMonthTotal)}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
                 </Link>
               </CardContent>
             </Card>

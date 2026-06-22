@@ -1,14 +1,5 @@
 "use client";
 
-import { ChevronLeft, ChevronRight } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { cn, formatJSTDate } from "@/lib/utils";
 
 /**
@@ -40,9 +31,7 @@ interface CalendarGridProps {
   month: number;
   selectedDay: number | null;
   calendarData: Record<string, CalendarData>;
-  onMonthChange: (year: number, month: number) => void;
   onDayClick: (day: number) => void;
-  availableYears?: number[];
 }
 
 /**
@@ -57,18 +46,16 @@ function getMaxExpense(calendarData: Record<string, CalendarData>): number {
 }
 
 /**
- * 月間カレンダーグリッド表示コンポーネント
- * DayPicker を使わず、シンプルな手作り実装で確実に 7 列グリッドを表示する
- * 年月セレクトをカレンダーヘッダーに統合している
+ * 月間カレンダーグリッド表示コンポーネントである．
+ * DayPicker を使わず、シンプルな手作り実装で確実に 7 列グリッドを表示する．
+ * 年月ナビゲーションは親コンポーネントの MonthNavigator に委ねている．
  */
 export function CalendarGrid({
   year,
   month,
   selectedDay,
   calendarData,
-  onMonthChange,
   onDayClick,
-  availableYears = [],
 }: CalendarGridProps) {
   const maxExpense = getMaxExpense(calendarData);
   // 月の1日
@@ -118,92 +105,9 @@ export function CalendarGrid({
   }
 
   const weekDays = ["日", "月", "火", "水", "木", "金", "土"];
-  const monthOptions = Array.from({ length: 12 }, (_, i) => i + 1);
 
   return (
     <div className="w-full space-y-3">
-      {/* ヘッダー: 年月選択と前後ボタン */}
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2 flex-1">
-          {availableYears.length > 0 && (
-            <Select
-              value={String(year)}
-              onValueChange={value => {
-                const y = Number(value);
-                if (Number.isFinite(y)) {
-                  onMonthChange(y, month);
-                }
-              }}
-            >
-              <SelectTrigger className="h-9 w-24">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {availableYears.map(y => (
-                  <SelectItem key={y} value={String(y)}>
-                    {y}年
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          )}
-
-          <Select
-            value={String(month)}
-            onValueChange={value => {
-              const m = Number(value);
-              if (Number.isFinite(m)) {
-                onMonthChange(year, m);
-              }
-            }}
-          >
-            <SelectTrigger className="h-9 w-24">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {monthOptions.map(m => (
-                <SelectItem key={m} value={String(m)}>
-                  {m}月
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-
-        <div className="flex gap-1">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="h-9 w-9 p-0"
-            onClick={() => {
-              if (month === 1) {
-                onMonthChange(year - 1, 12);
-              } else {
-                onMonthChange(year, month - 1);
-              }
-            }}
-          >
-            <ChevronLeft className="h-4 w-4" />
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="h-9 w-9 p-0"
-            onClick={() => {
-              if (month === 12) {
-                onMonthChange(year + 1, 1);
-              } else {
-                onMonthChange(year, month + 1);
-              }
-            }}
-          >
-            <ChevronRight className="h-4 w-4" />
-          </Button>
-        </div>
-      </div>
-
       {/* カレンダーグリッド */}
       <div className="w-full overflow-hidden rounded-md border border-zinc-800 bg-zinc-950">
         {/* 曜日ヘッダー */}

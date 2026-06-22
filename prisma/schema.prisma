@@ -42,9 +42,10 @@ model SubAccount {
   cryptos          CryptoAsset[]
   holdings         Holding[]
   holdingHistories HoldingHistory[]
-  pointDetail      PointDetail?
-  mainAccount      MainAccount      @relation(fields: [mainAccountId], references: [id], onDelete: Cascade)
-  transactions     Transaction[]
+  pointDetail         PointDetail?
+  creditCardBillings  CreditCardBilling[]
+  mainAccount         MainAccount      @relation(fields: [mainAccountId], references: [id], onDelete: Cascade)
+  transactions        Transaction[]
 
   @@unique([mainAccountId, currentName])
   @@index([mainAccountId])
@@ -180,6 +181,19 @@ model CategoryRule {
 
   @@unique([keyword, subCategoryId])
   @@index([subCategoryId])
+}
+
+model CreditCardBilling {
+  id           String   @id @default(cuid())
+  subAccountId String
+  billingDate  DateTime @db.Date
+  amount       Int
+  content      String?
+  scrapedAt    DateTime  @default(now())
+  subAccount   SubAccount @relation(fields: [subAccountId], references: [id], onDelete: Cascade)
+
+  @@unique([subAccountId, billingDate])
+  @@index([subAccountId, billingDate])
 }
 
 enum AssetType {

@@ -14,6 +14,95 @@ import {
 } from "@/lib/validations";
 
 /**
+ * クレジットカードの請求履歴を取得する関数である．
+ * 指定されたメイン口座に紐づく負債サブアカウントの請求データを返す．
+ */
+export async function getCreditCardBillings(mainAccountId: string) {
+  logger.info(`📂 Fetching credit card billings for account: ${mainAccountId}`);
+  return prisma.creditCardBilling.findMany({
+    where: {
+      subAccount: {
+        mainAccountId,
+        assetType: "LIABILITY",
+      },
+    },
+    select: {
+      id: true,
+      billingDate: true,
+      amount: true,
+      content: true,
+      subAccount: {
+        select: {
+          id: true,
+          currentName: true,
+        },
+      },
+    },
+    orderBy: [{ subAccount: { sortOrder: "asc" } }, { billingDate: "desc" }],
+  });
+}
+
+/**
+ * メイン口座ごとの請求概要を取得する関数である．
+ * 各口座の最新の請求額と合計を計算して返す．
+ */
+export async function getCreditCardBillingSummary(
+  mainAccountId: string,
+): Promise<{
+  totalBilling: number;
+  recentBillings: Array<{
+    subAccountName: string;
+    amount: number;
+    billingDate: Date;
+  }>;
+}> {
+  logger.info(
+    `📂 Fetching credit card billing summary for account: ${mainAccountId}`,
+  );
+  const billings = await prisma.creditCardBilling.findMany({
+    where: {
+      subAccount: {
+        mainAccountId,
+        assetType: "LIABILITY",
+      },
+    },
+    select: {
+      amount: true,
+      billingDate: true,
+      subAccount: {
+        select: {
+          currentName: true,
+        },
+      },
+    },
+    orderBy: { billingDate: "desc" },
+  });
+
+  // 各サブアカウントごとに最新の請求を取得
+  const latestBySubAccount = new Map<
+    string,
+    { amount: number; billingDate: Date }
+  >();
+  for (const b of billings) {
+    const key = b.subAccount.currentName;
+    if (!latestBySubAccount.has(key)) {
+      latestBySubAccount.set(key, {
+        amount: b.amount,
+        billingDate: b.billingDate,
+      });
+    }
+  }
+
+  const recentBillings = Array.from(latestBySubAccount.entries()).map(
+    ([subAccountName, data]) => ({ subAccountName, ...data }),
+  );
+
+  const totalBilling = recentBillings.reduce((sum, b) => sum + b.amount, 0);
+
+  return { totalBilling, recentBillings };
+}
+
+/**
  * すべてのメイン口座情報を取得する関数である．
  * 各口座に関連付けられたプロバイダー，サブ口座，保有銘柄，ポイント詳細などを一括で取得する．
  */
@@ -40,10 +129,11 @@ export async function getAccounts() {
  * 口座一覧用の軽量関数である．
  * 一覧表示に必要な最小限のフィールドのみを取得する．
  * holdings, cryptos, pointDetail は取得しない．
+ * 負債口座の請求概要も併せて取得する．
  */
 export async function getAccountList() {
   logger.info("📂 Fetching account list (lightweight)...");
-  return prisma.mainAccount.findMany({
+  const accounts = await prisma.mainAccount.findMany({
     select: {
       id: true,
       label: true,
@@ -66,6 +156,67 @@ export async function getAccountList() {
     },
     orderBy: { sortOrder: "asc" },
   });
+
+  // 各口座の請求概要を取得
+  const accountsWithBilling = accounts.map(async account => {
+    const liabilitySubAccounts = account.subAccounts.filter(
+      sa => sa.assetType === "LIABILITY",
+    );
+    let billingSummary: {
+      totalBilling: number;
+      recentBillings: Array<{
+        subAccountName: string;
+        amount: number;
+        billingDate: Date;
+      }>;
+    } | null = null;
+
+    if (liabilitySubAccounts.length > 0) {
+      const billings = await prisma.creditCardBilling.findMany({
+        where: {
+          subAccountId: { in: liabilitySubAccounts.map(sa => sa.id) },
+        },
+        select: {
+          amount: true,
+          billingDate: true,
+          subAccount: { select: { currentName: true } },
+        },
+        orderBy: { billingDate: "desc" },
+      });
+
+      if (billings.length > 0) {
+        const latestBySubAccount = new Map<
+          string,
+          { amount: number; billingDate: Date }
+        >();
+        for (const b of billings) {
+          const key = b.subAccount.currentName;
+          if (!latestBySubAccount.has(key)) {
+            latestBySubAccount.set(key, {
+              amount: b.amount,
+              billingDate: b.billingDate,
+            });
+          }
+        }
+
+        const recentBillings = Array.from(latestBySubAccount.entries()).map(
+          ([subAccountName, data]) => ({ subAccountName, ...data }),
+        );
+        const totalBilling = recentBillings.reduce(
+          (sum, b) => sum + b.amount,
+          0,
+        );
+        billingSummary = { totalBilling, recentBillings };
+      }
+    }
+
+    return {
+      ...account,
+      billingSummary,
+    };
+  });
+
+  return Promise.all(accountsWithBilling);
 }
 
 /**

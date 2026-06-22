@@ -101,6 +101,164 @@ async function fetchJson<T>(page: Page, url: string): Promise<T> {
   return (await res.json()) as T;
 }
 
+type MfLiabilitiesResponse = {
+  accounts?: Array<{
+    service_id: number;
+    disp_name: string | null;
+    account_id_hash: string;
+    category_type: string;
+    category_name: string;
+    service: {
+      service_type: string;
+      service_name: string;
+      disp_order: number;
+      yomigana: string;
+      color_code: string;
+    };
+    sub_accounts?: Array<{
+      sub_name: string | null;
+      sub_type: string;
+      sub_number: string | null;
+      disp_name: string | null;
+      user_asset_acts?: Array<{
+        content: string;
+        amount: number;
+        currency: string;
+        jpyrate: number;
+        updated_at: string;
+      }>;
+      asset_classes?: Array<{
+        asset_class_type: string;
+        asset_class_name: string;
+        asset_subclasses?: Array<{
+          asset_subclass_type: string;
+          asset_subclass_name: string;
+          user_asset_sums?: Array<{
+            value: number;
+            currency: string;
+            jpyrate: number;
+          }>;
+        }>;
+      }>;
+    }>;
+  }>;
+};
+
+/**
+ * MoneyForward のクレジットカード請求情報 (/sp2/liabilities) を取得する
+ */
+async function fetchLiabilities(page: Page): Promise<MfLiabilitiesResponse> {
+  return fetchJson<MfLiabilitiesResponse>(
+    page,
+    "https://moneyforward.com/sp2/liabilities",
+  );
+}
+
+/**
+ * クレジットカードの請求データを DB に保存する
+ */
+async function saveCreditCardBillings(
+  liabilities: MfLiabilitiesResponse,
+  providerId: string,
+) {
+  const accounts = liabilities.accounts ?? [];
+  if (accounts.length === 0) {
+    logger.info("ℹ️ No liability accounts found for billing data.");
+    return;
+  }
+
+  logger.info(
+    { accountCount: accounts.length },
+    "💳 Processing credit card billing data...",
+  );
+
+  // 対象プロバイダーの mainAccount を取得
+  const mainAccounts = await prisma.mainAccount.findMany({
+    where: { providerId },
+    select: { id: true, label: true },
+  });
+
+  const targetLabels = new Set(
+    mainAccounts.map(ma => normalizeInstitutionName(ma.label)),
+  );
+
+  let totalBillingsSaved = 0;
+
+  for (const account of accounts) {
+    // プロバイダーマッチ
+    const serviceName = normalizeInstitutionName(account.service.service_name);
+    if (!targetLabels.has(serviceName)) continue;
+
+    const mainAccount = mainAccounts.find(
+      ma => normalizeInstitutionName(ma.label) === serviceName,
+    );
+    if (!mainAccount) continue;
+
+    const subAccounts = account.sub_accounts ?? [];
+    for (const subAccount of subAccounts) {
+      // user_asset_acts がない場合はスキップ
+      const acts = subAccount.user_asset_acts ?? [];
+      if (acts.length === 0) continue;
+
+      // subAccount を DB から取得（LIABILITY 类型のものを対象）
+      const subAccountName = buildSubAccountMergeName(
+        subAccount.sub_type,
+        subAccount.sub_name ?? "",
+      );
+      const dbSubAccount = await prisma.subAccount.findFirst({
+        where: {
+          mainAccountId: mainAccount.id,
+          currentName: subAccountName,
+          assetType: "LIABILITY",
+        },
+      });
+      if (!dbSubAccount) continue;
+
+      // 各請求データを upsert
+      for (const act of acts) {
+        const amount = Math.trunc(act.amount);
+
+        try {
+          await prisma.creditCardBilling.upsert({
+            where: {
+              subAccountId_billingDate: {
+                subAccountId: dbSubAccount.id,
+                billingDate: toUtcDateOnly(act.updated_at.slice(0, 10)),
+              },
+            },
+            create: {
+              subAccountId: dbSubAccount.id,
+              billingDate: toUtcDateOnly(act.updated_at.slice(0, 10)),
+              amount,
+              content: act.content?.trim() || null,
+            },
+            update: {
+              amount,
+              content: act.content?.trim() || null,
+            },
+          });
+          totalBillingsSaved++;
+        } catch (error) {
+          logger.warn(
+            {
+              err: error,
+              subAccount: subAccountName,
+              billingDate: act.updated_at,
+              amount,
+            },
+            "⚠️ Failed to save credit card billing record.",
+          );
+        }
+      }
+    }
+  }
+
+  logger.info(
+    { count: totalBillingsSaved },
+    "✅ Credit card billing data saved.",
+  );
+}
+
 async function fetchAccountSummaries(page: Page): Promise<MfAccountSummary[]> {
   const payload = await fetchJson<{ accounts?: MfAccountSummary[] }>(
     page,
@@ -2607,6 +2765,11 @@ export async function runMfScraper(
     // Phase 5: 負債口座の BalanceHistory を逆算（最新残高 + 入出金明細）
     logger.info("📋 Phase 5: Recalculating liability balance history...");
     await recalculateLiabilityHistory(transactions, provider.id);
+
+    // Phase 5.5: クレジットカードの請求データをスクレイプ・保存
+    logger.info("📋 Phase 5.5: Scraping credit card billing data...");
+    const liabilities = await fetchLiabilities(page);
+    await saveCreditCardBillings(liabilities, provider.id);
 
     // Phase 6: 残高履歴を過去から取得（非負債口座のみ）
     logger.info("📋 Phase 6: Scraping balance history...");

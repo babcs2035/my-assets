@@ -33,6 +33,7 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { MonthNavigator } from "@/components/ui/month-navigator";
 import {
   Pagination,
   PaginationContent,
@@ -100,11 +101,6 @@ export function TransactionsContent() {
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth() + 1;
   const now = nowJST();
-  const yearOptions = Array.from(
-    { length: now.getFullYear() - 2023 + 2 },
-    (_, i) => 2023 + i,
-  );
-  const _monthOptions = Array.from({ length: 12 }, (_, i) => i + 1);
   const activeMainAccountId =
     selectedMainAccountId === "all" ? undefined : selectedMainAccountId;
   const activeSubAccountId =
@@ -255,6 +251,22 @@ export function TransactionsContent() {
   return (
     <div className="space-y-6">
       <div className="space-y-6">
+        {/* 年月ナビゲーター */}
+        <MonthNavigator
+          year={year}
+          month={month}
+          onMonthChange={(newYear, newMonth) => {
+            setCurrentDate(new Date(newYear, newMonth - 1, 1));
+            setSelectedDay(null);
+            setPage(1);
+          }}
+          onThisMonth={() => {
+            setCurrentDate(new Date(now.getFullYear(), now.getMonth(), 1));
+            setSelectedDay(null);
+            setPage(1);
+          }}
+        />
+
         {/* カレンダー表示エリア */}
         <Card className="relative">
           <CardHeader>
@@ -283,12 +295,6 @@ export function TransactionsContent() {
               month={month}
               selectedDay={selectedDay}
               calendarData={calendarData}
-              availableYears={yearOptions}
-              onMonthChange={(newYear, newMonth) => {
-                setCurrentDate(new Date(newYear, newMonth - 1, 1));
-                setSelectedDay(null);
-                setPage(1);
-              }}
               onDayClick={day => {
                 if (selectedDay === day) {
                   setSelectedDay(null);
@@ -298,22 +304,6 @@ export function TransactionsContent() {
                 setPage(1);
               }}
             />
-            <div className="mt-4">
-              <Button
-                type="button"
-                variant="outline"
-                className="h-9 w-full sm:w-auto"
-                onClick={() => {
-                  setCurrentDate(
-                    new Date(now.getFullYear(), now.getMonth(), 1),
-                  );
-                  setSelectedDay(null);
-                  setPage(1);
-                }}
-              >
-                今月
-              </Button>
-            </div>
           </CardContent>
         </Card>
 
