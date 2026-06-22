@@ -3,6 +3,7 @@
 import {
   ArrowDownUp,
   ArrowLeftRight,
+  Brain,
   Building2,
   LayoutDashboard,
   Settings,
@@ -51,6 +52,11 @@ const navItems = [
     href: "/accounts",
     label: "口座管理",
     icon: Building2,
+  },
+  {
+    href: "/analysis",
+    label: "分析",
+    icon: Brain,
   },
   {
     href: "/settings",

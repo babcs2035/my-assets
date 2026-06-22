@@ -10,7 +10,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { cn, nowJST, toJST } from "@/lib/utils";
+import { cn, formatJSTDate, formatJSTDateTime, nowJST } from "@/lib/utils";
 
 /**
  * 同期状態の型定義である．
@@ -47,24 +47,33 @@ export function SyncStatus() {
           return;
         }
 
-        const last = toJST(new Date(info.date));
-        const isToday =
-          now.getFullYear() === last.getFullYear() &&
-          now.getMonth() === last.getMonth() &&
-          now.getDate() === last.getDate();
+        const lastDateStr = formatJSTDate(new Date(info.date));
+        const isToday = formatJSTDate(now) === lastDateStr;
 
         if (isToday) {
           setStatus(info.success ? "success" : "error");
           setLastSyncText(
-            `${last.getFullYear()}/${String(last.getMonth() + 1).padStart(2, "0")}/${String(last.getDate()).padStart(2, "0")} ${last.getHours().toString().padStart(2, "0")}:${last
-              .getMinutes()
-              .toString()
-              .padStart(2, "0")} ${info.success ? "完了" : "失敗"}`,
+            formatJSTDateTime(new Date(info.date)) +
+              ` ${info.success ? "完了" : "失敗"}`,
           );
         } else {
           // 現在同期実行中かどうかを判定する (例: 08:00 - 08:10 JST)．
-          const hour = now.getHours();
-          const minute = now.getMinutes();
+          const lastDateTimeStr = formatJSTDateTime(new Date(info.date));
+          const hour = parseInt(
+            new Intl.DateTimeFormat("en-US", {
+              hour: "2-digit",
+              hour12: false,
+              timeZone: "Asia/Tokyo",
+            }).format(now),
+            10,
+          );
+          const minute = parseInt(
+            new Intl.DateTimeFormat("en-US", {
+              minute: "2-digit",
+              timeZone: "Asia/Tokyo",
+            }).format(now),
+            10,
+          );
 
           if (hour === 8 && minute < 10) {
             setStatus("syncing");
@@ -72,18 +81,12 @@ export function SyncStatus() {
           } else if ((hour === 8 && minute >= 10) || hour > 8) {
             setStatus(info.success ? "idle" : "error");
             setLastSyncText(
-              `${last.getFullYear()}/${String(last.getMonth() + 1).padStart(2, "0")}/${String(last.getDate()).padStart(2, "0")} ${last.getHours().toString().padStart(2, "0")}:${last
-                .getMinutes()
-                .toString()
-                .padStart(2, "0")} ${info.success ? "完了" : "失敗"}`,
+              `${lastDateTimeStr} ${info.success ? "完了" : "失敗"}`,
             );
           } else {
             setStatus("idle");
             setLastSyncText(
-              `${last.getFullYear()}/${String(last.getMonth() + 1).padStart(2, "0")}/${String(last.getDate()).padStart(2, "0")} ${last.getHours().toString().padStart(2, "0")}:${last
-                .getMinutes()
-                .toString()
-                .padStart(2, "0")} ${info.success ? "完了" : "失敗"}`,
+              `${lastDateTimeStr} ${info.success ? "完了" : "失敗"}`,
             );
           }
         }

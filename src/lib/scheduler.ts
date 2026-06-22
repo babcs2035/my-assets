@@ -46,6 +46,7 @@ function msUntilNext0800JST(): number {
 
 /**
  * 全てのアクティブなプロバイダーの同期を実行する関数である．
+ * 同期完了後に資産分析も自動的に実行する．
  */
 async function runAllProvidersSync() {
   const logger = await getLazyLogger();
@@ -119,6 +120,24 @@ async function runAllProvidersSync() {
     }
 
     logger.info("⏰ [Scheduler] ✅ All scheduled syncs completed.");
+
+    // ── 同期完了後に資産分析を実行 ────────────────────────
+    logger.info("⏰ [Scheduler] Running asset analysis after sync...");
+    try {
+      const { runAssetAnalysis } = await import("@/actions/analysis");
+      const result = await runAssetAnalysis();
+
+      if (result.success) {
+        logger.info("⏰ [Scheduler] ✅ Asset analysis completed.");
+      } else {
+        logger.error(
+          { error: result.error },
+          "⏰ [Scheduler] ❌ Asset analysis failed.",
+        );
+      }
+    } catch (error) {
+      logger.error({ err: error }, "⏰ [Scheduler] ❌ Asset analysis failed.");
+    }
   } catch (error) {
     logger.error({ err: error }, "⏰ [Scheduler] ❌ Scheduled sync failed.");
   }

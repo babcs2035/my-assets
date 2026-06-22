@@ -31,21 +31,21 @@ model MainAccount {
 }
 
 model SubAccount {
-  id               String           @id @default(cuid())
-  mainAccountId    String
-  currentName      String
-  assetType        AssetType        @default(CASH)
-  balance          Int
-  sortOrder        Int              @default(0)
-  isHidden         Boolean          @default(false)
-  histories        BalanceHistory[]
-  cryptos          CryptoAsset[]
-  holdings         Holding[]
-  holdingHistories HoldingHistory[]
-  pointDetail         PointDetail?
-  creditCardBillings  CreditCardBilling[]
-  mainAccount         MainAccount      @relation(fields: [mainAccountId], references: [id], onDelete: Cascade)
-  transactions        Transaction[]
+  id                 String              @id @default(cuid())
+  mainAccountId      String
+  currentName        String
+  assetType          AssetType           @default(CASH)
+  balance            Int
+  sortOrder          Int                 @default(0)
+  isHidden           Boolean             @default(false)
+  histories          BalanceHistory[]
+  creditCardBillings CreditCardBilling[]
+  cryptos            CryptoAsset[]
+  holdings           Holding[]
+  holdingHistories   HoldingHistory[]
+  pointDetail        PointDetail?
+  mainAccount        MainAccount         @relation(fields: [mainAccountId], references: [id], onDelete: Cascade)
+  transactions       Transaction[]
 
   @@unique([mainAccountId, currentName])
   @@index([mainAccountId])
@@ -184,16 +184,30 @@ model CategoryRule {
 }
 
 model CreditCardBilling {
-  id           String   @id @default(cuid())
+  id           String     @id @default(cuid())
   subAccountId String
-  billingDate  DateTime @db.Date
+  billingDate  DateTime   @db.Date
   amount       Int
   content      String?
-  scrapedAt    DateTime  @default(now())
+  scrapedAt    DateTime   @default(now())
   subAccount   SubAccount @relation(fields: [subAccountId], references: [id], onDelete: Cascade)
 
   @@unique([subAccountId, billingDate])
   @@index([subAccountId, billingDate])
+}
+
+model AssetAnalysis {
+  id        String         @id @default(cuid())
+  content   String
+  prompt    String?
+  status    AnalysisStatus @default(PENDING)
+  error     String?
+  providers String?
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+
+  @@index([status])
+  @@index([createdAt])
 }
 
 enum AssetType {
@@ -207,4 +221,10 @@ enum AssetType {
 enum CategoryType {
   INCOME
   EXPENSE
+}
+
+enum AnalysisStatus {
+  PENDING
+  COMPLETED
+  FAILED
 }
