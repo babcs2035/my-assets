@@ -197,17 +197,19 @@ model CreditCardBilling {
 }
 
 model AssetAnalysis {
-  id        String         @id @default(cuid())
-  content   String
-  prompt    String?
-  status    AnalysisStatus @default(PENDING)
-  error     String?
-  providers String?
-  createdAt DateTime       @default(now())
-  updatedAt DateTime       @updatedAt
+  id           String         @id @default(cuid())
+  content      String
+  status       AnalysisStatus @default(PENDING)
+  error        String?
+  providers    String?
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  prompt       String?
+  analysisDate DateTime       @default(now())
 
   @@index([status])
   @@index([createdAt])
+  @@index([analysisDate])
 }
 
 enum AssetType {

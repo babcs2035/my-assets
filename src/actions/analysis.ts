@@ -6,15 +6,27 @@ import { prisma } from "@/lib/prisma";
 import { assetTypeLabel, formatCurrency, nowJST } from "@/lib/utils";
 
 /**
+ * 分析結果をデータベースに保存する際の分析日時を取得する．
+ * 環境変数 ANALYSIS_DATE が設定されていればそちらを優先し，なければ現在時刻 (JST) を返す．
+ */
+function getAnalysisDate(): Date {
+  if (process.env.ANALYSIS_DATE) {
+    return new Date(process.env.ANALYSIS_DATE);
+  }
+  return nowJST();
+}
+
+/**
  * 分析結果の型定義である．
  */
 export type AnalysisResult = Omit<
   AssetAnalysis,
-  "createdAt" | "updatedAt" | "prompt"
+  "createdAt" | "updatedAt" | "prompt" | "analysisDate"
 > & {
   createdAt: Date;
   updatedAt: Date;
   prompt?: string | null;
+  analysisDate: Date;
 };
 
 /**
@@ -324,6 +336,7 @@ ${recentTransactions || "・なし"}
           status: "FAILED",
           error,
           providers: null,
+          analysisDate: getAnalysisDate(),
         },
       });
       return { success: false, error };
@@ -367,6 +380,7 @@ ${recentTransactions || "・なし"}
           status: "FAILED",
           error,
           providers: null,
+          analysisDate: getAnalysisDate(),
         },
       });
       return { success: false, error };
@@ -394,6 +408,7 @@ ${recentTransactions || "・なし"}
           status: "FAILED",
           error,
           providers: null,
+          analysisDate: getAnalysisDate(),
         },
       });
       return { success: false, error };
@@ -438,6 +453,7 @@ ${recentTransactions || "・なし"}
           status: "FAILED",
           error,
           providers: null,
+          analysisDate: getAnalysisDate(),
         },
       });
       return { success: false, error };
@@ -451,6 +467,7 @@ ${recentTransactions || "・なし"}
         prompt,
         status: "COMPLETED",
         providers: null,
+        analysisDate: getAnalysisDate(),
       },
     });
 
@@ -470,6 +487,7 @@ ${recentTransactions || "・なし"}
         status: "FAILED",
         error: `分析中にエラーが発生しました: ${errorMessage}`,
         providers: null,
+        analysisDate: getAnalysisDate(),
       },
     });
 

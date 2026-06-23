@@ -156,7 +156,9 @@ const AnalysisPage: NextPage = () => {
                     <span className="text-blue-500">実行中</span>
                   </>
                 )}
-                <span>{formatJSTDateTime(latestResult.createdAt as Date)}</span>
+                <span>
+                  {formatJSTDateTime(latestResult.analysisDate as Date)}
+                </span>
               </div>
             </div>
           </CardHeader>
@@ -238,7 +240,7 @@ const AnalysisPage: NextPage = () => {
                         <Calendar className="h-4 w-4 text-zinc-500 shrink-0" />
                         <div className="min-w-0">
                           <span className="text-sm font-medium text-zinc-200">
-                            {formatJSTDateTime(result.createdAt as Date)}
+                            {formatJSTDateTime(result.analysisDate as Date)}
                           </span>
                           <span className="block text-xs text-zinc-500 truncate">
                             {(result.content as string).length}文字
