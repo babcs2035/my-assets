@@ -11,6 +11,8 @@ services:
       APP_PORT: ${APP_PORT:-3000}
       OP_MF_ITEM_ID: ${OP_MF_ITEM_ID:-MF_Main}
       OP_VAULT: ${OP_VAULT:-}
+      LLAMA_SERVER_URL: ${LLAMA_SERVER_URL:-}
+      LLAMA_MODEL_NAME: ${LLAMA_MODEL_NAME:-unsloth/Qwen3.6-35B-A3B-MTP-GGUF:Q4_K_XL}
     volumes:
       # Pre-extracted credentials (from deploy host)
       - ./data/runtime/op-secrets.json:/app/op-secrets.json:ro
