@@ -6,12 +6,12 @@ services:
     ports:
       - "127.0.0.1:${APP_PORT:-3000}:3000"
     environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER:-my-assets_user}:${POSTGRES_PASSWORD:-my-assets_password}@my-assets-db:${DB_PORT:-5432}/${POSTGRES_DB:-my-assets}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-my-assets_user}:${POSTGRES_PASSWORD:-my-assets_password}@my-assets-db:5432/${POSTGRES_DB:-my-assets}
       TZ: ${TZ:-Asia/Tokyo}
       APP_PORT: ${APP_PORT:-3000}
       OP_MF_ITEM_ID: ${OP_MF_ITEM_ID:-MF_Main}
       OP_VAULT: ${OP_VAULT:-}
-      LLAMA_SERVER_URL: ${LLAMA_SERVER_URL:-}
+      LLAMA_SERVER_URL: ${LLAMA_SERVER_URL:-http://host.docker.internal:18080/v1/chat/completions}
       LLAMA_MODEL_NAME: ${LLAMA_MODEL_NAME:-unsloth/Qwen3.6-35B-A3B-MTP-GGUF:Q4_K_XL}
     volumes:
       # Pre-extracted credentials (from deploy host)
@@ -19,12 +19,14 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
   db:
     image: postgres:16-alpine
     container_name: my-assets-db
     restart: unless-stopped
-    command: ["postgres", "-p", "${DB_PORT:-5432}"]
+    command: ["postgres", "-p", "5432"]
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-my-assets_user}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-my-assets_password}
@@ -32,8 +34,6 @@ services:
       TZ: ${TZ:-Asia/Tokyo}
     volumes:
       - postgres_data:/var/lib/postgresql/data
-    expose:
-      - "${DB_PORT:-5432}"
     healthcheck:
       test:
         [
