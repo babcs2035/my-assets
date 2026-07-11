@@ -50,6 +50,11 @@ import {
   syncProvider,
 } from "@/actions/providers";
 import {
+  createTransferRule,
+  deleteTransferRule,
+  getTransferRules,
+} from "@/actions/transactions";
+import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -102,6 +107,7 @@ type Provider = Awaited<ReturnType<typeof getProviders>>[number];
 type Account = Awaited<ReturnType<typeof getAccounts>>[number];
 type Category = Awaited<ReturnType<typeof getCategories>>[number];
 type CategoryRule = Awaited<ReturnType<typeof getCategoryRules>>[number];
+type TransferRule = Awaited<ReturnType<typeof getTransferRules>>[number];
 
 /**
  * プロバイダーのタイプ表示名を返すヘルパー関数である．
@@ -189,6 +195,12 @@ export function SettingsContent() {
   const [ruleKeywords, setRuleKeywords] = useState("");
   const [ruleSubCategoryId, setRuleSubCategoryId] = useState<string>("");
 
+  // Transfer Rule State
+  const [transferRules, setTransferRules] = useState<TransferRule[]>([]);
+  const [transferRuleKeyword, setTransferRuleKeyword] = useState("");
+  const [transferRuleTargetSubAccountId, setTransferRuleTargetSubAccountId] =
+    useState<string>("");
+
   // Category Edit State
   const [editingMainCategory, setEditingMainCategory] = useState<{
     id: string;
@@ -214,11 +226,12 @@ export function SettingsContent() {
     setIsLoading(true);
     startTransition(async () => {
       try {
-        const [p, a, c, r] = await Promise.all([
+        const [p, a, c, r, t] = await Promise.all([
           getProviders(),
           getAccounts(),
           getCategories(),
           getCategoryRules(),
+          getTransferRules(),
         ]);
         setProviders(p);
         setAccounts(a);
@@ -234,6 +247,7 @@ export function SettingsContent() {
           ),
         );
         setRules(r);
+        setTransferRules(t);
       } catch {
         toast.error("設定データのフェッチに失敗しました．");
       } finally {
@@ -648,6 +662,34 @@ export function SettingsContent() {
       fetchData();
     } catch {
       toast.error("ルールの削除に失敗しました．");
+    }
+  };
+
+  // --- 振替ルール ハンドラ ---
+
+  const handleAddTransferRule = async () => {
+    if (!transferRuleKeyword || !transferRuleTargetSubAccountId) return;
+    try {
+      await createTransferRule({
+        keyword: transferRuleKeyword,
+        targetSubAccountId: transferRuleTargetSubAccountId,
+      });
+      toast.success("振替ルールを追加しました．");
+      setTransferRuleKeyword("");
+      setTransferRuleTargetSubAccountId("");
+      fetchData();
+    } catch {
+      toast.error("振替ルールの追加に失敗しました．");
+    }
+  };
+
+  const handleDeleteTransferRule = async (id: string) => {
+    try {
+      await deleteTransferRule(id);
+      toast.success("振替ルールを削除しました．");
+      fetchData();
+    } catch {
+      toast.error("振替ルールの削除に失敗しました．");
     }
   };
 
@@ -1957,6 +1999,145 @@ export function SettingsContent() {
                       </TableRow>
                     ))}
                     {rules.length === 0 && (
+                      <TableRow>
+                        <TableCell
+                          colSpan={3}
+                          className="h-24 text-center text-zinc-500"
+                        >
+                          ルールがありません
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* 振替ルール管理セクション */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              振替ルール管理
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex flex-col gap-4 md:flex-row md:items-end">
+              <div className="space-y-2 flex-1 w-full">
+                <Label>キーワード</Label>
+                <div className="relative">
+                  <Search className="absolute left-2 top-2.5 h-4 w-4 text-zinc-500" />
+                  <Input
+                    placeholder="明細の摘要に含まれる文字"
+                    className="pl-8 text-sm"
+                    value={transferRuleKeyword}
+                    onChange={e => setTransferRuleKeyword(e.target.value)}
+                  />
+                </div>
+              </div>
+              <div className="space-y-2 w-full sm:w-auto sm:flex-1 md:w-[250px] shrink-0">
+                <Label>振替先口座</Label>
+                <Select
+                  value={transferRuleTargetSubAccountId}
+                  onValueChange={setTransferRuleTargetSubAccountId}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="口座を選択" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {accounts
+                      .flatMap(a =>
+                        a.subAccounts.map(sa => ({
+                          id: sa.id,
+                          name: `${a.label}（${sa.currentName}）`,
+                        })),
+                      )
+                      .map(sa => (
+                        <SelectItem key={sa.id} value={sa.id}>
+                          {sa.name}
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <Button
+                onClick={handleAddTransferRule}
+                disabled={
+                  !transferRuleKeyword || !transferRuleTargetSubAccountId
+                }
+                className="w-full md:w-auto"
+              >
+                ルール追加
+              </Button>
+            </div>
+
+            <div className="rounded-md border border-zinc-800 overflow-hidden">
+              {/* Mobile View */}
+              <div className="md:hidden divide-y divide-zinc-800">
+                {transferRules.map(rule => (
+                  <div key={rule.id} className="p-3 bg-card min-w-0">
+                    <div className="flex justify-between items-start gap-3 min-w-0">
+                      <div className="space-y-1.5 min-w-0 overflow-hidden flex-1">
+                        <div className="font-mono text-zinc-200 text-sm truncate">
+                          {rule.keyword}
+                        </div>
+                        <Badge variant="secondary" className="text-xs">
+                          {rule.targetSubAccount.mainAccount.label}（
+                          {rule.targetSubAccount.currentName}）
+                        </Badge>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handleDeleteTransferRule(rule.id)}
+                        className="text-zinc-500 hover:text-red-400 shrink-0"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+                {transferRules.length === 0 && (
+                  <div className="p-8 text-center text-sm text-zinc-500">
+                    ルールがありません
+                  </div>
+                )}
+              </div>
+
+              {/* Desktop View */}
+              <div className="hidden md:block overflow-x-auto">
+                <Table className="min-w-[600px]">
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>キーワード</TableHead>
+                      <TableHead>振替先口座</TableHead>
+                      <TableHead className="text-right">操作</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {transferRules.map(rule => (
+                      <TableRow key={rule.id}>
+                        <TableCell className="font-mono text-zinc-300 truncate max-w-[200px]">
+                          {rule.keyword}
+                        </TableCell>
+                        <TableCell>
+                          {rule.targetSubAccount.mainAccount.label}（
+                          {rule.targetSubAccount.currentName}）
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleDeleteTransferRule(rule.id)}
+                            className="text-zinc-500 hover:text-red-400"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                    {transferRules.length === 0 && (
                       <TableRow>
                         <TableCell
                           colSpan={3}

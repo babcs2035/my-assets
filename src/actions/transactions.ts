@@ -6,7 +6,13 @@ import { prisma } from "@/lib/prisma";
 import { formatJSTDate } from "@/lib/utils";
 import {
   type TransactionCategoryUpdateInput,
+  type TransferMarkInput,
+  type TransferRuleCreateInput,
+  type TransferRuleUpdateInput,
   transactionCategoryUpdateSchema,
+  transferMarkSchema,
+  transferRuleCreateSchema,
+  transferRuleUpdateSchema,
 } from "@/lib/validations";
 
 const toUtcDateOnly = (year: number, month: number, day: number) =>
@@ -421,4 +427,255 @@ export async function detectTransfers() {
   logger.info(`✅ Detected and linked ${matched} transfer pairs.`);
   revalidatePath("/transactions");
   return { matched };
+}
+
+/**
+ * 指定された取引明細を振替扱いに設定する関数である．
+ * 出金側の明細を更新し，振替先口座に受信側の明細を自動生成する．
+ * 振替先口座の残高は更新しない（入出金明細上のペアとしてのみ管理）．
+ */
+export async function markTransactionAsTransfer(input: TransferMarkInput) {
+  const data = transferMarkSchema.parse(input);
+  logger.info(
+    `🔄 Marking transaction ${data.transactionId} as transfer to ${data.targetSubAccountId}`,
+  );
+
+  const source = await prisma.transaction.findUnique({
+    where: { id: data.transactionId },
+    select: {
+      id: true,
+      date: true,
+      amount: true,
+      desc: true,
+      subAccountId: true,
+      isTransfer: true,
+    },
+  });
+
+  if (!source) {
+    logger.warn(`Source transaction ${data.transactionId} not found.`);
+    throw new Error("出金元明細が見つかりません．");
+  }
+
+  if (source.isTransfer) {
+    throw new Error("既に振替扱いの明細です．");
+  }
+
+  if (source.subAccountId === data.targetSubAccountId) {
+    throw new Error("同じ口座には振替できません．");
+  }
+
+  // 出金側: amount < 0 ならそのまま，amount > 0 なら符号を反転
+  const sourceAmount = source.amount > 0 ? -source.amount : source.amount;
+
+  const transferId = `tf_${source.id.slice(0, 8)}_${Date.now()}`;
+
+  // 受信側IDを先に生成し，両側をトランザクションとして一括更新
+  const targetId = crypto.randomUUID();
+
+  await prisma.$transaction(async tx => {
+    // 受信側明細を生成
+    await tx.transaction.create({
+      data: {
+        id: targetId,
+        subAccountId: data.targetSubAccountId,
+        date: source.date,
+        amount: Math.abs(sourceAmount),
+        desc: source.desc,
+        isTransfer: true,
+        transferId,
+        linkedTransId: source.id,
+      },
+    });
+
+    // 出金側明細を更新（相手側IDをセット）
+    await tx.transaction.update({
+      where: { id: source.id },
+      data: {
+        isTransfer: true,
+        transferId,
+        linkedTransId: targetId,
+      },
+    });
+  });
+
+  logger.info(`✅ Marked as transfer: ${transferId}`);
+
+  // 摘要に基づき自動で振替ルールを作成する
+  if (data.createRule && source.desc) {
+    logger.info(`➕ Creating auto-transfer rule for: ${source.desc}`);
+    await prisma.transferRule.deleteMany({
+      where: { keyword: source.desc },
+    });
+    await prisma.transferRule.create({
+      data: {
+        keyword: source.desc,
+        targetSubAccountId: data.targetSubAccountId,
+      },
+    });
+    revalidatePath("/settings");
+  }
+
+  revalidatePath("/transactions");
+  return { transferId };
+}
+
+/**
+ * 振替ルールの一覧を取得する関数である．
+ * 各ルールに振替先口座の詳細情報を含める．
+ */
+export async function getTransferRules() {
+  logger.info("📜 Fetching transfer rules...");
+  return prisma.transferRule.findMany({
+    include: {
+      targetSubAccount: {
+        include: {
+          mainAccount: true,
+        },
+      },
+    },
+  });
+}
+
+/**
+ * 新しい振替ルールを作成する関数である．
+ * 同じキーワードを持つ既存のルールを削除してから新規作成する（upsert的な動作）．
+ */
+export async function createTransferRule(input: TransferRuleCreateInput) {
+  const data = transferRuleCreateSchema.parse(input);
+  logger.info(`➕ Creating transfer rule for keyword: ${data.keyword}`);
+
+  // 同じキーワードを持つ既存のルールを削除してから新規作成する
+  await prisma.transferRule.deleteMany({
+    where: { keyword: data.keyword },
+  });
+
+  const result = await prisma.transferRule.create({ data });
+  revalidatePath("/settings");
+  revalidatePath("/transactions");
+  return result;
+}
+
+/**
+ * 振替ルールを更新する関数である．
+ */
+export async function updateTransferRule(
+  id: string,
+  input: TransferRuleUpdateInput,
+) {
+  const data = transferRuleUpdateSchema.parse(input);
+  logger.info(`📝 Updating transfer rule: ${id}`);
+  const result = await prisma.transferRule.update({
+    where: { id },
+    data,
+  });
+  revalidatePath("/settings");
+  return result;
+}
+
+/**
+ * 振替ルールを削除する関数である．
+ */
+export async function deleteTransferRule(id: string) {
+  logger.info(`🗑️ Deleting transfer rule: ${id}`);
+  const result = await prisma.transferRule.delete({
+    where: { id },
+  });
+  revalidatePath("/settings");
+  return result;
+}
+
+/**
+ * 定義されたすべての振替ルールを，未処理の取引に対して一括適用する関数である．
+ * 各ルールは摘要がキーワードに一致する取引を
+ * 振替先口座の反対符号の取引とペアリングして振替扱いにマークする．
+ */
+export async function applyAllTransferRules() {
+  logger.info("Applying all transfer rules to transactions...");
+  const rules = await prisma.transferRule.findMany({});
+
+  let pairsMarked = 0;
+  let pairsSkipped = 0;
+
+  for (const rule of rules) {
+    // キーワードに一致する未処理の取引を取得
+    const sourceTransactions = await prisma.transaction.findMany({
+      where: {
+        desc: { contains: rule.keyword, mode: "insensitive" },
+        isTransfer: false,
+        subAccount: { isHidden: false },
+      },
+      select: {
+        id: true,
+        subAccountId: true,
+        amount: true,
+        date: true,
+      },
+    });
+
+    for (const sourceTx of sourceTransactions) {
+      // すでに処理済みの場合はスキップ
+      const sourceCheck = await prisma.transaction.findUnique({
+        where: { id: sourceTx.id },
+        select: { isTransfer: true },
+      });
+      if (!sourceCheck || sourceCheck.isTransfer) continue;
+
+      // 振替先口座で反対符号・同額の取引を検索
+      const targetTx = await prisma.transaction.findFirst({
+        where: {
+          subAccountId: rule.targetSubAccountId,
+          amount: -sourceTx.amount,
+          date: sourceTx.date,
+          isTransfer: false,
+        },
+        select: { id: true },
+      });
+
+      if (!targetTx) {
+        // 相手方が見つからない場合はスキップ
+        continue;
+      }
+
+      // 相手方も未処理か確認
+      const targetCheck = await prisma.transaction.findUnique({
+        where: { id: targetTx.id },
+        select: { isTransfer: true },
+      });
+      if (!targetCheck || targetCheck.isTransfer) {
+        pairsSkipped++;
+        continue;
+      }
+
+      // ペアを振替扱いにマーク
+      const transferId = `tf_${sourceTx.id.slice(0, 8)}_${targetTx.id.slice(0, 8)}`;
+
+      await prisma.$transaction([
+        prisma.transaction.update({
+          where: { id: sourceTx.id },
+          data: {
+            isTransfer: true,
+            transferId,
+            linkedTransId: targetTx.id,
+          },
+        }),
+        prisma.transaction.update({
+          where: { id: targetTx.id },
+          data: {
+            isTransfer: true,
+            transferId,
+            linkedTransId: sourceTx.id,
+          },
+        }),
+      ]);
+
+      pairsMarked++;
+    }
+  }
+
+  logger.info(
+    `Transfer rules applied: ${pairsMarked} pairs marked, ${pairsSkipped} pairs skipped.`,
+  );
+  revalidatePath("/transactions");
+  return { pairsMarked, pairsSkipped };
 }

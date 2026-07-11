@@ -88,12 +88,32 @@ export type TransactionCategoryUpdateInput = z.infer<
 
 /**
  * 振替 (Transfer) 設定時のバリデーションスキーマである．
+ * 出金元明細の ID と，振替先サブ口座の ID を指定する．
  */
 export const transferMarkSchema = z.object({
-  transactionId1: z.string(),
-  transactionId2: z.string(),
+  transactionId: z.string(),
+  targetSubAccountId: z.string(),
+  createRule: z.boolean().default(false),
 });
 export type TransferMarkInput = z.infer<typeof transferMarkSchema>;
+
+/**
+ * 振替ルール (TransferRule) 作成時のバリデーションスキーマである．
+ */
+export const transferRuleCreateSchema = z.object({
+  keyword: z.string().min(1, "キーワードは必須です"),
+  targetSubAccountId: z.string().min(1, "振替先口座は必須です"),
+});
+export type TransferRuleCreateInput = z.infer<typeof transferRuleCreateSchema>;
+
+/**
+ * 振替ルール (TransferRule) 更新時のバリデーションスキーマである．
+ */
+export const transferRuleUpdateSchema = z.object({
+  keyword: z.string().optional(),
+  targetSubAccountId: z.string().optional(),
+});
+export type TransferRuleUpdateInput = z.infer<typeof transferRuleUpdateSchema>;
 
 /**
  * メイン口座 (MainAccount) 更新時のバリデーションスキーマである．

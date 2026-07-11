@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  ArrowDownUp,
   ArrowUpDown,
   ChevronDown,
   ChevronUp,
@@ -18,6 +19,7 @@ import {
   updateTransactionCategory,
 } from "@/actions/transactions";
 import { CalendarGrid } from "@/components/transactions/calendar-grid";
+import { TransferDialog } from "@/components/transactions/transfer-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -97,6 +99,13 @@ export function TransactionsContent() {
   const [, startTransition] = useTransition();
   const [sortKey, setSortKey] = useState<SortKey>("date");
   const [sortDir, setSortDir] = useState<SortDirection>("desc");
+
+  // 振替設定ダイアログの状態
+  const [transferDialogOpen, setTransferDialogOpen] = useState(false);
+  const [transferTargetTx, setTransferTargetTx] = useState<{
+    id: string;
+    desc: string;
+  } | null>(null);
 
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth() + 1;
@@ -236,6 +245,14 @@ export function TransactionsContent() {
       setSortKey(key);
       setSortDir(key === "date" ? "desc" : "asc");
     }
+  };
+
+  /**
+   * 振替設定ダイアログを開くハンドラである．
+   */
+  const openTransferDialog = (tx: Transaction) => {
+    setTransferTargetTx({ id: tx.id, desc: tx.desc });
+    setTransferDialogOpen(true);
   };
 
   const SortIcon = ({ columnKey }: { columnKey: SortKey }) => {
@@ -487,9 +504,9 @@ export function TransactionsContent() {
                           </div>
                         </div>
                       </div>
-                      {/* 振替でない場合のみカテゴリーセレクターを表示する */}
+                      {/* 振替でない場合のみカテゴリーセレクターと振替設定ボタンを表示する */}
                       {!tx.isTransfer && (
-                        <div className="flex items-center justify-between mt-2">
+                        <div className="flex items-center justify-between mt-2 gap-2">
                           <Select
                             value={tx.subCategoryId ?? "none"}
                             onValueChange={val =>
@@ -499,7 +516,7 @@ export function TransactionsContent() {
                               )
                             }
                           >
-                            <SelectTrigger className="h-8 w-[140px] text-xs">
+                            <SelectTrigger className="h-8 w-[120px] text-xs">
                               <SelectValue placeholder="未分類" />
                             </SelectTrigger>
                             <SelectContent>
@@ -519,6 +536,14 @@ export function TransactionsContent() {
                                 )}
                             </SelectContent>
                           </Select>
+                          <button
+                            type="button"
+                            onClick={() => openTransferDialog(tx)}
+                            className="flex h-8 shrink-0 items-center gap-1 rounded-md border border-zinc-700 bg-zinc-800 px-2 text-[11px] text-zinc-400 transition-colors hover:border-blue-500/50 hover:text-blue-400"
+                          >
+                            <ArrowDownUp className="h-3 w-3" />
+                            振替
+                          </button>
                         </div>
                       )}
                     </div>
@@ -625,36 +650,48 @@ export function TransactionsContent() {
                                 —
                               </span>
                             ) : (
-                              <Select
-                                value={tx.subCategoryId ?? "none"}
-                                onValueChange={val =>
-                                  handleCategoryChange(
-                                    tx.id,
-                                    val === "none" ? null : val,
-                                  )
-                                }
-                              >
-                                <SelectTrigger className="h-8 w-[180px] text-sm">
-                                  <SelectValue placeholder="未分類" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="none">未分類</SelectItem>
-                                  {categories
-                                    .filter(
-                                      mc =>
-                                        (mc as Category & { type: string })
-                                          .type ===
-                                        (tx.amount >= 0 ? "INCOME" : "EXPENSE"),
+                              <div className="flex items-center gap-2">
+                                <Select
+                                  value={tx.subCategoryId ?? "none"}
+                                  onValueChange={val =>
+                                    handleCategoryChange(
+                                      tx.id,
+                                      val === "none" ? null : val,
                                     )
-                                    .map(mc =>
-                                      mc.subCategories.map(sc => (
-                                        <SelectItem key={sc.id} value={sc.id}>
-                                          {mc.name} / {sc.name}
-                                        </SelectItem>
-                                      )),
-                                    )}
-                                </SelectContent>
-                              </Select>
+                                  }
+                                >
+                                  <SelectTrigger className="h-8 w-[150px] text-sm">
+                                    <SelectValue placeholder="未分類" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="none">未分類</SelectItem>
+                                    {categories
+                                      .filter(
+                                        mc =>
+                                          (mc as Category & { type: string })
+                                            .type ===
+                                          (tx.amount >= 0
+                                            ? "INCOME"
+                                            : "EXPENSE"),
+                                      )
+                                      .map(mc =>
+                                        mc.subCategories.map(sc => (
+                                          <SelectItem key={sc.id} value={sc.id}>
+                                            {mc.name} / {sc.name}
+                                          </SelectItem>
+                                        )),
+                                      )}
+                                  </SelectContent>
+                                </Select>
+                                <button
+                                  type="button"
+                                  onClick={() => openTransferDialog(tx)}
+                                  className="flex h-8 shrink-0 items-center gap-1 rounded-md border border-zinc-700 bg-zinc-800 px-2 text-[11px] text-zinc-400 transition-colors hover:border-blue-500/50 hover:text-blue-400"
+                                >
+                                  <ArrowDownUp className="h-3 w-3" />
+                                  振替
+                                </button>
+                              </div>
                             )}
                           </TableCell>
                         </TableRow>
@@ -712,6 +749,18 @@ export function TransactionsContent() {
           </CardContent>
         </Card>
       </div>
+
+      {/* 振替設定ダイアログ */}
+      {transferTargetTx && (
+        <TransferDialog
+          open={transferDialogOpen}
+          onOpenChange={setTransferDialogOpen}
+          transactionId={transferTargetTx.id}
+          transactionDesc={transferTargetTx.desc}
+          filterOptions={filterOptions}
+          onDone={fetchData}
+        />
+      )}
     </div>
   );
 }

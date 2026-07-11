@@ -46,6 +46,7 @@ model SubAccount {
   pointDetail        PointDetail?
   mainAccount        MainAccount         @relation(fields: [mainAccountId], references: [id], onDelete: Cascade)
   transactions       Transaction[]
+  transferRules      TransferRule[]
 
   @@unique([mainAccountId, currentName])
   @@index([mainAccountId])
@@ -181,6 +182,16 @@ model CategoryRule {
 
   @@unique([keyword, subCategoryId])
   @@index([subCategoryId])
+}
+
+model TransferRule {
+  id                 String      @id @default(cuid())
+  keyword            String
+  targetSubAccountId String
+  targetSubAccount   SubAccount  @relation(fields: [targetSubAccountId], references: [id])
+
+  @@unique([keyword, targetSubAccountId])
+  @@index([targetSubAccountId])
 }
 
 model CreditCardBilling {
