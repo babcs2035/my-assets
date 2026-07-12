@@ -539,10 +539,10 @@ export function TransactionsContent() {
                           <button
                             type="button"
                             onClick={() => openTransferDialog(tx)}
-                            className="flex h-8 shrink-0 items-center gap-1 rounded-md border border-zinc-700 bg-zinc-800 px-2 text-[11px] text-zinc-400 transition-colors hover:border-blue-500/50 hover:text-blue-400"
+                            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-zinc-700 bg-zinc-800 text-zinc-400 transition-colors hover:border-blue-500/50 hover:text-blue-400"
+                            title="振替設定"
                           >
                             <ArrowDownUp className="h-3 w-3" />
-                            振替
                           </button>
                         </div>
                       )}
@@ -556,7 +556,7 @@ export function TransactionsContent() {
                     <TableHeader>
                       <TableRow>
                         <TableHead
-                          className="w-[100px] cursor-pointer select-none hover:text-zinc-300"
+                          className="w-[100px] cursor-pointer select-none hover:text-zinc-300 whitespace-nowrap"
                           onClick={() => handleSort("date")}
                         >
                           <div className="flex items-center justify-center gap-1">
@@ -564,10 +564,14 @@ export function TransactionsContent() {
                             <SortIcon columnKey="date" />
                           </div>
                         </TableHead>
-                        <TableHead className="select-none">口座</TableHead>
-                        <TableHead className="select-none">摘要</TableHead>
+                        <TableHead className="select-none whitespace-nowrap">
+                          口座
+                        </TableHead>
+                        <TableHead className="select-none whitespace-nowrap">
+                          摘要
+                        </TableHead>
                         <TableHead
-                          className="w-[120px] text-right cursor-pointer select-none hover:text-zinc-300"
+                          className="w-[120px] text-right cursor-pointer select-none hover:text-zinc-300 whitespace-nowrap"
                           onClick={() => handleSort("amount")}
                         >
                           <div className="flex items-center justify-end gap-1">
@@ -575,7 +579,9 @@ export function TransactionsContent() {
                             <SortIcon columnKey="amount" />
                           </div>
                         </TableHead>
-                        <TableHead>カテゴリー</TableHead>
+                        <TableHead className="whitespace-nowrap">
+                          カテゴリー
+                        </TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -686,10 +692,10 @@ export function TransactionsContent() {
                                 <button
                                   type="button"
                                   onClick={() => openTransferDialog(tx)}
-                                  className="flex h-8 shrink-0 items-center gap-1 rounded-md border border-zinc-700 bg-zinc-800 px-2 text-[11px] text-zinc-400 transition-colors hover:border-blue-500/50 hover:text-blue-400"
+                                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-zinc-700 bg-zinc-800 text-zinc-400 transition-colors hover:border-blue-500/50 hover:text-blue-400"
+                                  title="振替設定"
                                 >
                                   <ArrowDownUp className="h-3 w-3" />
-                                  振替
                                 </button>
                               </div>
                             )}

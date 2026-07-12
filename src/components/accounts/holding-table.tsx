@@ -17,7 +17,7 @@ type Holding = {
   name: string;
   account: string;
   quantity: number;
-  avgCostBasis: number;
+  acquisitionCost: number;
   unitPrice: number;
   valuation: number;
   dayBeforeRatio: number | null;
@@ -72,19 +72,29 @@ export function HoldingTable({
     <Table>
       <TableHeader>
         <TableRow>
-          <TableHead className="min-w-[240px]">銘柄名</TableHead>
-          <TableHead className="w-[100px]">口座</TableHead>
-          <TableHead className="text-right">保有数</TableHead>
+          <TableHead className="whitespace-nowrap min-w-[240px]">
+            銘柄名
+          </TableHead>
+          <TableHead className="whitespace-nowrap w-[100px]">口座</TableHead>
+          <TableHead className="whitespace-nowrap text-right">保有数</TableHead>
           {showDetails && (
             <>
-              <TableHead className="text-right">平均取得単価</TableHead>
-              <TableHead className="text-right">基準価額</TableHead>
+              <TableHead className="whitespace-nowrap text-right">
+                取得価額
+              </TableHead>
+              <TableHead className="whitespace-nowrap text-right">
+                基準価額
+              </TableHead>
             </>
           )}
-          <TableHead className="text-right">評価額</TableHead>
-          {showDetails && <TableHead className="text-right">前日比</TableHead>}
+          <TableHead className="whitespace-nowrap text-right">評価額</TableHead>
+          {showDetails && (
+            <TableHead className="whitespace-nowrap text-right">
+              前日比
+            </TableHead>
+          )}
           <TableHead
-            className="text-right cursor-pointer select-none hover:text-zinc-100 transition-colors"
+            className="whitespace-nowrap text-right cursor-pointer select-none hover:text-zinc-100 transition-colors"
             onClick={() => handleSort("gainLoss")}
           >
             <span className="inline-flex items-center gap-0.5">
@@ -98,7 +108,7 @@ export function HoldingTable({
             </span>
           </TableHead>
           <TableHead
-            className="text-right cursor-pointer select-none hover:text-zinc-100 transition-colors"
+            className="whitespace-nowrap text-right cursor-pointer select-none hover:text-zinc-100 transition-colors"
             onClick={() => handleSort("gainLossRate")}
           >
             <span className="inline-flex items-center gap-0.5">
@@ -127,8 +137,8 @@ export function HoldingTable({
             </TableCell>
             {showDetails && (
               <>
-                <TableCell className="whitespace-nowrap text-right font-mono text-zinc-300">
-                  {formatCurrency(h.avgCostBasis)}
+                <TableCell className="whitespace-nowrap text-right font-mono font-medium text-zinc-100">
+                  {formatCurrency(h.acquisitionCost)}
                 </TableCell>
                 <TableCell className="whitespace-nowrap text-right font-mono text-zinc-300">
                   {formatCurrency(h.unitPrice)}

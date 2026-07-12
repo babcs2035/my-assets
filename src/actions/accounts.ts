@@ -16,15 +16,19 @@ import {
 /**
  * クレジットカードの請求履歴を取得する関数である．
  * 指定されたメイン口座に紐づく負債サブアカウントの請求データを返す．
+ * 請求日が今日以降のレコードのみをフィルタリングして返す．
  */
 export async function getCreditCardBillings(mainAccountId: string) {
   logger.info(`📂 Fetching credit card billings for account: ${mainAccountId}`);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
   return prisma.creditCardBilling.findMany({
     where: {
       subAccount: {
         mainAccountId,
         assetType: "LIABILITY",
       },
+      billingDate: { gte: today },
     },
     select: {
       id: true,
@@ -45,6 +49,7 @@ export async function getCreditCardBillings(mainAccountId: string) {
 /**
  * メイン口座ごとの請求概要を取得する関数である．
  * 各口座の最新の請求額と合計を計算して返す．
+ * 請求日が今日以降のレコードのみをフィルタリングして返す．
  */
 export async function getCreditCardBillingSummary(
   mainAccountId: string,
@@ -59,12 +64,16 @@ export async function getCreditCardBillingSummary(
   logger.info(
     `📂 Fetching credit card billing summary for account: ${mainAccountId}`,
   );
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
   const billings = await prisma.creditCardBilling.findMany({
     where: {
       subAccount: {
         mainAccountId,
         assetType: "LIABILITY",
       },
+      billingDate: { gte: today },
     },
     select: {
       amount: true,
@@ -172,9 +181,13 @@ export async function getAccountList() {
     } | null = null;
 
     if (liabilitySubAccounts.length > 0) {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
       const billings = await prisma.creditCardBilling.findMany({
         where: {
           subAccountId: { in: liabilitySubAccounts.map(sa => sa.id) },
+          billingDate: { gte: today },
         },
         select: {
           amount: true,

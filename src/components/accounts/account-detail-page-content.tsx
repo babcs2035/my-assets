@@ -84,7 +84,11 @@ function AccountDetailContent({
   );
 
   const allHoldings = visibleSubAccounts.flatMap(sa =>
-    (sa.holdings ?? []).map(h => ({ ...h, account: sa.mainAccount.label })),
+    (sa.holdings ?? []).map(h => ({
+      ...h,
+      account: sa.mainAccount.label,
+      acquisitionCost: h.valuation - h.gainLoss,
+    })),
   );
 
   const allCryptos = visibleSubAccounts.flatMap(sa => sa.cryptos);
@@ -93,7 +97,7 @@ function AccountDetailContent({
   type HistGroup = {
     name: string;
     valuation: number;
-    unitPrice: number;
+    unitPrice: number | null;
     gainLoss: number;
     gainLossRate: number;
     date: Date | string;
@@ -122,8 +126,7 @@ function AccountDetailContent({
     id: string;
     name: string;
     quantity: number;
-    avgCostBasis: number;
-    unitPrice: number;
+    unitPrice: number | null;
     valuation: number;
     gainLoss: number;
     gainLossRate: number;
@@ -139,7 +142,6 @@ function AccountDetailContent({
       id: h.id,
       name: h.name,
       quantity: h.quantity,
-      avgCostBasis: h.avgCostBasis,
       unitPrice: h.unitPrice,
       valuation: h.valuation,
       gainLoss: h.gainLoss,

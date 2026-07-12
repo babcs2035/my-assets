@@ -325,11 +325,19 @@ export function AssetsContent({ breakdown }: AssetsContentProps) {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>名称</TableHead>
-                    <TableHead>金融機関</TableHead>
-                    <TableHead>カテゴリ</TableHead>
-                    <TableHead className="text-right">金額</TableHead>
-                    <TableHead className="text-right">割合</TableHead>
+                    <TableHead className="whitespace-nowrap">名称</TableHead>
+                    <TableHead className="whitespace-nowrap">
+                      金融機関
+                    </TableHead>
+                    <TableHead className="whitespace-nowrap">
+                      カテゴリ
+                    </TableHead>
+                    <TableHead className="whitespace-nowrap text-right">
+                      金額
+                    </TableHead>
+                    <TableHead className="whitespace-nowrap text-right">
+                      割合
+                    </TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -340,18 +348,18 @@ export function AssetsContent({ breakdown }: AssetsContentProps) {
                         : "0";
                     return (
                       <TableRow key={a.name}>
-                        <TableCell className="font-medium text-zinc-200 truncate max-w-[140px]">
+                        <TableCell className="whitespace-nowrap font-medium text-zinc-200 truncate max-w-[140px]">
                           {a.name}
                           {a.holdings && a.holdings.length > 0 && (
-                            <div className="text-xs text-zinc-500 mt-0.5">
-                              {a.holdings.length} 銘柄
-                            </div>
+                            <span className="whitespace-nowrap text-xs text-zinc-500 ml-1">
+                              ({a.holdings.length}銘柄)
+                            </span>
                           )}
                         </TableCell>
-                        <TableCell className="text-zinc-400 text-sm truncate max-w-[140px]">
+                        <TableCell className="whitespace-nowrap text-zinc-400 text-sm truncate max-w-[140px]">
                           {a.account}
                         </TableCell>
-                        <TableCell>
+                        <TableCell className="whitespace-nowrap">
                           <span
                             className="inline-flex items-center gap-1 rounded-md border border-zinc-700 bg-zinc-800/60 px-2 py-0.5 text-[11px]"
                             style={{
@@ -372,10 +380,10 @@ export function AssetsContent({ breakdown }: AssetsContentProps) {
                                   : "ポイント"}
                           </span>
                         </TableCell>
-                        <TableCell className="text-right font-mono font-medium text-zinc-100">
+                        <TableCell className="whitespace-nowrap text-right font-mono font-medium text-zinc-100">
                           {formatCurrency(a.amount)}
                         </TableCell>
-                        <TableCell className="text-right font-mono text-zinc-300">
+                        <TableCell className="whitespace-nowrap text-right font-mono text-zinc-300">
                           {pct}%
                         </TableCell>
                       </TableRow>
@@ -398,7 +406,7 @@ export function AssetsContent({ breakdown }: AssetsContentProps) {
           </CardHeader>
           <CardContent>
             <div className="overflow-x-auto">
-              <HoldingTable holdings={holdings} />
+              <HoldingTable holdings={holdings} showDetails />
             </div>
           </CardContent>
         </Card>

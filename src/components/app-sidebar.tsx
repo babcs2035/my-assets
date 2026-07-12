@@ -3,10 +3,10 @@
 import {
   ArrowDownUp,
   ArrowLeftRight,
-  Brain,
   Building2,
   LayoutDashboard,
   Settings,
+  Sparkles,
   TrendingUp,
 } from "lucide-react";
 import Image from "next/image";
@@ -56,7 +56,7 @@ const navItems = [
   {
     href: "/analysis",
     label: "分析",
-    icon: Brain,
+    icon: Sparkles,
   },
   {
     href: "/settings",

@@ -262,13 +262,25 @@ export default async function DashboardPage() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>カテゴリ</TableHead>
-                <TableHead className="text-right">金額</TableHead>
-                <TableHead className="text-right">比率</TableHead>
-                <TableHead className="text-right">前日</TableHead>
-                <TableHead className="text-right">1週間</TableHead>
-                <TableHead className="text-right">1カ月</TableHead>
-                <TableHead className="text-right">1年</TableHead>
+                <TableHead className="whitespace-nowrap">カテゴリ</TableHead>
+                <TableHead className="whitespace-nowrap text-right">
+                  金額
+                </TableHead>
+                <TableHead className="whitespace-nowrap text-right">
+                  比率
+                </TableHead>
+                <TableHead className="whitespace-nowrap text-right">
+                  前日
+                </TableHead>
+                <TableHead className="whitespace-nowrap text-right">
+                  1週間
+                </TableHead>
+                <TableHead className="whitespace-nowrap text-right">
+                  1カ月
+                </TableHead>
+                <TableHead className="whitespace-nowrap text-right">
+                  1年
+                </TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -312,24 +324,24 @@ export default async function DashboardPage() {
 
                   return (
                     <TableRow key={s.key}>
-                      <TableCell>
+                      <TableCell className="whitespace-nowrap">
                         <div className="flex items-center gap-1.5">
                           <span
                             className="h-2.5 w-2.5 rounded-full shrink-0"
                             style={{ backgroundColor: s.color }}
                           />
-                          <span className="text-sm text-zinc-200 truncate">
+                          <span className="whitespace-nowrap text-sm text-zinc-200 truncate">
                             {s.label}
                           </span>
                         </div>
                       </TableCell>
-                      <TableCell className="text-right font-mono text-base font-medium text-zinc-100">
+                      <TableCell className="whitespace-nowrap text-right font-mono text-base font-medium text-zinc-100">
                         {formatCurrency(current)}
                       </TableCell>
-                      <TableCell className="text-right font-mono text-sm text-zinc-300">
+                      <TableCell className="whitespace-nowrap text-right font-mono text-sm text-zinc-300">
                         {pct}%
                       </TableCell>
-                      <TableCell className="text-right font-mono text-sm">
+                      <TableCell className="whitespace-nowrap text-right font-mono text-sm">
                         <span
                           className={
                             yd.num >= 0 ? "text-emerald-400" : "text-red-400"
@@ -338,12 +350,12 @@ export default async function DashboardPage() {
                           {yd.num >= 0 && "+"}
                           {yd.num.toLocaleString()}
                         </span>
-                        <span className="text-zinc-500 ml-0.5">
+                        <span className="whitespace-nowrap text-zinc-500 ml-0.5">
                           ({yd.num >= 0 && "+"}
                           {yd.pct}%)
                         </span>
                       </TableCell>
-                      <TableCell className="text-right font-mono text-sm">
+                      <TableCell className="whitespace-nowrap text-right font-mono text-sm">
                         <span
                           className={
                             wk.num >= 0 ? "text-emerald-400" : "text-red-400"
@@ -352,12 +364,12 @@ export default async function DashboardPage() {
                           {wk.num >= 0 && "+"}
                           {wk.num.toLocaleString()}
                         </span>
-                        <span className="text-zinc-500 ml-0.5">
+                        <span className="whitespace-nowrap text-zinc-500 ml-0.5">
                           ({wk.num >= 0 && "+"}
                           {wk.pct}%)
                         </span>
                       </TableCell>
-                      <TableCell className="text-right font-mono text-sm">
+                      <TableCell className="whitespace-nowrap text-right font-mono text-sm">
                         <span
                           className={
                             mo.num >= 0 ? "text-emerald-400" : "text-red-400"
@@ -366,12 +378,12 @@ export default async function DashboardPage() {
                           {mo.num >= 0 && "+"}
                           {mo.num.toLocaleString()}
                         </span>
-                        <span className="text-zinc-500 ml-0.5">
+                        <span className="whitespace-nowrap text-zinc-500 ml-0.5">
                           ({mo.num >= 0 && "+"}
                           {mo.pct}%)
                         </span>
                       </TableCell>
-                      <TableCell className="text-right font-mono text-sm">
+                      <TableCell className="whitespace-nowrap text-right font-mono text-sm">
                         <span
                           className={
                             yr.num >= 0 ? "text-emerald-400" : "text-red-400"
@@ -380,7 +392,7 @@ export default async function DashboardPage() {
                           {yr.num >= 0 && "+"}
                           {yr.num.toLocaleString()}
                         </span>
-                        <span className="text-zinc-500 ml-0.5">
+                        <span className="whitespace-nowrap text-zinc-500 ml-0.5">
                           ({yr.num >= 0 && "+"}
                           {yr.pct}%)
                         </span>

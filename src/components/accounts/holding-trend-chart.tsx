@@ -1,6 +1,6 @@
 "use client";
 
-import { TrendingUp } from "lucide-react";
+import { ListPlus, TrendingUp } from "lucide-react";
 import { useState } from "react";
 import {
   Area,
@@ -30,7 +30,7 @@ import { formatCurrency } from "@/lib/utils";
 type HoldingHistoryItem = {
   date: Date | string;
   valuation: number;
-  unitPrice: number;
+  unitPrice: number | null;
   gainLoss: number;
   gainLossRate: number;
 };
@@ -39,8 +39,7 @@ type HoldingWithHistories = {
   id: string;
   name: string;
   quantity: number;
-  avgCostBasis: number;
-  unitPrice: number;
+  unitPrice: number | null;
   valuation: number;
   gainLoss: number;
   gainLossRate: number;
@@ -64,10 +63,13 @@ export function HoldingTrendChart({ holdings }: Props) {
     setSelectedHoldingId(holdings[0].id);
   }
 
-  const selectedHolding = holdings.find(h => h.id === selectedHoldingId);
+  const isTotal = selectedHoldingId === "total";
+  const selectedHolding = isTotal
+    ? undefined
+    : holdings.find(h => h.id === selectedHoldingId);
 
   if (holdings.length === 0) return null;
-  if (!selectedHolding) {
+  if (!isTotal && !selectedHolding) {
     return (
       <Card>
         <CardHeader className="pb-2">
@@ -83,14 +85,63 @@ export function HoldingTrendChart({ holdings }: Props) {
     );
   }
 
-  const chartData = selectedHolding.holdingHistories.map(h => ({
-    date:
-      typeof h.date === "string" ? h.date : h.date.toISOString().slice(0, 10),
-    valuation: h.valuation,
-    unitPrice: h.unitPrice,
-    gainLoss: h.gainLoss,
-    gainLossRate: h.gainLossRate,
-  }));
+  // 合計モード: 全銘柄の履歴を日付でマージして合算
+  let chartData: Array<{
+    date: string;
+    valuation: number;
+    unitPrice: number | null;
+    gainLoss: number;
+    gainLossRate: number;
+    acquisitionCost: number;
+  }>;
+
+  if (isTotal) {
+    const dateMap = new Map<
+      string,
+      { valuation: number; acquisitionCost: number; gainLoss: number }
+    >();
+    for (const h of holdings) {
+      for (const hist of h.holdingHistories) {
+        const dateStr =
+          typeof hist.date === "string"
+            ? hist.date
+            : hist.date.toISOString().slice(0, 10);
+        const entry = dateMap.get(dateStr) ?? {
+          valuation: 0,
+          acquisitionCost: 0,
+          gainLoss: 0,
+        };
+        entry.valuation += hist.valuation;
+        entry.acquisitionCost += hist.valuation - hist.gainLoss;
+        entry.gainLoss += hist.gainLoss;
+        dateMap.set(dateStr, entry);
+      }
+    }
+    chartData = Array.from(dateMap.entries())
+      .map(([date, v]) => ({
+        date,
+        valuation: v.valuation,
+        unitPrice: null,
+        gainLoss: v.gainLoss,
+        gainLossRate:
+          v.acquisitionCost > 0 ? (v.gainLoss / v.acquisitionCost) * 100 : 0,
+        acquisitionCost: v.acquisitionCost,
+      }))
+      .sort((a, b) => a.date.localeCompare(b.date));
+  } else {
+    chartData =
+      selectedHolding?.holdingHistories.map(h => ({
+        date:
+          typeof h.date === "string"
+            ? h.date
+            : h.date.toISOString().slice(0, 10),
+        valuation: h.valuation,
+        unitPrice: h.unitPrice,
+        gainLoss: h.gainLoss,
+        gainLossRate: h.gainLossRate,
+        acquisitionCost: h.valuation - h.gainLoss,
+      })) ?? [];
+  }
 
   const filteredData = filterByUnifiedTimeRange(
     chartData,
@@ -118,10 +169,16 @@ export function HoldingTrendChart({ holdings }: Props) {
 
   const currentValuation =
     chartDataToShow[chartDataToShow.length - 1]?.valuation ?? 0;
-  const [domainMin, domainMax] = getNiceChartDomain(
-    chartDataToShow.map(d => d.valuation),
-  );
-  const isPositive = selectedHolding.gainLoss >= 0;
+  const allValues = chartDataToShow.flatMap(d => [
+    d.valuation,
+    d.acquisitionCost,
+  ]);
+  const [domainMin, domainMax] = getNiceChartDomain(allValues);
+  const totalGainLoss =
+    chartDataToShow[chartDataToShow.length - 1]?.gainLoss ?? 0;
+  const totalGainLossRate =
+    chartDataToShow[chartDataToShow.length - 1]?.gainLossRate ?? 0;
+  const isPositive = totalGainLoss >= 0;
 
   return (
     <Card>
@@ -136,12 +193,14 @@ export function HoldingTrendChart({ holdings }: Props) {
               {formatCurrency(currentValuation)}
             </div>
             <div className="flex items-center gap-2 text-sm mt-1">
-              <span className="text-zinc-400">{selectedHolding.name}</span>
+              <span className="text-zinc-400">
+                {isTotal ? "合計" : (selectedHolding?.name ?? "")}
+              </span>
               <span
                 className={`font-mono font-medium ${isPositive ? "text-success" : "text-destructive"}`}
               >
-                {selectedHolding.gainLoss != null &&
-                  `${selectedHolding.gainLossRate >= 0 ? "+" : ""}${selectedHolding.gainLossRate.toFixed(2)}%`}
+                {totalGainLossRate >= 0 ? "+" : ""}
+                {totalGainLossRate.toFixed(2)}%
               </span>
             </div>
           </div>
@@ -154,6 +213,12 @@ export function HoldingTrendChart({ holdings }: Props) {
                 <SelectValue placeholder="銘柄を選択" />
               </SelectTrigger>
               <SelectContent>
+                <SelectItem value="total">
+                  <span className="inline-flex items-center gap-1.5">
+                    <ListPlus className="h-3.5 w-3.5 text-zinc-400" />
+                    合計
+                  </span>
+                </SelectItem>
                 {holdings.map(h => (
                   <SelectItem key={h.id} value={h.id}>
                     {h.name}
@@ -183,8 +248,18 @@ export function HoldingTrendChart({ holdings }: Props) {
                 x2="0"
                 y2="1"
               >
-                <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.4} />
+                <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.35} />
                 <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0} />
+              </linearGradient>
+              <linearGradient
+                id="colorHoldingAcquisition"
+                x1="0"
+                y1="0"
+                x2="0"
+                y2="1"
+              >
+                <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.5} />
+                <stop offset="95%" stopColor="#3b82f6" stopOpacity={0.08} />
               </linearGradient>
             </defs>
             <CartesianGrid
@@ -225,17 +300,25 @@ export function HoldingTrendChart({ holdings }: Props) {
                       </div>
                       <div className="space-y-1.5 text-sm">
                         <div className="flex items-center justify-between gap-4">
+                          <span className="text-zinc-300">取得価額</span>
+                          <span className="font-mono font-bold text-blue-400">
+                            {formatCurrency(p.acquisitionCost)}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between gap-4">
                           <span className="text-zinc-300">評価額</span>
                           <span className="font-mono font-bold text-zinc-100">
                             {formatCurrency(p.valuation)}
                           </span>
                         </div>
-                        <div className="flex items-center justify-between gap-4">
-                          <span className="text-zinc-300">基準価額</span>
-                          <span className="font-mono font-bold text-zinc-100">
-                            {formatCurrency(p.unitPrice)}
-                          </span>
-                        </div>
+                        {p.unitPrice != null && (
+                          <div className="flex items-center justify-between gap-4">
+                            <span className="text-zinc-300">基準価額</span>
+                            <span className="font-mono font-bold text-zinc-100">
+                              {formatCurrency(p.unitPrice)}
+                            </span>
+                          </div>
+                        )}
                         <div className="flex items-center justify-between gap-4">
                           <span className="text-zinc-300">評価損益</span>
                           <span
@@ -258,6 +341,17 @@ export function HoldingTrendChart({ holdings }: Props) {
                 }
                 return null;
               }}
+            />
+            <Area
+              type="monotone"
+              dataKey="acquisitionCost"
+              stroke="#60a5fa"
+              strokeWidth={1.5}
+              strokeDasharray="4 4"
+              fillOpacity={1}
+              fill="url(#colorHoldingAcquisition)"
+              isAnimationActive={true}
+              animationDuration={800}
             />
             <Area
               type="monotone"

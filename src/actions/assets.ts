@@ -43,6 +43,7 @@ async function getAssetBreakdownInternal() {
       name: string;
       quantity: number;
       avgCostBasis: number;
+      acquisitionCost: number;
       unitPrice: number;
       valuation: number;
       gainLoss: number;
@@ -83,6 +84,7 @@ async function getAssetBreakdownInternal() {
                 name: h.name,
                 quantity: h.quantity,
                 avgCostBasis: h.avgCostBasis,
+                acquisitionCost: h.valuation - h.gainLoss,
                 unitPrice: h.unitPrice,
                 valuation: h.valuation,
                 gainLoss: h.gainLoss,

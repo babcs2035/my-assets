@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  Brain,
   Calendar,
   CheckCircle2,
   Loader2,
@@ -121,7 +120,7 @@ const AnalysisPage: NextPage = () => {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <PageHeader title="分析" icon={Brain} />
+      <PageHeader title="分析" icon={Sparkles} />
 
       {/* ── 分析実行ボタン ──────────────────────────── */}
       <div className="flex justify-end">

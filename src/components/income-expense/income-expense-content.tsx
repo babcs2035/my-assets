@@ -2,7 +2,7 @@
 
 import dayjs from "dayjs";
 import { Loader2 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Bar,
   BarChart,
@@ -114,24 +114,44 @@ export function IncomeExpenseContent({
   const totalMonthlyExpense = monthlyData?.totalExpense ?? 0;
   const monthlyBalance = monthlyData?.balance ?? 0;
 
-  // カテゴリ別 pie chart データ
+  // カテゴリ名を "メイン/サブ" 形式に分解するヘルパー
+  const parseCategoryName = useCallback((name: string) => {
+    const slashIdx = name.indexOf("/");
+    if (slashIdx < 0) return { mainCategory: name, subCategory: name };
+    return {
+      mainCategory: name.slice(0, slashIdx),
+      subCategory: name.slice(slashIdx + 1),
+    };
+  }, []);
+
+  // カテゴリ別 pie chart データ（階層表示用）
   const incomePieData = useMemo(() => {
     if (!monthlyData) return [];
-    return monthlyData.incomeByCategory.map((item, idx) => ({
-      name: item.name,
-      value: item.amount,
-      fill: incomeColors[idx % incomeColors.length],
-    }));
-  }, [monthlyData]);
+    return monthlyData.incomeByCategory.map((item, idx) => {
+      const { mainCategory, subCategory } = parseCategoryName(item.name);
+      return {
+        name: item.name,
+        mainCategory,
+        subCategory,
+        value: item.amount,
+        fill: incomeColors[idx % incomeColors.length],
+      };
+    });
+  }, [monthlyData, parseCategoryName]);
 
   const expensePieData = useMemo(() => {
     if (!monthlyData) return [];
-    return monthlyData.expenseByCategory.map((item, idx) => ({
-      name: item.name,
-      value: item.amount,
-      fill: expenseColors[idx % expenseColors.length],
-    }));
-  }, [monthlyData]);
+    return monthlyData.expenseByCategory.map((item, idx) => {
+      const { mainCategory, subCategory } = parseCategoryName(item.name);
+      return {
+        name: item.name,
+        mainCategory,
+        subCategory,
+        value: item.amount,
+        fill: expenseColors[idx % expenseColors.length],
+      };
+    });
+  }, [monthlyData, parseCategoryName]);
 
   const totalIncomeValue = incomePieData.reduce((s, d) => s + d.value, 0);
   const totalExpenseValue = expensePieData.reduce((s, d) => s + d.value, 0);
@@ -264,10 +284,18 @@ export function IncomeExpenseContent({
                           content={({ active, payload }) => {
                             if (!active || !payload?.length) return null;
                             const item = payload[0];
+                            const name = String(item.name ?? "");
+                            const { mainCategory, subCategory } =
+                              parseCategoryName(name);
                             return (
                               <div className="rounded-lg border border-zinc-700 bg-zinc-900 p-3 shadow-sm relative z-50 max-w-[280px]">
-                                <div className="mb-1.5 text-sm text-zinc-400 truncate whitespace-nowrap">
-                                  {String(item.name ?? "")}
+                                <div className="mb-1.5 space-y-0.5">
+                                  <span className="text-sm font-bold text-zinc-200">
+                                    {mainCategory}
+                                  </span>
+                                  <span className="text-sm text-zinc-400">
+                                    {subCategory}
+                                  </span>
                                 </div>
                                 <div className="font-mono text-base font-bold text-zinc-100">
                                   {formatCurrency(Number(item.value ?? 0))}
@@ -296,8 +324,14 @@ export function IncomeExpenseContent({
                               className="h-2.5 w-2.5 rounded-full shrink-0"
                               style={{ backgroundColor: item.fill }}
                             />
-                            <span className="text-sm text-zinc-300 truncate flex-1">
-                              {item.name}
+                            <span className="text-sm flex-1 truncate">
+                              <span className="font-medium text-zinc-200">
+                                {item.mainCategory}
+                              </span>
+                              <span className="text-zinc-500"> / </span>
+                              <span className="text-zinc-300">
+                                {item.subCategory}
+                              </span>
                             </span>
                             <span className="font-mono text-sm text-zinc-100 font-medium">
                               {formatCurrency(item.value)}
@@ -355,10 +389,18 @@ export function IncomeExpenseContent({
                           content={({ active, payload }) => {
                             if (!active || !payload?.length) return null;
                             const item = payload[0];
+                            const name = String(item.name ?? "");
+                            const { mainCategory, subCategory } =
+                              parseCategoryName(name);
                             return (
                               <div className="rounded-lg border border-zinc-700 bg-zinc-900 p-3 shadow-sm relative z-50 max-w-[280px]">
-                                <div className="mb-1.5 text-sm text-zinc-400 truncate whitespace-nowrap">
-                                  {String(item.name ?? "")}
+                                <div className="mb-1.5 space-y-0.5">
+                                  <span className="text-sm font-bold text-zinc-200">
+                                    {mainCategory}
+                                  </span>
+                                  <span className="text-sm text-zinc-400">
+                                    {subCategory}
+                                  </span>
                                 </div>
                                 <div className="font-mono text-base font-bold text-zinc-100">
                                   {formatCurrency(Number(item.value ?? 0))}
@@ -389,8 +431,14 @@ export function IncomeExpenseContent({
                               className="h-2.5 w-2.5 rounded-full shrink-0"
                               style={{ backgroundColor: item.fill }}
                             />
-                            <span className="text-sm text-zinc-300 truncate flex-1">
-                              {item.name}
+                            <span className="text-sm flex-1 truncate">
+                              <span className="font-medium text-zinc-200">
+                                {item.mainCategory}
+                              </span>
+                              <span className="text-zinc-500"> / </span>
+                              <span className="text-zinc-300">
+                                {item.subCategory}
+                              </span>
                             </span>
                             <span className="font-mono text-sm text-zinc-100 font-medium">
                               {formatCurrency(item.value)}

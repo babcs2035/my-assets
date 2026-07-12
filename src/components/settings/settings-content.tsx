@@ -18,7 +18,7 @@ import {
   Upload,
   XCircle,
 } from "lucide-react";
-import { useCallback, useEffect, useState, useTransition } from "react";
+import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
 import {
   createMainAccount,
@@ -191,6 +191,11 @@ export function SettingsContent() {
     index: number;
   } | null>(null);
 
+  // ドラッグ中のハンドラが stale な state を参照しないよう、
+  // 常に最新の state 値を参照するための ref である．
+  const expenseCategoryItemsRef = useRef<Category[]>([]);
+  const incomeCategoryItemsRef = useRef<Category[]>([]);
+
   // Rule Form State
   const [ruleKeywords, setRuleKeywords] = useState("");
   const [ruleSubCategoryId, setRuleSubCategoryId] = useState<string>("");
@@ -259,6 +264,14 @@ export function SettingsContent() {
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  // state 変更時に ref を最新に保つ（ドラッグハンドラが常に最新データを参照するため）
+  useEffect(() => {
+    expenseCategoryItemsRef.current = expenseCategoryItems;
+  }, [expenseCategoryItems]);
+  useEffect(() => {
+    incomeCategoryItemsRef.current = incomeCategoryItems;
+  }, [incomeCategoryItems]);
 
   // --- ハンドラ関数群 ---
 
@@ -598,8 +611,8 @@ export function SettingsContent() {
 
     const items =
       parentType === "EXPENSE"
-        ? [...expenseCategoryItems]
-        : [...incomeCategoryItems];
+        ? [...expenseCategoryItemsRef.current]
+        : [...incomeCategoryItemsRef.current];
     const parentIndex = items.findIndex(item => item.id === mainCategoryId);
     if (parentIndex < 0) return;
 
@@ -1220,11 +1233,19 @@ export function SettingsContent() {
                 <Table className="min-w-[700px]">
                   <TableHeader>
                     <TableRow>
-                      <TableHead>名前</TableHead>
-                      <TableHead>タイプ</TableHead>
-                      <TableHead>最終同期</TableHead>
-                      <TableHead>ステータス</TableHead>
-                      <TableHead className="text-right">操作</TableHead>
+                      <TableHead className="whitespace-nowrap">名前</TableHead>
+                      <TableHead className="whitespace-nowrap">
+                        タイプ
+                      </TableHead>
+                      <TableHead className="whitespace-nowrap">
+                        最終同期
+                      </TableHead>
+                      <TableHead className="whitespace-nowrap">
+                        ステータス
+                      </TableHead>
+                      <TableHead className="whitespace-nowrap text-right">
+                        操作
+                      </TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -1594,13 +1615,13 @@ export function SettingsContent() {
                             <Table className="min-w-[500px]">
                               <TableHeader>
                                 <TableRow className="hover:bg-transparent border-zinc-800">
-                                  <TableHead className="h-8 text-xs">
+                                  <TableHead className="h-8 text-xs whitespace-nowrap">
                                     金融機関
                                   </TableHead>
-                                  <TableHead className="h-8 text-xs">
+                                  <TableHead className="h-8 text-xs whitespace-nowrap">
                                     内訳・詳細
                                   </TableHead>
-                                  <TableHead className="h-8 text-xs text-right">
+                                  <TableHead className="h-8 text-xs text-right whitespace-nowrap">
                                     操作
                                   </TableHead>
                                 </TableRow>
@@ -1969,9 +1990,15 @@ export function SettingsContent() {
                 <Table className="min-w-[600px]">
                   <TableHeader>
                     <TableRow>
-                      <TableHead>キーワード</TableHead>
-                      <TableHead>適用カテゴリー</TableHead>
-                      <TableHead className="text-right">操作</TableHead>
+                      <TableHead className="whitespace-nowrap">
+                        キーワード
+                      </TableHead>
+                      <TableHead className="whitespace-nowrap">
+                        適用カテゴリー
+                      </TableHead>
+                      <TableHead className="whitespace-nowrap text-right">
+                        操作
+                      </TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -2110,9 +2137,15 @@ export function SettingsContent() {
                 <Table className="min-w-[600px]">
                   <TableHeader>
                     <TableRow>
-                      <TableHead>キーワード</TableHead>
-                      <TableHead>振替先口座</TableHead>
-                      <TableHead className="text-right">操作</TableHead>
+                      <TableHead className="whitespace-nowrap">
+                        キーワード
+                      </TableHead>
+                      <TableHead className="whitespace-nowrap">
+                        振替先口座
+                      </TableHead>
+                      <TableHead className="whitespace-nowrap text-right">
+                        操作
+                      </TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>

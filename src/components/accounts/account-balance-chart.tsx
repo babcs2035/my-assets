@@ -1,6 +1,7 @@
 "use client";
 
 import type { AssetType } from "@prisma/client";
+import { ListPlus, Wallet } from "lucide-react";
 import { useState } from "react";
 import {
   Area,
@@ -154,11 +155,37 @@ export function AccountBalanceChart({
           <div className="flex w-full flex-col gap-3 lg:w-auto">
             <Select value={selectedId} onValueChange={setSelectedId}>
               <SelectTrigger className="w-full lg:w-[320px]">
-                <SelectValue placeholder="表示する口座を選択" />
+                {selectedSeries ? (
+                  <span className="flex items-center gap-2">
+                    {selectedSeries.id === "total" ? (
+                      <ListPlus className="h-3.5 w-3.5 text-zinc-400" />
+                    ) : (
+                      <Wallet
+                        className="h-3.5 w-3.5 shrink-0"
+                        style={{
+                          color: assetTypeColor(
+                            selectedSeries.assetType ?? "CASH",
+                          ),
+                        }}
+                      />
+                    )}
+                    {selectedSeries.name}
+                  </span>
+                ) : (
+                  <SelectValue placeholder="表示する口座を選択" />
+                )}
               </SelectTrigger>
               <SelectContent>
                 {series.map(s => (
                   <SelectItem key={s.id} value={s.id}>
+                    {s.id === "total" ? (
+                      <ListPlus className="h-3.5 w-3.5 text-zinc-400" />
+                    ) : (
+                      <Wallet
+                        className="h-3.5 w-3.5 shrink-0"
+                        style={{ color: assetTypeColor(s.assetType ?? "CASH") }}
+                      />
+                    )}
                     {s.name}
                   </SelectItem>
                 ))}

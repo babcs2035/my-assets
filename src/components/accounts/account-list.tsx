@@ -162,20 +162,27 @@ export function AccountList({ accounts }: { accounts: AccountListItem[] }) {
                     ))}
                   </div>
 
-                  {/* クレジットカード請求情報 */}
+                  {/* クレジットカード請求情報（請求日が今日以降のもののみ表示） */}
                   {account.billingSummary &&
                     account.billingSummary.recentBillings.length > 0 &&
                     (() => {
                       const now = new Date();
-                      const thisMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-                      const thisMonthBillings =
+                      now.setHours(0, 0, 0, 0);
+                      const todayKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+                      const futureBillings =
                         account.billingSummary.recentBillings.filter(b => {
                           const d = new Date(b.billingDate);
-                          return (
-                            `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}` ===
-                            thisMonthKey
-                          );
+                          const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+                          return key >= todayKey;
                         });
+                      const thisMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+                      const thisMonthBillings = futureBillings.filter(b => {
+                        const d = new Date(b.billingDate);
+                        return (
+                          `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}` ===
+                          thisMonthKey
+                        );
+                      });
                       const thisMonthTotal = thisMonthBillings.reduce(
                         (sum, b) => sum + b.amount,
                         0,
@@ -186,7 +193,7 @@ export function AccountList({ accounts }: { accounts: AccountListItem[] }) {
                           <div className="mb-1.5 text-xs font-medium text-zinc-400">
                             クレジットカード請求
                           </div>
-                          {account.billingSummary.recentBillings.map(b => (
+                          {futureBillings.map(b => (
                             <div
                               key={b.subAccountName}
                               className="flex items-center justify-between text-sm"
