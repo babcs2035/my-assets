@@ -50,18 +50,19 @@ function isOpCliAvailable(): boolean {
 
 /**
  * Runtime secrets ファイルを読み込む．
+ * パスは環境変数由来のため Turbopack の静的解析不能であり，
+ * ファイルアクセスには turbopackIgnore を付与してプロジェクト全体の
+ * tracing（standalone 出力の肥大化）を防いでいる．
  */
 function loadRuntimeSecrets(): Record<string, unknown> | null {
   const secretsPath = process.env.OP_SECRETS_FILE || DEFAULT_SECRETS_PATH;
 
-  if (!fs.existsSync(secretsPath)) {
+  if (!fs.existsSync(/*turbopackIgnore: true*/ secretsPath)) {
     logger.debug({ secretsPath }, "Runtime secrets file not found.");
     return null;
   }
 
   try {
-    // パスは環境変数由来のため静的解析不能．トレース対象外を明示し，
-    // プロジェクト全体の tracing（standalone 出力の肥大化）を防ぐ
     const data = JSON.parse(
       fs.readFileSync(/*turbopackIgnore: true*/ secretsPath, "utf-8"),
     );
