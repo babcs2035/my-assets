@@ -2778,7 +2778,12 @@ export async function runMfScraper(
     signal?.removeEventListener("abort", abortHandler);
     activeBrowsers.delete(provider.id);
     await browser.close();
-    await prisma.$disconnect();
+    // 直接実行（エントリポイント）時のみ切断する．
+    // スケジューラや Server Action からプロセス内で呼ばれた場合は，
+    // アプリ全体で共有する Prisma クライアントを切らない
+    if (isEntry) {
+      await prisma.$disconnect();
+    }
   }
 }
 
