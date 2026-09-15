@@ -36,6 +36,9 @@ yarn-error.log*
 # 1Password runtime secrets (local debugging)
 op-secrets.json
 
+# local runtime data (secrets, logs, etc.)
+/data/
+
 # vercel
 .vercel
 
