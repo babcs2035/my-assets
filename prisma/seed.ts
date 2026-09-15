@@ -4,7 +4,12 @@ import { PrismaClient } from "@prisma/client";
 import { Pool } from "pg";
 
 console.log("Current working directory:", process.cwd());
-console.log("DATABASE_URL:", process.env.DATABASE_URL); // keep log
+// DATABASE_URL のパスワード部分をマスクして出力する（ログ行自体はデバッグ用に保持）
+const maskedUrl = (process.env.DATABASE_URL ?? "").replace(
+  /:\/\/([^:]+):([^@]+)@/,
+  "://$1:****@",
+);
+console.log("DATABASE_URL:", maskedUrl);
 
 const connectionString = `${process.env.DATABASE_URL}`;
 
