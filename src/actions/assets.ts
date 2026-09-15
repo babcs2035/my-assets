@@ -311,10 +311,8 @@ async function getCurrentMonthIncomeExpenseInternal() {
   };
 }
 
-// ── Cached exports (TTL: 5分) ──
-
 /**
- * 資産・負債の詳細内訳を取得する（TTL: 5分）。
+ * 資産・負債の詳細内訳を取得する。
  */
 export const getAssetBreakdown = async () => {
   logger.info("Fetching asset breakdown...");
@@ -322,7 +320,7 @@ export const getAssetBreakdown = async () => {
 };
 
 /**
- * 資産タイプ別の前日・週間・月間・年間比較を取得する（TTL: 5分）。
+ * 資産タイプ別の前日・週間・月間・年間比較を取得する。
  */
 export const getAssetTypeComparison = async () => {
   logger.info("Fetching asset type comparison...");
@@ -330,7 +328,7 @@ export const getAssetTypeComparison = async () => {
 };
 
 /**
- * 今月の収支を取得する（TTL: 5分）。
+ * 今月の収支を取得する。
  */
 export const getCurrentMonthIncomeExpense = async () => {
   logger.info("Fetching current month income/expense...");

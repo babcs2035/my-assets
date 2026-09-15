@@ -200,10 +200,8 @@ async function getAnnualIncomeExpenseInternal(
     }));
 }
 
-// ── Cached exports ──
-
 /**
- * 指定年月の収支データを取得する（TTL: 5分）。
+ * 指定年月の収支データを取得する。
  */
 export const getMonthlyIncomeExpense = async (
   year: number,
@@ -221,7 +219,7 @@ export const getMonthlyIncomeExpense = async (
 };
 
 /**
- * 収支推移データを取得する（TTL: 5分）。
+ * 収支推移データを取得する。
  */
 export const getIncomeExpenseTrend = async (
   year?: number,
@@ -233,7 +231,7 @@ export const getIncomeExpenseTrend = async (
 };
 
 /**
- * 年別収支データを取得する（TTL: 5分）。
+ * 年別収支データを取得する。
  */
 export const getAnnualIncomeExpense = async (
   mainAccountId?: string,
