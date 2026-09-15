@@ -60,7 +60,11 @@ function loadRuntimeSecrets(): Record<string, unknown> | null {
   }
 
   try {
-    const data = JSON.parse(fs.readFileSync(secretsPath, "utf-8"));
+    // パスは環境変数由来のため静的解析不能．トレース対象外を明示し，
+    // プロジェクト全体の tracing（standalone 出力の肥大化）を防ぐ
+    const data = JSON.parse(
+      fs.readFileSync(/*turbopackIgnore: true*/ secretsPath, "utf-8"),
+    );
     if (!data || typeof data !== "object" || !("items" in data)) {
       throw new Error("Invalid runtime secrets format: missing 'items' key");
     }
@@ -151,10 +155,7 @@ function generateTotpFromUri(otpUri: string): string {
     10 ** digits;
   const code = String(codeInt).padStart(digits, "0");
   // secret と code は認証情報のためログに含めない
-  logger.debug(
-    { digits, period, algorithm, counter },
-    "TOTP code generated.",
-  );
+  logger.debug({ digits, period, algorithm, counter }, "TOTP code generated.");
   return code;
 }
 
