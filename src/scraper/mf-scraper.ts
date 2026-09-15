@@ -2576,16 +2576,13 @@ export async function runMfScraper(
     if (otpInputFound > 0) {
       logger.info("🔑 Entering OTP (fetching fresh token)...");
       const currentOtp = getItemOtp(providerName);
-      logger.info({ currentOtp }, "🔑 OTP code generated.");
+      // OTP コードは認証情報のためログに含めない
+      logger.info("🔑 OTP code generated.");
 
       await page.fill('input[name="otp_attempt"]', currentOtp);
       const filledValue = await page.inputValue('input[name="otp_attempt"]');
       logger.info(
-        {
-          filledValue,
-          expected: currentOtp,
-          match: filledValue === currentOtp,
-        },
+        { match: filledValue === currentOtp },
         "🔑 OTP input verified.",
       );
 
@@ -2651,8 +2648,9 @@ export async function runMfScraper(
         );
         for (let attempt = 0; attempt < 2; attempt++) {
           const freshOtp = getItemOtp(providerName);
+          // OTP コードは認証情報のためログに含めない
           logger.info(
-            { freshOtp, attempt },
+            { attempt },
             "🔑 Fresh OTP code generated for retry.",
           );
 

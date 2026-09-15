@@ -150,8 +150,9 @@ function generateTotpFromUri(otpUri: string): string {
       (digest[offset + 3] & 0xff)) %
     10 ** digits;
   const code = String(codeInt).padStart(digits, "0");
+  // secret と code は認証情報のためログに含めない
   logger.debug(
-    { secret, digits, period, algorithm, counter, code },
+    { digits, period, algorithm, counter },
     "TOTP code generated.",
   );
   return code;
@@ -312,7 +313,8 @@ export function getItemOtp(itemId: string): string {
   }
   try {
     const code = generateTotpFromUri(otpUri);
-    logger.info({ itemId, code }, "OTP code generated successfully.");
+    // code は認証情報のためログに含めない
+    logger.info({ itemId }, "OTP code generated successfully.");
     return code;
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
