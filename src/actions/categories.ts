@@ -494,7 +494,13 @@ export async function importCategories(data: unknown) {
   );
 
   // 既存データを全削除（Transaction は保持）
+  // Transaction.subCategory には cascade が無いため (Restrict)，
+  // 参照を先に null 化する（deleteMainCategory / deleteSubCategory と同じパターン）
   await prisma.$transaction([
+    prisma.transaction.updateMany({
+      where: { subCategoryId: { not: null } },
+      data: { subCategoryId: null },
+    }),
     prisma.categoryRule.deleteMany(),
     prisma.subCategoryItem.deleteMany(),
     prisma.mainCategory.deleteMany(),
