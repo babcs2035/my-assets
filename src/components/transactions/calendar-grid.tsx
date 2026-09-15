@@ -58,6 +58,8 @@ export function CalendarGrid({
   onDayClick,
 }: CalendarGridProps) {
   const maxExpense = getMaxExpense(calendarData);
+  // JST の今日の日付文字列（サーバーの TZ が JST でない環境でも正しく判定する）
+  const todayKey = formatJSTDate(new Date());
   // 月の1日
   const firstDay = new Date(year, month - 1, 1);
   // 月の最後の日
@@ -139,11 +141,7 @@ export function CalendarGrid({
               ? calendarData[dateKey]
               : undefined;
             const isSelected = cell.isCurrentMonth && selectedDay === cell.day;
-            const isToday =
-              cell.isCurrentMonth &&
-              new Date().getDate() === cell.day &&
-              new Date().getMonth() === month - 1 &&
-              new Date().getFullYear() === year;
+            const isToday = cell.isCurrentMonth && dateKey === todayKey;
 
             return (
               <button

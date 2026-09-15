@@ -7,7 +7,7 @@ import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import { reorderMainAccounts } from "@/actions/accounts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { assetTypeColor, formatCurrency } from "@/lib/utils";
+import { assetTypeColor, formatCurrency, formatJSTDate } from "@/lib/utils";
 
 type BillingSummary = {
   totalBilling: number;
@@ -166,22 +166,17 @@ export function AccountList({ accounts }: { accounts: AccountListItem[] }) {
                   {account.billingSummary &&
                     account.billingSummary.recentBillings.length > 0 &&
                     (() => {
-                      const now = new Date();
-                      now.setHours(0, 0, 0, 0);
-                      const todayKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+                      // JST 日付文字列で比較する（サーバーの TZ に依存しない）
+                      const todayKey = formatJSTDate(new Date());
                       const futureBillings =
                         account.billingSummary.recentBillings.filter(b => {
-                          const d = new Date(b.billingDate);
-                          const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+                          const key = formatJSTDate(b.billingDate);
                           return key >= todayKey;
                         });
-                      const thisMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+                      const thisMonthKey = todayKey.slice(0, 7);
                       const thisMonthBillings = futureBillings.filter(b => {
-                        const d = new Date(b.billingDate);
-                        return (
-                          `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}` ===
-                          thisMonthKey
-                        );
+                        const key = formatJSTDate(b.billingDate);
+                        return key.slice(0, 7) === thisMonthKey;
                       });
                       const thisMonthTotal = thisMonthBillings.reduce(
                         (sum, b) => sum + b.amount,

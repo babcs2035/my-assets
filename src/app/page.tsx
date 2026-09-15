@@ -24,7 +24,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import logger from "@/lib/logger";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, formatJSTDate } from "@/lib/utils";
 
 /**
  * 常に最新のデータを表示させるため，動的レンダリングを強制する設定である．
@@ -294,8 +294,10 @@ export default async function DashboardPage() {
                 const oneYearAgo = new Date(now);
                 oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
 
+                // chartData のキーは JST 日付文字列のため，JST で検索する
+                // （サーバーの TZ が JST でない環境でも正しくヒットする）
                 const findValue = (date: Date, key: string) => {
-                  const dateStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+                  const dateStr = formatJSTDate(date);
                   const entry = history.find(h => h.date === dateStr);
                   return entry ? (entry[key as keyof typeof entry] ?? 0) : 0;
                 };

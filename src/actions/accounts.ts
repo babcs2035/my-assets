@@ -4,6 +4,7 @@ import type { AssetType } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import logger from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
+import { formatJSTDate } from "@/lib/utils";
 import {
   type MainAccountCreateInput,
   type MainAccountUpdateInput,
@@ -14,14 +15,22 @@ import {
 } from "@/lib/validations";
 
 /**
+ * JST の今日の日付を，billingDate の保存形式（JST 日付の UTC 00:00）で返す関数である．
+ * サーバーの TZ が JST でない環境でも，クエリ境界が保存形式と一致するようにする．
+ */
+function todayJstAsUtcMidnight(): Date {
+  const [year, month, day] = formatJSTDate(new Date()).split("-").map(Number);
+  return new Date(Date.UTC(year, month - 1, day));
+}
+
+/**
  * クレジットカードの請求履歴を取得する関数である．
  * 指定されたメイン口座に紐づく負債サブアカウントの請求データを返す．
  * 請求日が今日以降のレコードのみをフィルタリングして返す．
  */
 export async function getCreditCardBillings(mainAccountId: string) {
   logger.info(`📂 Fetching credit card billings for account: ${mainAccountId}`);
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  const today = todayJstAsUtcMidnight();
   return prisma.creditCardBilling.findMany({
     where: {
       subAccount: {
@@ -64,8 +73,7 @@ export async function getCreditCardBillingSummary(
   logger.info(
     `📂 Fetching credit card billing summary for account: ${mainAccountId}`,
   );
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  const today = todayJstAsUtcMidnight();
 
   const billings = await prisma.creditCardBilling.findMany({
     where: {
@@ -181,8 +189,7 @@ export async function getAccountList() {
     } | null = null;
 
     if (liabilitySubAccounts.length > 0) {
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
+      const today = todayJstAsUtcMidnight();
 
       const billings = await prisma.creditCardBilling.findMany({
         where: {
