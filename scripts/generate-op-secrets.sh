@@ -65,7 +65,9 @@ done
 rm -f /tmp/op-secrets-tmp.json
 
 # Combine all items into final JSON
+# 出力先は docker-compose(.yml) がマウントする data/runtime/op-secrets.json と揃える
 if [ -f /tmp/op-secrets-item-tmp.json ]; then
+  mkdir -p data/runtime
   python3 -c "
 import json
 
@@ -82,12 +84,12 @@ with open('/tmp/op-secrets-item-tmp.json', 'r') as f:
             pass
 
 print(json.dumps({'items': all_items}, indent=2))
-" < /tmp/op-secrets-item-tmp.json > op-secrets.json
+" < /tmp/op-secrets-item-tmp.json > data/runtime/op-secrets.json
 
   rm -f /tmp/op-secrets-item-tmp.json
-  echo "✅ Generated op-secrets.json with ${#ITEM_IDS[@]} item(s)."
+  echo "✅ Generated data/runtime/op-secrets.json with ${#ITEM_IDS[@]} item(s)."
 else
   echo "⚠️  No items were successfully retrieved."
-  rm -f op-secrets.json
+  rm -f data/runtime/op-secrets.json
   exit 1
 fi

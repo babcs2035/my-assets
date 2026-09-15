@@ -8,7 +8,8 @@ services:
     ports:
       - "127.0.0.1:${APP_PORT:-3000}:3000"
     environment:
-      DATABASE_URL: postgresql://my-assets_user:my-assets_password@db:5432/my-assets
+      # db サービスと同じ環境変数から接続先を組み立てる（.env.example 由来のパスワードでも一致する）
+      DATABASE_URL: postgresql://${POSTGRES_USER:-my-assets_user}:${POSTGRES_PASSWORD:-my-assets_password}@db:5432/${POSTGRES_DB:-my-assets}
       TZ: Asia/Tokyo
       APP_PORT: ${APP_PORT:-3000}
       BASIC_AUTH_USER:
