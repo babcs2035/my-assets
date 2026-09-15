@@ -2649,10 +2649,7 @@ export async function runMfScraper(
         for (let attempt = 0; attempt < 2; attempt++) {
           const freshOtp = getItemOtp(providerName);
           // OTP コードは認証情報のためログに含めない
-          logger.info(
-            { attempt },
-            "🔑 Fresh OTP code generated for retry.",
-          );
+          logger.info({ attempt }, "🔑 Fresh OTP code generated for retry.");
 
           const otpInput = page.locator('input[name="otp_attempt"]');
           if ((await otpInput.count()) > 0) {
