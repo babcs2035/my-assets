@@ -1,6 +1,5 @@
 "use client";
 
-import dayjs from "dayjs";
 import { Loader2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -25,7 +24,13 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ChartContainer, ChartTooltip } from "@/components/ui/chart";
 import { MonthNavigator } from "@/components/ui/month-navigator";
-import { formatCurrency } from "@/lib/utils";
+import { formatYAxisCurrency } from "@/lib/chart-format";
+import {
+  formatCurrency,
+  formatJSTDate,
+  formatSignedCurrency,
+  nowJST,
+} from "@/lib/utils";
 
 type TrendData = Awaited<ReturnType<typeof getMonthlyIncomeExpense>>;
 
@@ -205,9 +210,10 @@ export function IncomeExpenseContent({
             setMonth(newMonth);
           }}
           onThisMonth={() => {
-            const now = dayjs();
-            setYear(now.year());
-            setMonth(now.month() + 1);
+            // ブラウザの TZ に依存せず JST の年月を判定する
+            const nowKey = formatJSTDate(nowJST());
+            setYear(Number(nowKey.slice(0, 4)));
+            setMonth(Number(nowKey.slice(5, 7)));
           }}
         />
 
@@ -263,7 +269,7 @@ export function IncomeExpenseContent({
                 <div
                   className={`text-2xl font-bold font-mono tracking-tight ${monthlyBalance >= 0 ? "text-emerald-400" : "text-red-400"}`}
                 >
-                  {formatCurrency(monthlyBalance)}
+                  {formatSignedCurrency(monthlyBalance)}
                 </div>
               </CardContent>
             </Card>
@@ -550,21 +556,16 @@ export function IncomeExpenseContent({
                       stroke="#52525b"
                       tickLine={false}
                       axisLine={false}
-                      tickFormatter={v => `${v}月`}
+                      // period は "YYYY-MM" なので月はゼロ埋め文字列（"01" 等）
+                      tickFormatter={v => `${Number(v)}月`}
                     />
                     <YAxis
                       stroke="#52525b"
                       tickLine={false}
                       axisLine={false}
-                      tickFormatter={value => {
-                        const abs = Math.abs(value);
-                        const sign = value < 0 ? "-" : "";
-                        if (abs >= 100000000)
-                          return `${sign}${(abs / 100000000).toFixed(1)}億`;
-                        if (abs >= 10000)
-                          return `${sign}${Math.round(abs / 10000)}万`;
-                        return `${sign}${abs}`;
-                      }}
+                      tickFormatter={value =>
+                        formatYAxisCurrency(Number(value))
+                      }
                       width={80}
                     />
                     <ChartTooltip
@@ -580,7 +581,7 @@ export function IncomeExpenseContent({
                         return (
                           <div className="rounded-lg border border-zinc-700 bg-zinc-900 p-3 shadow-sm relative z-50">
                             <div className="mb-1.5 text-sm text-zinc-400">
-                              {month ? `${month}月` : ""}
+                              {month ? `${Number(month)}月` : ""}
                             </div>
                             <div className="space-y-1.5">
                               {payload.map(item => (
@@ -691,15 +692,7 @@ export function IncomeExpenseContent({
                     stroke="#52525b"
                     tickLine={false}
                     axisLine={false}
-                    tickFormatter={value => {
-                      const abs = Math.abs(value);
-                      const sign = value < 0 ? "-" : "";
-                      if (abs >= 100000000)
-                        return `${sign}${(abs / 100000000).toFixed(1)}億`;
-                      if (abs >= 10000)
-                        return `${sign}${Math.round(abs / 10000)}万`;
-                      return `${sign}${abs}`;
-                    }}
+                    tickFormatter={value => formatYAxisCurrency(Number(value))}
                     width={80}
                   />
                   <ChartTooltip

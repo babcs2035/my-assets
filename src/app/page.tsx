@@ -24,7 +24,11 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import logger from "@/lib/logger";
-import { formatCurrency, formatJSTDate } from "@/lib/utils";
+import {
+  formatCurrency,
+  formatJSTDate,
+  formatSignedCurrency,
+} from "@/lib/utils";
 
 /**
  * 常に最新のデータを表示させるため，動的レンダリングを強制する設定である．
@@ -36,8 +40,7 @@ export const dynamic = "force-dynamic";
  * ガイドブック原則:
  *   - 全体→部分の階層: KPI 指標 → 推移グラフ → 構成比 → 詳細通知
  *   - 左上に最も重要な情報を配置
- *   - 比較対象を提供（前日比）
- *   - メタ情報を記載（最終更新日時）
+ *   - 比較対象を提供（前日比・前月比）
  */
 export const metadata: Metadata = {
   title: "ダッシュボード | My Assets",
@@ -72,6 +75,37 @@ export default async function DashboardPage() {
     (kpi.byAssetType.CRYPTO ?? 0) +
     (kpi.byAssetType.POINT ?? 0);
 
+  // 前月比の表示（差が 0 の場合は中性の Minus アイコンを表示し，
+  // 緑の「上昇」矢印を出さない）
+  const renderMonthDiff = (diff: number, upIsGood: boolean) => {
+    const upClass = upIsGood ? "text-emerald-500" : "text-red-500";
+    const downClass = upIsGood ? "text-red-500" : "text-emerald-500";
+    return (
+      <>
+        {diff > 0 ? (
+          <ArrowUpRight className={`h-4 w-4 ${upClass} shrink-0`} />
+        ) : diff < 0 ? (
+          <ArrowDownRight className={`h-4 w-4 ${downClass} shrink-0`} />
+        ) : (
+          <Minus className="h-4 w-4 text-zinc-500 shrink-0" />
+        )}
+        <span
+          className={
+            diff > 0
+              ? `${upClass} font-medium`
+              : diff < 0
+                ? `${downClass} font-medium`
+                : "text-zinc-500"
+          }
+        >
+          {diff > 0 && "+"}
+          {diff.toLocaleString()} 円
+        </span>
+        <span className="text-zinc-500">前月比</span>
+      </>
+    );
+  };
+
   return (
     <div className="space-y-6 animate-fade-in">
       <PageHeader title="ダッシュボード" icon={LayoutDashboard} />
@@ -86,9 +120,9 @@ export default async function DashboardPage() {
             </p>
             <div
               className="text-2xl sm:text-3xl font-bold text-zinc-50 font-mono tracking-tight"
-              title={formatCurrency(kpi.netWorth)}
+              title={formatSignedCurrency(kpi.netWorth)}
             >
-              {formatCurrency(kpi.netWorth)}
+              {formatSignedCurrency(kpi.netWorth)}
             </div>
             {/* 前日比 – ガイドブック: 比較対象を提供する
                 （前日の履歴が不完全な場合は dailyChange が null になり「—」表示） */}
@@ -138,32 +172,11 @@ export default async function DashboardPage() {
               {formatCurrency(monthlyIncomeExpense.current.income)}
             </div>
             <div className="flex items-center text-sm text-muted-foreground mt-2.5 gap-1.5">
-              {monthlyIncomeExpense.current.income -
-                monthlyIncomeExpense.previous.income >=
-              0 ? (
-                <ArrowUpRight className="h-4 w-4 text-emerald-500 shrink-0" />
-              ) : (
-                <ArrowDownRight className="h-4 w-4 text-red-500 shrink-0" />
+              {renderMonthDiff(
+                monthlyIncomeExpense.current.income -
+                  monthlyIncomeExpense.previous.income,
+                true,
               )}
-              <span
-                className={
-                  monthlyIncomeExpense.current.income -
-                    monthlyIncomeExpense.previous.income >=
-                  0
-                    ? "text-emerald-500 font-medium"
-                    : "text-red-500 font-medium"
-                }
-              >
-                {monthlyIncomeExpense.current.income -
-                  monthlyIncomeExpense.previous.income >=
-                  0 && "+"}
-                {(
-                  monthlyIncomeExpense.current.income -
-                  monthlyIncomeExpense.previous.income
-                ).toLocaleString()}{" "}
-                円
-              </span>
-              <span className="text-zinc-500">前月比</span>
             </div>
           </CardContent>
         </Card>
@@ -176,32 +189,11 @@ export default async function DashboardPage() {
               {formatCurrency(monthlyIncomeExpense.current.expense)}
             </div>
             <div className="flex items-center text-sm text-muted-foreground mt-2.5 gap-1.5">
-              {monthlyIncomeExpense.current.expense -
-                monthlyIncomeExpense.previous.expense >=
-              0 ? (
-                <ArrowUpRight className="h-4 w-4 text-red-500 shrink-0" />
-              ) : (
-                <ArrowDownRight className="h-4 w-4 text-emerald-500 shrink-0" />
+              {renderMonthDiff(
+                monthlyIncomeExpense.current.expense -
+                  monthlyIncomeExpense.previous.expense,
+                false,
               )}
-              <span
-                className={
-                  monthlyIncomeExpense.current.expense -
-                    monthlyIncomeExpense.previous.expense >=
-                  0
-                    ? "text-red-500 font-medium"
-                    : "text-emerald-500 font-medium"
-                }
-              >
-                {monthlyIncomeExpense.current.expense -
-                  monthlyIncomeExpense.previous.expense >=
-                  0 && "+"}
-                {(
-                  monthlyIncomeExpense.current.expense -
-                  monthlyIncomeExpense.previous.expense
-                ).toLocaleString()}{" "}
-                円
-              </span>
-              <span className="text-zinc-500">前月比</span>
             </div>
           </CardContent>
         </Card>
@@ -216,32 +208,11 @@ export default async function DashboardPage() {
               {formatCurrency(monthlyIncomeExpense.current.balance)}
             </div>
             <div className="flex items-center text-sm text-muted-foreground mt-2.5 gap-1.5">
-              {monthlyIncomeExpense.current.balance -
-                monthlyIncomeExpense.previous.balance >=
-              0 ? (
-                <ArrowUpRight className="h-4 w-4 text-emerald-500 shrink-0" />
-              ) : (
-                <ArrowDownRight className="h-4 w-4 text-red-500 shrink-0" />
+              {renderMonthDiff(
+                monthlyIncomeExpense.current.balance -
+                  monthlyIncomeExpense.previous.balance,
+                true,
               )}
-              <span
-                className={
-                  monthlyIncomeExpense.current.balance -
-                    monthlyIncomeExpense.previous.balance >=
-                  0
-                    ? "text-emerald-500 font-medium"
-                    : "text-red-500 font-medium"
-                }
-              >
-                {monthlyIncomeExpense.current.balance -
-                  monthlyIncomeExpense.previous.balance >=
-                  0 && "+"}
-                {(
-                  monthlyIncomeExpense.current.balance -
-                  monthlyIncomeExpense.previous.balance
-                ).toLocaleString()}{" "}
-                円
-              </span>
-              <span className="text-zinc-500">前月比</span>
             </div>
           </CardContent>
         </Card>
@@ -253,7 +224,7 @@ export default async function DashboardPage() {
         <Card className="col-span-1 lg:col-span-5 overflow-hidden">
           <CardHeader className="pb-2">
             <CardTitle className="text-base font-medium text-zinc-200">
-              資産推移（積み上げ・月次）
+              資産推移（積み上げ・日次）
             </CardTitle>
           </CardHeader>
           <CardContent className="pl-0 sm:pl-2">

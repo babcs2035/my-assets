@@ -107,14 +107,18 @@ export function DashboardAreaChart({ data }: DashboardAreaChartProps) {
     );
   }
 
-  if (chartData.length === 0 || !hasVisibleSeries) {
+  // 1 点だけだと AreaChart は線を描画できず空白になるため，
+  // 2 点未満は空状態としてメッセージを表示する
+  if (chartData.length < 2 || !hasVisibleSeries) {
     return (
       <div className="flex flex-col gap-3">
         <UnifiedTimeRangeTabs value={timeRange} onChange={setTimeRange} />
         <div className="flex h-60 w-full items-center justify-center text-sm text-zinc-500 border border-dashed border-zinc-800 rounded-md">
           {chartData.length === 0
             ? "表示するデータがありません"
-            : "表示する項目を選択してください"}
+            : chartData.length === 1
+              ? "データが 1 件のみのため，グラフを描画できません"
+              : "表示する項目を選択してください"}
         </div>
         <SeriesLegend
           visibleSeries={visibleSeries}
