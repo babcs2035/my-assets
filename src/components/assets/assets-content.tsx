@@ -204,7 +204,7 @@ export function AssetsContent({ breakdown }: AssetsContentProps) {
                         <span className="text-sm text-zinc-300 truncate flex-1">
                           {item.name}
                         </span>
-                        <span className="font-mono text-sm text-zinc-100 font-medium">
+                        <span className="font-mono text-sm text-zinc-100 font-medium shrink-0 whitespace-nowrap">
                           {formatCurrency(item.value)}
                         </span>
                         <span className="font-mono text-xs text-zinc-500 shrink-0">
@@ -295,7 +295,7 @@ export function AssetsContent({ breakdown }: AssetsContentProps) {
                         <span className="text-sm text-zinc-300 truncate flex-1">
                           {item.name}
                         </span>
-                        <span className="font-mono text-sm text-zinc-100 font-medium">
+                        <span className="font-mono text-sm text-zinc-100 font-medium shrink-0 whitespace-nowrap">
                           {formatCurrency(item.value)}
                         </span>
                         <span className="font-mono text-xs text-zinc-500 shrink-0">
