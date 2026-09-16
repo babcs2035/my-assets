@@ -3,7 +3,13 @@
 import type { AssetAnalysis } from "@prisma/client";
 import logger from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
-import { assetTypeLabel, formatCurrency, nowJST } from "@/lib/utils";
+import {
+  assetTypeLabel,
+  formatCurrency,
+  formatJSTDate,
+  nowJST,
+  yesterdayJST,
+} from "@/lib/utils";
 
 /**
  * 分析結果をデータベースに保存する際の分析日時を取得する．
@@ -50,9 +56,9 @@ export async function runAssetAnalysis() {
       orderBy: { sortOrder: "asc" },
     });
 
-    // 直近 30 日の残高推移
+    // 直近 30 日の残高推移（UTC で計算し TZ に依存しない）
     const thirtyDaysAgo = new Date(now);
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    thirtyDaysAgo.setUTCDate(thirtyDaysAgo.getUTCDate() - 30);
 
     const balanceHistories = await prisma.balanceHistory.findMany({
       where: {
@@ -75,11 +81,14 @@ export async function runAssetAnalysis() {
     });
 
     // 今月の収支（カテゴリ情報付き）
-    const currentMonth = new Date(now);
-    currentMonth.setDate(1);
-    currentMonth.setHours(0, 0, 0, 0);
-    const nextMonth = new Date(currentMonth);
-    nextMonth.setMonth(nextMonth.getMonth() + 1);
+    // JST の年月から月窓を組む（TZ 非依存．保存日付は JST 日付の UTC 0 時）
+    const jstNow = formatJSTDate(now);
+    const curYear = Number(jstNow.slice(0, 4));
+    const curMonth = Number(jstNow.slice(5, 7));
+    const currentMonth = new Date(Date.UTC(curYear, curMonth - 1, 1));
+    const nextMonth = new Date(
+      Date.UTC(curMonth === 12 ? curYear + 1 : curYear, curMonth % 12, 1),
+    );
 
     const currentMonthTransactions = await prisma.transaction.findMany({
       where: {
@@ -93,8 +102,9 @@ export async function runAssetAnalysis() {
     });
 
     // 先月の収支（比較用）
-    const prevMonthStart = new Date(currentMonth);
-    prevMonthStart.setMonth(prevMonthStart.getMonth() - 1);
+    const prevMonthStart = new Date(
+      Date.UTC(curMonth === 1 ? curYear - 1 : curYear, (curMonth + 10) % 12, 1),
+    );
     const prevMonthEnd = new Date(currentMonth);
 
     const prevMonthTransactions = await prisma.transaction.findMany({
@@ -241,9 +251,8 @@ export async function runAssetAnalysis() {
         : 0;
 
     // 前日比（昨日の資産合計）
-    const yesterday = new Date(now);
-    yesterday.setDate(yesterday.getDate() - 1);
-    const yesterdayKey = yesterday.toISOString().slice(0, 10);
+    // 昨日の JST 日付キーを取得する（TZ 非依存）
+    const yesterdayKey = formatJSTDate(yesterdayJST());
     const yesterdayTotal = dailyTotals[yesterdayKey] ?? 0;
     const dailyChange = lastTotal - yesterdayTotal;
 

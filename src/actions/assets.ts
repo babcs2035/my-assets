@@ -3,7 +3,7 @@
 import type { AssetType } from "@prisma/client";
 import logger from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
-import { nowJST, todayJST, yesterdayJST } from "@/lib/utils";
+import { formatJSTDate, nowJST, todayJST, yesterdayJST } from "@/lib/utils";
 
 const toUtcDateOnly = (year: number, month: number, day: number) =>
   new Date(Date.UTC(year, month - 1, day, 0, 0, 0, 0));
@@ -234,8 +234,10 @@ async function getAssetTypeComparisonInternal() {
  */
 async function getCurrentMonthIncomeExpenseInternal() {
   const now = nowJST();
-  const year = now.getFullYear();
-  const month = now.getMonth() + 1;
+  // 現在の JST 年月を取得する（TZ 非依存）
+  const jst = formatJSTDate(now);
+  const year = Number(jst.slice(0, 4));
+  const month = Number(jst.slice(5, 7));
 
   const start = toUtcDateOnly(year, month, 1);
   const nextYear = month === 12 ? year + 1 : year;

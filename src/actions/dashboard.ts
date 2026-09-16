@@ -95,10 +95,12 @@ async function getDashboardKPIInternal() {
 async function getAssetHistoryInternal(days?: number) {
   logger.info("Fetching asset history from balanceHistory...");
 
+  // 保存された日付は JST 日付の UTC 0 時であるため，
+  // 日付の計算はすべて UTC getter/setter で行う（TZ 非依存）
   const today = todayJST();
   let since = new Date(today);
   if (days) {
-    since.setDate(since.getDate() - days);
+    since.setUTCDate(since.getUTCDate() - days);
   } else {
     const oldestHistory = await prisma.balanceHistory.findFirst({
       select: { date: true },
@@ -107,9 +109,9 @@ async function getAssetHistoryInternal(days?: number) {
 
     if (oldestHistory?.date) {
       since = new Date(oldestHistory.date);
-      since.setHours(0, 0, 0, 0);
+      since.setUTCHours(0, 0, 0, 0);
     } else {
-      since.setFullYear(since.getFullYear() - 1);
+      since.setUTCFullYear(since.getUTCFullYear() - 1);
     }
   }
 
@@ -194,8 +196,11 @@ async function getAssetHistoryInternal(days?: number) {
 async function getExpiringPointsInternal() {
   logger.info("Checking for expiring points...");
   const now = nowJST();
-  const oneMonthLater = new Date(now);
-  oneMonthLater.setMonth(oneMonthLater.getMonth() + 1);
+  // 現在の JST 年月から「翌月 1 日」を組む（TZ 非依存）
+  const jst = formatJSTDate(now);
+  const oneMonthLater = new Date(
+    Date.UTC(Number(jst.slice(0, 4)), Number(jst.slice(5, 7)), 1),
+  );
 
   return prisma.pointDetail.findMany({
     where: {

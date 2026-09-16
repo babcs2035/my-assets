@@ -134,8 +134,11 @@ async function getIncomeExpenseTrendInternal(
   let cumulativeBalance = 0;
 
   for (const tx of transactions) {
+    // 日付は JST 日付の UTC 0 時として保存されるため，
+    // UTC getter で月キーを組む（ローカル getter では UTC より西の
+    // サーバー TZ で月初の取引が前の月に帰属する）
     const d = new Date(tx.date);
-    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    const key = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
     if (!monthlyMap.has(key)) {
       monthlyMap.set(key, { income: 0, expense: 0, balance: 0 });
     }
@@ -188,7 +191,8 @@ async function getAnnualIncomeExpenseInternal(
   const annualMap = new Map<number, { income: number; expense: number }>();
 
   for (const tx of transactions) {
-    const year = new Date(tx.date).getFullYear();
+    // 月キーと同様に UTC getter で年キーを組む
+    const year = new Date(tx.date).getUTCFullYear();
     if (!annualMap.has(year)) {
       annualMap.set(year, { income: 0, expense: 0 });
     }

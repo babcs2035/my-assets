@@ -345,7 +345,7 @@ export async function detectTransfers() {
 
   const now = new Date();
   const threeMonthsAgo = new Date(now);
-  threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
+  threeMonthsAgo.setUTCMonth(threeMonthsAgo.getUTCMonth() - 3);
 
   const unmatched = await prisma.transaction.findMany({
     where: {
