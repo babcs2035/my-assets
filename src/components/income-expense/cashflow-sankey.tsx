@@ -37,6 +37,46 @@ const expenseColorPalette = [
   "#6b7280",
 ];
 
+// 1 ノードあたりの高さ (nodeThickness 20 + nodeSpacing 20)
+const SANKEY_NODE_PITCH = 40;
+// サンキー図の最小高さ
+const SANKEY_MIN_HEIGHT = 300;
+
+/**
+ * Sankey ノード ID からカテゴリ名を取得するヘルパーである．
+ * income-/expense- プレフィックスを除去し，subOnly が true の場合は
+ * メインカテゴリーも除去してサブカテゴリー名のみを返す（チャート上の
+ * ラベルは幅制限があるため）．
+ */
+function categoryName(id: string, subOnly: boolean): string {
+  let name = id;
+  if (name.startsWith("income-")) {
+    name = name.slice(7);
+  } else if (name.startsWith("expense-")) {
+    name = name.slice(8);
+  }
+  if (subOnly) {
+    const slashIdx = name.indexOf("/");
+    if (slashIdx !== -1) {
+      name = name.slice(slashIdx + 1);
+    }
+  }
+  return name;
+}
+
+/**
+ * 集約ノード (ratio/deficit/surplus) の表示ラベルを取得するヘルパーである．
+ * ratio ノードの値は max(収入, 支出) であるため，赤字月には「支出合計」と表示する．
+ */
+function aggregateLabel(id: string, totalIncome: number, totalExpense: number) {
+  if (id === "ratio") {
+    return totalIncome - totalExpense >= 0 ? "収入合計" : "支出合計";
+  }
+  if (id === "deficit") return "赤字合計";
+  if (id === "surplus") return "黒字合計";
+  return null;
+}
+
 /**
  * Sankey ダイアグラムによるキャッシュフロー可視化
  *
@@ -153,8 +193,21 @@ export function CashflowSankey({ data }: CashflowSankeyProps) {
 
   const { nodes, links } = sankeyData;
 
+  // 固定高さだとノード数が多いカラムで overflow するため，
+  // 最もノードが多いカラムに基づいて高さを動的に計算する
+  const incomeColumnCount = nodes.filter(
+    n => n.id.startsWith("income-") || n.id === "deficit",
+  ).length;
+  const expenseColumnCount = nodes.filter(
+    n => n.id.startsWith("expense-") || n.id === "surplus",
+  ).length;
+  const chartHeight = Math.max(
+    SANKEY_MIN_HEIGHT,
+    Math.max(incomeColumnCount, expenseColumnCount) * SANKEY_NODE_PITCH + 40,
+  );
+
   return (
-    <div className="h-[300px] w-full">
+    <div className="w-full" style={{ height: `${chartHeight}px` }}>
       <ResponsiveSankey
         data={{ nodes, links }}
         margin={{ top: 10, right: 120, bottom: 10, left: 120 }}
@@ -198,53 +251,37 @@ export function CashflowSankey({ data }: CashflowSankeyProps) {
         // ダークテーマ: 白文字でコントラスト確保
         labelTextColor="#fff"
         label={node => {
-          // プレフィックスを除去
-          let displayId = node.id;
-          if (displayId.startsWith("income-")) {
-            displayId = displayId.slice(7);
-            // mainCategory/subCategory 形式の場合は subCategory のみ表示
-            const slashIdx = displayId.indexOf("/");
-            if (slashIdx !== -1) {
-              displayId = displayId.slice(slashIdx + 1);
-            }
-          } else if (displayId.startsWith("expense-")) {
-            displayId = displayId.slice(8);
-          }
+          const aggregate = aggregateLabel(
+            node.id,
+            data.totalIncome,
+            data.totalExpense,
+          );
+          if (aggregate) return aggregate;
+
+          // チャート上のラベルはサブカテゴリーのみ表示（幅制限のため）
+          const displayId = categoryName(node.id, true);
 
           const value = node.value || 0;
-          const base = data.totalIncome;
+          // 支出ノードは支出合計，収入ノードは収入合計を基準にする
+          // （すべてを収入合計で割ると赤字月で「120%」のような表示になる）
+          const base = node.id.startsWith("expense-")
+            ? data.totalExpense
+            : data.totalIncome;
           const pct = base === 0 ? "0" : ((value / base) * 100).toFixed(0);
-
-          // 集約ラベル
-          if (node.id === "ratio") {
-            return `収入合計`;
-          }
-          if (node.id === "deficit") {
-            return `赤字合計`;
-          }
-          if (node.id === "surplus") {
-            return `黒字合計`;
-          }
 
           return `${displayId} ${pct}%`;
         }}
         nodeTooltip={({ node }) => {
-          let displayName = node.id;
-          if (displayName.startsWith("income-")) {
-            displayName = displayName.slice(7);
-            // mainCategory/subCategory 形式の場合は subCategory のみ表示
-            const slashIdx = displayName.indexOf("/");
-            if (slashIdx !== -1) {
-              displayName = displayName.slice(slashIdx + 1);
-            }
-          } else if (displayName.startsWith("expense-")) {
-            displayName = displayName.slice(8);
-          }
+          // ツールチップには幅の余裕があるため，main/sub 全体を表示する
+          let displayName = categoryName(node.id, false);
 
           // 集約ノードの displayName を日本語化
-          if (node.id === "ratio") displayName = `収入合計`;
-          else if (node.id === "deficit") displayName = `赤字合計`;
-          else if (node.id === "surplus") displayName = `黒字合計`;
+          const aggregate = aggregateLabel(
+            node.id,
+            data.totalIncome,
+            data.totalExpense,
+          );
+          if (aggregate) displayName = aggregate;
 
           // カラー取得
           let dotColor = "#6b7280";
@@ -288,28 +325,22 @@ export function CashflowSankey({ data }: CashflowSankeyProps) {
           );
         }}
         linkTooltip={({ link }) => {
-          let srcId = link.source.id;
-          let tgtId = link.target.id;
-          if (srcId.startsWith("income-")) {
-            srcId = srcId.slice(7);
-            const slashIdx = srcId.indexOf("/");
-            if (slashIdx !== -1) srcId = srcId.slice(slashIdx + 1);
-          }
-          if (srcId.startsWith("expense-")) srcId = srcId.slice(8);
-          if (tgtId.startsWith("income-")) {
-            tgtId = tgtId.slice(7);
-            const slashIdx = tgtId.indexOf("/");
-            if (slashIdx !== -1) tgtId = tgtId.slice(slashIdx + 1);
-          }
-          if (tgtId.startsWith("expense-")) tgtId = tgtId.slice(8);
+          let srcId = categoryName(link.source.id, false);
+          let tgtId = categoryName(link.target.id, false);
 
           // 集約ノードの日本語化
-          if (srcId === "ratio") srcId = `収入合計`;
-          if (tgtId === "surplus") tgtId = `黒字合計`;
-          if (tgtId === "deficit") tgtId = `赤字合計`;
-          if (srcId === "surplus") srcId = `黒字合計`;
-          if (srcId === "deficit") srcId = `赤字合計`;
-          if (tgtId === "ratio") tgtId = `収入合計`;
+          const srcAggregate = aggregateLabel(
+            link.source.id,
+            data.totalIncome,
+            data.totalExpense,
+          );
+          if (srcAggregate) srcId = srcAggregate;
+          const tgtAggregate = aggregateLabel(
+            link.target.id,
+            data.totalIncome,
+            data.totalExpense,
+          );
+          if (tgtAggregate) tgtId = tgtAggregate;
 
           return (
             <div className="rounded-lg border border-zinc-700 bg-zinc-900 p-3 shadow-sm relative z-50 max-w-[280px]">
