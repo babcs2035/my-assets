@@ -1,9 +1,10 @@
 "use client";
 
 import { ArrowDownUp, Loader2 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { markTransactionAsTransfer } from "@/actions/transactions";
+import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -53,8 +54,19 @@ export function TransferDialog({
   const [selectedMainAccountId, setSelectedMainAccountId] =
     useState<string>("");
 
+  // 親コンポーネントがダイアログを閉じてもマウントを維持するため，
+  // 開くたびに選択をリセットする（別取引で開いた際に前の選択が
+  // 引き継がれるのを防ぐ）。モダール表示のため open が true になる
+  // たびに取引も切り替わる
+  useEffect(() => {
+    if (open) {
+      setSelectedSubAccountId("");
+      setSelectedMainAccountId("");
+    }
+  }, [open]);
+
   const availableSubAccounts =
-    selectedMainAccountId === "all"
+    selectedMainAccountId === "all" || selectedMainAccountId === ""
       ? filterOptions.flatMap(ma =>
           ma.subAccounts.map(sa => ({
             ...sa,
@@ -91,8 +103,6 @@ export function TransferDialog({
         description: `"${transactionDesc}" が振替明細になり、自動で振替ルールが登録されました．`,
       });
       onOpenChange(false);
-      setSelectedSubAccountId("");
-      setSelectedMainAccountId("all");
       onDone();
     } catch (err) {
       const message =
@@ -177,13 +187,9 @@ export function TransferDialog({
               設定中...
             </div>
           ) : (
-            <button
-              type="button"
-              onClick={handleMarkTransfer}
-              className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
-            >
+            <Button type="button" onClick={handleMarkTransfer}>
               振替設定する
-            </button>
+            </Button>
           )}
         </DialogFooter>
       </DialogContent>
