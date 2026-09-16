@@ -1635,6 +1635,11 @@ async function saveTransactionsToDatabase(
         if (a.date.getTime() !== b.date.getTime()) continue;
         if (a.subAccountId === b.subAccountId) continue;
         if (a.amount + b.amount !== 0) continue;
+        // 同日同額（±amount）だけでは無関係な収入＋支出ペアを振替と誤認するため，
+        // 両明細の説明に「振替」を含むこと（スクレイパーは振替を
+        // `振替: X → Y` で保存し，MF の生データも「…への振替」を含む）を要求する．
+        // ペアリングできない明細は通常取引として表示され続ける（安全側）．
+        if (!a.desc.includes("振替") || !b.desc.includes("振替")) continue;
 
         await prisma.transaction.update({
           where: { id: a.id },
