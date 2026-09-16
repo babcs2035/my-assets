@@ -29,7 +29,6 @@ async function main() {
           env: {
             ...filteredEnv,
             OP_MF_ITEM_ID: provider.name,
-            MF_FULL_SYNC: "true",
           },
           stdio: "inherit",
         });
