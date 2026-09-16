@@ -130,8 +130,11 @@ export function AssetsContent({ breakdown }: AssetsContentProps) {
         </Card>
       </div>
 
-      {/* 資産・負債内訳（円グラフ + テーブル） */}
-      <div className="grid gap-4 md:grid-cols-2">
+      {/* 資産・負債内訳（円グラフ + テーブル）
+       * 横並びレイアウト（円グラフ 160px + 凡例）はカード幅 ~452px 以上で初めて成立するため，
+       * md 幅（768-1024px）では 2 列にすると凡例が ~95px に圧縮される．
+       * lg 以上でのみ 2 列にし，md 幅ではカードを全幅で縦積みにする． */}
+      <div className="grid gap-4 lg:grid-cols-2">
         {/* 資産内訳 */}
         <Card>
           <CardHeader>
