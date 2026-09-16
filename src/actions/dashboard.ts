@@ -47,6 +47,7 @@ async function getDashboardKPIInternal() {
     },
     select: {
       balance: true,
+      subAccountId: true,
       subAccount: {
         select: {
           assetType: true,
@@ -55,11 +56,21 @@ async function getDashboardKPIInternal() {
     },
   });
 
+  // 全表示口座に前日の履歴が存在する場合のみ前日比を計算する．
+  // 履歴が不完全なまま 0 と比較すると「前日比 +¥8,000,000」のような
+  // 誤った値が表示されるため，不完全時は null を返す（UI は「—」表示）．
+  const visibleIds = new Set(subAccounts.map(sa => sa.id));
+  const yesterdayIds = new Set(yesterdayHistories.map(h => h.subAccountId));
+  const hasCompleteYesterdayHistory =
+    visibleIds.size > 0 && [...visibleIds].every(id => yesterdayIds.has(id));
+
   const yesterdayTotal = yesterdayHistories.reduce(
     (sum, h) => sum + h.balance,
     0,
   );
-  const dailyChange = netWorth - yesterdayTotal;
+  const dailyChange = hasCompleteYesterdayHistory
+    ? netWorth - yesterdayTotal
+    : null;
 
   const yesterdayByType: Record<string, number> = {};
   for (const h of yesterdayHistories) {
@@ -73,7 +84,9 @@ async function getDashboardKPIInternal() {
     netWorth,
     dailyChange,
     byAssetType: byAssetType as Record<AssetType, number>,
-    yesterdayByType: yesterdayByType as Record<AssetType, number>,
+    yesterdayByType: hasCompleteYesterdayHistory
+      ? (yesterdayByType as Record<AssetType, number>)
+      : null,
   };
 }
 

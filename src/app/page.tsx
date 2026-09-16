@@ -90,28 +90,38 @@ export default async function DashboardPage() {
             >
               {formatCurrency(kpi.netWorth)}
             </div>
-            {/* 前日比 – ガイドブック: 比較対象を提供する */}
+            {/* 前日比 – ガイドブック: 比較対象を提供する
+                （前日の履歴が不完全な場合は dailyChange が null になり「—」表示） */}
             <div className="flex items-center text-sm text-muted-foreground mt-2.5 gap-1.5">
-              {kpi.dailyChange > 0 ? (
-                <ArrowUpRight className="h-4 w-4 text-emerald-500 shrink-0" />
-              ) : kpi.dailyChange < 0 ? (
-                <ArrowDownRight className="h-4 w-4 text-red-500 shrink-0" />
+              {kpi.dailyChange === null ? (
+                <>
+                  <span className="text-zinc-500">—</span>
+                  <span className="text-zinc-500">前日比</span>
+                </>
               ) : (
-                <Minus className="h-4 w-4 text-zinc-500 shrink-0" />
+                <>
+                  {kpi.dailyChange > 0 ? (
+                    <ArrowUpRight className="h-4 w-4 text-emerald-500 shrink-0" />
+                  ) : kpi.dailyChange < 0 ? (
+                    <ArrowDownRight className="h-4 w-4 text-red-500 shrink-0" />
+                  ) : (
+                    <Minus className="h-4 w-4 text-zinc-500 shrink-0" />
+                  )}
+                  <span
+                    className={
+                      kpi.dailyChange > 0
+                        ? "text-emerald-500 font-medium"
+                        : kpi.dailyChange < 0
+                          ? "text-red-500 font-medium"
+                          : "text-zinc-500"
+                    }
+                  >
+                    {kpi.dailyChange > 0 && "+"}
+                    {kpi.dailyChange.toLocaleString()} 円
+                  </span>
+                  <span className="text-zinc-500">前日比</span>
+                </>
               )}
-              <span
-                className={
-                  kpi.dailyChange > 0
-                    ? "text-emerald-500 font-medium"
-                    : kpi.dailyChange < 0
-                      ? "text-red-500 font-medium"
-                      : "text-zinc-500"
-                }
-              >
-                {kpi.dailyChange > 0 && "+"}
-                {kpi.dailyChange.toLocaleString()} 円
-              </span>
-              <span className="text-zinc-500">前日比</span>
             </div>
           </CardContent>
         </Card>
@@ -297,10 +307,14 @@ export default async function DashboardPage() {
 
                 // chartData のキーは JST 日付文字列のため，JST で検索する
                 // （サーバーの TZ が JST でない環境でも正しくヒットする）
-                const findValue = (date: Date, key: string) => {
+                // 対象日付に履歴エントリが無い場合は null を返す（UI は「—」表示）
+                const findValue = (date: Date, key: string): number | null => {
                   const dateStr = formatJSTDate(date);
                   const entry = history.find(h => h.date === dateStr);
-                  return entry ? (entry[key as keyof typeof entry] ?? 0) : 0;
+                  // entry の型には date: string が含まれるため Number で強制変換する
+                  return entry
+                    ? Number(entry[key as keyof typeof entry] ?? 0)
+                    : null;
                 };
 
                 const diff = (nowVal: number, agoVal: number) => {
@@ -310,20 +324,43 @@ export default async function DashboardPage() {
                   return { num: d, pct: p };
                 };
 
+                // 比較対象のデータが無い（null）場合は「—」を表示する．
+                // 0 と比較すると「+X (0.00%)」という誤解を招く表示になるため．
+                const renderChange = (current: number, ago: number | null) => {
+                  if (ago === null) {
+                    return <span className="text-zinc-500">—</span>;
+                  }
+                  const d = diff(current, ago);
+                  return (
+                    <>
+                      <span
+                        className={
+                          d.num >= 0 ? "text-emerald-400" : "text-red-400"
+                        }
+                      >
+                        {d.num >= 0 && "+"}
+                        {d.num.toLocaleString()}
+                      </span>
+                      <span className="whitespace-nowrap text-zinc-500 ml-0.5">
+                        ({d.num >= 0 && "+"}
+                        {d.pct}%)
+                      </span>
+                    </>
+                  );
+                };
+
                 return assetOnlySeries.map(s => {
                   const current = kpi.byAssetType[s.key] ?? 0;
                   const pct =
                     totalAssets > 0
                       ? ((current / totalAssets) * 100).toFixed(1)
                       : "0";
-                  const yesterday = kpi.yesterdayByType?.[s.key] ?? 0;
-                  const yd = diff(current, yesterday);
-                  const weekAgo = Number(findValue(oneWeekAgo, s.key)) ?? 0;
-                  const wk = diff(current, weekAgo);
-                  const monthAgo = Number(findValue(oneMonthAgo, s.key)) ?? 0;
-                  const mo = diff(current, monthAgo);
-                  const yearAgo = Number(findValue(oneYearAgo, s.key)) ?? 0;
-                  const yr = diff(current, yearAgo);
+                  const yesterday = kpi.yesterdayByType
+                    ? (kpi.yesterdayByType[s.key] ?? null)
+                    : null;
+                  const weekAgo = findValue(oneWeekAgo, s.key);
+                  const monthAgo = findValue(oneMonthAgo, s.key);
+                  const yearAgo = findValue(oneYearAgo, s.key);
 
                   return (
                     <TableRow key={s.key}>
@@ -345,60 +382,16 @@ export default async function DashboardPage() {
                         {pct}%
                       </TableCell>
                       <TableCell className="whitespace-nowrap text-right font-mono text-sm">
-                        <span
-                          className={
-                            yd.num >= 0 ? "text-emerald-400" : "text-red-400"
-                          }
-                        >
-                          {yd.num >= 0 && "+"}
-                          {yd.num.toLocaleString()}
-                        </span>
-                        <span className="whitespace-nowrap text-zinc-500 ml-0.5">
-                          ({yd.num >= 0 && "+"}
-                          {yd.pct}%)
-                        </span>
+                        {renderChange(current, yesterday)}
                       </TableCell>
                       <TableCell className="whitespace-nowrap text-right font-mono text-sm">
-                        <span
-                          className={
-                            wk.num >= 0 ? "text-emerald-400" : "text-red-400"
-                          }
-                        >
-                          {wk.num >= 0 && "+"}
-                          {wk.num.toLocaleString()}
-                        </span>
-                        <span className="whitespace-nowrap text-zinc-500 ml-0.5">
-                          ({wk.num >= 0 && "+"}
-                          {wk.pct}%)
-                        </span>
+                        {renderChange(current, weekAgo)}
                       </TableCell>
                       <TableCell className="whitespace-nowrap text-right font-mono text-sm">
-                        <span
-                          className={
-                            mo.num >= 0 ? "text-emerald-400" : "text-red-400"
-                          }
-                        >
-                          {mo.num >= 0 && "+"}
-                          {mo.num.toLocaleString()}
-                        </span>
-                        <span className="whitespace-nowrap text-zinc-500 ml-0.5">
-                          ({mo.num >= 0 && "+"}
-                          {mo.pct}%)
-                        </span>
+                        {renderChange(current, monthAgo)}
                       </TableCell>
                       <TableCell className="whitespace-nowrap text-right font-mono text-sm">
-                        <span
-                          className={
-                            yr.num >= 0 ? "text-emerald-400" : "text-red-400"
-                          }
-                        >
-                          {yr.num >= 0 && "+"}
-                          {yr.num.toLocaleString()}
-                        </span>
-                        <span className="whitespace-nowrap text-zinc-500 ml-0.5">
-                          ({yr.num >= 0 && "+"}
-                          {yr.pct}%)
-                        </span>
+                        {renderChange(current, yearAgo)}
                       </TableCell>
                     </TableRow>
                   );
