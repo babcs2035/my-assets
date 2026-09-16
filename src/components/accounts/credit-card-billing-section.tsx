@@ -12,7 +12,7 @@ import {
 } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatYAxisCurrency } from "@/lib/chart-format";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, formatJSTDate } from "@/lib/utils";
 
 /**
  * クレジットカード請求履歴のデータ型である．
@@ -44,8 +44,10 @@ export function CreditCardBillingSection({
   const cardNames: string[] = [];
 
   for (const b of billings) {
-    const date = new Date(b.billingDate);
-    const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+    // billingDate は JST 日付の UTC 0 時で保存されるため，
+    // formatJSTDate で TZ 非依存に "YYYY-MM" を得る（ローカル TZ の
+    // getMonth() では UTC より東の環境で前月になることがある）
+    const monthKey = formatJSTDate(b.billingDate).slice(0, 7);
     const name = b.subAccount.currentName;
 
     if (!monthlyMap.has(monthKey)) {
@@ -88,29 +90,6 @@ export function CreditCardBillingSection({
             data={chartData}
             margin={{ top: 10, right: 10, left: 30, bottom: 0 }}
           >
-            <defs>
-              {cardNames.map((card, index) => (
-                <linearGradient
-                  key={`gradient-${card}`}
-                  id={`gradient-${card}`}
-                  x1="0"
-                  y1="0"
-                  x2="0"
-                  y2="1"
-                >
-                  <stop
-                    offset="5%"
-                    stopColor={index % 2 === 0 ? "#ef4444" : "#f97316"}
-                    stopOpacity={0.35}
-                  />
-                  <stop
-                    offset="95%"
-                    stopColor={index % 2 === 0 ? "#ef4444" : "#f97316"}
-                    stopOpacity={0}
-                  />
-                </linearGradient>
-              ))}
-            </defs>
             <CartesianGrid
               strokeDasharray="3 3"
               vertical={false}
