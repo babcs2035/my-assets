@@ -64,12 +64,13 @@ export default async function DashboardPage() {
     { key: "POINT", label: "ポイント", color: "#10b981" },
   ] as const;
 
+  // 演算子の優先度で `+` は `??` より高いため，各項を括弧で囲む必要がある
+  // （囲まないと CASH が存在する限り totalAssets は CASH のみになる）
   const totalAssets =
-    kpi.byAssetType.CASH ??
-    0 +
-      (kpi.byAssetType.INVESTMENT ?? 0) +
-      (kpi.byAssetType.CRYPTO ?? 0) +
-      (kpi.byAssetType.POINT ?? 0);
+    (kpi.byAssetType.CASH ?? 0) +
+    (kpi.byAssetType.INVESTMENT ?? 0) +
+    (kpi.byAssetType.CRYPTO ?? 0) +
+    (kpi.byAssetType.POINT ?? 0);
 
   return (
     <div className="space-y-6 animate-fade-in">
