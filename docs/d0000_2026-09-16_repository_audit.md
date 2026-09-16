@@ -1,7 +1,7 @@
 # リポジトリ監査結果（2026-09-16）
 
 リポジトリ全体（設定・スキーマ・ワークフロー・全ソース）を再確認した結果と，
-実施した修正，未決の提案をまとめる．
+実施した修正，提案の解決状況をまとめる．
 
 ## 実施済みの修正（2026-09-16 のコミット群）
 
@@ -22,23 +22,23 @@
 ## 検証の結果，問題なしと確認した項目
 
 - **migration チェーンは新規 DB で適用可能**：`HoldingHistory` は `20260528004929_init` で作成され，`20260528094025_add_holding_history` で修正される（順序は正しい）．`20260514020312_init` はインデックス作成のみ．
-- **`TransferRule.priority` の schema / migration 不一致**：未コミットの migration `20260915142627_init`（列削除）が既に用意されており，コミットすれば整合する．
+- **`TransferRule.priority` の schema / migration 不一致**：migration `20260915142627_init`（列削除）をコミット済み（`bee7f60`）．
 - **秘密情報のコミット**：`.gitignore` が `.env` と任意深さの `op-secrets.json` を除外しており，トラッキング履歴に秘密ファイルは無い．
 - **seed の冪等性**：既存データチェックにより再実行で重複しない．
 - **Dockerfile / standalone 整合**：`output: "standalone"` と runner の構成が整合し，`prisma migrate deploy` / seed 実行に必要なツールがイメージに含まれる．
 
-## 未決の提案（ユーザー判断待ち）
+## 解決済みの提案（2026-09-16 に実施）
 
-| ID | 内容 | 選択肢 |
+| ID | 実施内容 | コミット |
 | :--- | :--- | :--- |
-| P1 | 未使用のチャートコンポーネントが 3 つ存在（`DashboardDonutChart` ×2：`dashboard-charts.tsx` と `dashboard-donut-chart.tsx`，`DonutChart`：`charts/donut-chart.tsx`．いずれも import 元なし） | A1: 削除 (Recommended) / A2: 保持 |
-| P2 | `MF_FULL_SYNC` 環境変数は `src/scripts/sync.ts` で設定されるが読み込まれておらず，CLI 同期は常に scheduled（増分）モードで実行される | A1: エントリポイントで変数を尊重して manual（全量バックフィル）モードに切替 / A2: `sync.ts` 側の変数設定を削除 (Recommended) |
-| P3 | `getProviders` / `createProvider` が `actions/accounts.ts` と `actions/providers.ts` に重複定義され，挙動（並び順・scraperScript 処理）が異なる | A1: 片方に集約 / A2: 現状維持 |
-| P4 | `buildTransferPairs`（mf-scraper.ts）は同日・同額（±amount）の任意の 2 明細を振替ペアとしてマークするため，実際には無関係な収入＋支出のペアが明細一覧から隠れる可能性がある | A1: ペアリング条件の強化（説明テキストの一致等を追加）/ A2: 現状維持（運用上許容） |
-| P5 | 固定の開始日付が複数箇所にある（入出金推移・年別集計のクエリが `2024-01-01` 起点，`MonthNavigator` と設定画面の同期ダイアログが `2023` 起点） | A1: 定数化・統一 / A2: 意図的なデータ起点として現状維持 |
-| P6 | `.env.example` の `NEXT_PUBLIC_APP_URL`（basePath 未含み）と `APP_IMAGE` / `IMAGE_TAG` がコード・CI から参照されていない | A1: 削除 / A2: 使用箇所を追加 |
-| P7 | 非推奨・レガシーの残骸（`settings-content.tsx` のローカル `formatDateTime`（`formatJSTDateTime` 推奨），`analysis/page.tsx` の `NextPage` 型と `onPointerDown`，空ディレクトリ `src/contexts/`・`src/hooks/`） | A1: 清理 / A2: 現状維持 |
-| P8 | 未コミットの migration `20260915142627_init`（`TransferRule.priority` 削除）をコミットする | A1: コミット (Recommended) / A2: 保持 |
+| P1 | 未使用のチャートコンポーネントを削除（`DashboardDonutChart` ×2，`DonutChart`．不要になった recharts import と `formatCurrency` import も除去） | `6c5b06d` |
+| P2 | `sync.ts` の `MF_FULL_SYNC` 設定を削除（読み込み箇所が存在せず，常に既定モードで実行されていた） | `ddb346c` |
+| P3 | `actions/accounts.ts` の重複 `getProviders` / `createProvider` を削除（呼び出し元はすべて `actions/providers.ts` 版を使用） | `7102597` |
+| P4 | `buildTransferPairs` のペアリング条件に「両明細の desc に『振替』を含む」を追加（同日同額の無関係な収入＋支出ペアの誤ペアリングを防止．ペアリングできない明細は表示され続ける安全側） | `0fb801d` |
+| P5 | 固定開始日付を定数化（`BACKFILL_START_DATE = "2023-01-01"` を `lib/utils.ts` に追加し mf-scraper / month-navigator / 設定画面のダイアログに適用．入出金集計の `2024-01-01` は `income-expense.ts` 内のローカル定数 `INCOME_EXPENSE_AGGREGATION_START_DATE` に）．値はすべて不変 | `ae925e6` |
+| P6 | `.env.example` の未使用変数を削除（`NEXT_PUBLIC_APP_URL`，`APP_IMAGE`，`IMAGE_TAG`） | `4866d2d` |
+| P7 | レガシー残骸を削除（`settings-content.tsx` のローカル `formatDateTime` を `formatJSTDateTime` に置換（表示同一），`analysis/page.tsx` の `NextPage` 型と `onPointerDown` を除去（履歴行は兄弟 `<button>` 2 つに再構成しキーボード操作可能に），空ディレクトリ `src/contexts/`・`src/hooks/` を削除） | `76f7e9b` |
+| P8 | 未コミットだった migration `20260915142627_init`（`TransferRule.priority` 削除）をコミット | `bee7f60` |
 
 ## 検証コマンド
 
