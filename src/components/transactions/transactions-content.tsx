@@ -9,7 +9,7 @@ import {
   Loader2,
   SlidersHorizontal,
 } from "lucide-react";
-import { useCallback, useEffect, useState, useTransition } from "react";
+import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { getCategories } from "@/actions/categories";
 import {
@@ -129,11 +129,15 @@ export function TransactionsContent() {
    * 現在の年・月・日・ページに基づいてデータをフェッチする関数である．
    * ローカルなローディング状態を管理しながら実行する．
    */
+  const requestIdRef = useRef(0);
   const fetchData = useCallback(() => {
+    // 高速な月切り替え等で競合したフェッチの古い結果が
+    // 新しい結果を上書きするのを防ぐ
+    const requestId = ++requestIdRef.current;
     setIsLoading(true);
     startTransition(async () => {
       try {
-        const [txResult, calResult, catResult] = await Promise.all([
+        const [txResult, calResult] = await Promise.all([
           getTransactions({
             mainAccountId: activeMainAccountId,
             subAccountId: activeSubAccountId,
@@ -147,8 +151,9 @@ export function TransactionsContent() {
             mainAccountId: activeMainAccountId,
             subAccountId: activeSubAccountId,
           }),
-          getCategories(),
         ]);
+        // 古いフェッチの結果は破棄する
+        if (requestId !== requestIdRef.current) return;
         const txs = [...txResult.transactions];
         // ソート適用
         txs.sort((a, b) => {
@@ -163,11 +168,11 @@ export function TransactionsContent() {
         setTransactions(txs);
         setTotalPages(txResult.totalPages);
         setCalendarData(calResult);
-        setCategories(catResult);
       } catch {
+        if (requestId !== requestIdRef.current) return;
         toast.error("データの取得に失敗しました．");
       } finally {
-        setIsLoading(false);
+        if (requestId === requestIdRef.current) setIsLoading(false);
       }
     });
   }, [
@@ -188,12 +193,21 @@ export function TransactionsContent() {
     fetchData();
   }, [fetchData]);
 
+  // フィルター用オプションとカテゴリーはページ遷移で変わらないため，
+  // マウント時のみ取得する（fetchData 内で毎回取得するとページめくりごと
+  // に不要なリクエストが発生する）
   useEffect(() => {
     startTransition(async () => {
       try {
-        const options = await getTransactionFilterOptions();
+        const [options, cats] = await Promise.all([
+          getTransactionFilterOptions(),
+          getCategories(),
+        ]);
         setFilterOptions(options);
-      } catch {}
+        setCategories(cats);
+      } catch {
+        toast.error("フィルターオプションの取得に失敗しました．");
+      }
     });
   }, []);
 
@@ -540,6 +554,7 @@ export function TransactionsContent() {
                             type="button"
                             onClick={() => openTransferDialog(tx)}
                             className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-zinc-700 bg-zinc-800 text-zinc-400 transition-colors hover:border-blue-500/50 hover:text-blue-400"
+                            aria-label="振替設定"
                             title="振替設定"
                           >
                             <ArrowDownUp className="h-3 w-3" />
@@ -556,13 +571,23 @@ export function TransactionsContent() {
                     <TableHeader>
                       <TableRow>
                         <TableHead
-                          className="w-[100px] cursor-pointer select-none hover:text-zinc-300 whitespace-nowrap"
-                          onClick={() => handleSort("date")}
+                          className="w-[100px] whitespace-nowrap"
+                          aria-sort={
+                            sortKey === "date"
+                              ? sortDir === "asc"
+                                ? "ascending"
+                                : "descending"
+                              : undefined
+                          }
                         >
-                          <div className="flex items-center justify-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => handleSort("date")}
+                            className="mx-auto flex cursor-pointer select-none items-center justify-center gap-1 hover:text-zinc-300"
+                          >
                             日付
                             <SortIcon columnKey="date" />
-                          </div>
+                          </button>
                         </TableHead>
                         <TableHead className="select-none whitespace-nowrap">
                           口座
@@ -571,13 +596,23 @@ export function TransactionsContent() {
                           摘要
                         </TableHead>
                         <TableHead
-                          className="w-[120px] text-right cursor-pointer select-none hover:text-zinc-300 whitespace-nowrap"
-                          onClick={() => handleSort("amount")}
+                          className="w-[120px] text-right whitespace-nowrap"
+                          aria-sort={
+                            sortKey === "amount"
+                              ? sortDir === "asc"
+                                ? "ascending"
+                                : "descending"
+                              : undefined
+                          }
                         >
-                          <div className="flex items-center justify-end gap-1">
+                          <button
+                            type="button"
+                            onClick={() => handleSort("amount")}
+                            className="mx-auto flex cursor-pointer select-none items-center justify-end gap-1 hover:text-zinc-300"
+                          >
                             金額
                             <SortIcon columnKey="amount" />
-                          </div>
+                          </button>
                         </TableHead>
                         <TableHead className="whitespace-nowrap">
                           カテゴリー
@@ -693,6 +728,7 @@ export function TransactionsContent() {
                                   type="button"
                                   onClick={() => openTransferDialog(tx)}
                                   className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-zinc-700 bg-zinc-800 text-zinc-400 transition-colors hover:border-blue-500/50 hover:text-blue-400"
+                                  aria-label="振替設定"
                                   title="振替設定"
                                 >
                                   <ArrowDownUp className="h-3 w-3" />
@@ -729,7 +765,7 @@ export function TransactionsContent() {
                     </PaginationItem>
                     <PaginationItem>
                       <span className="text-sm text-zinc-500 mx-2">
-                        Page {page} of {totalPages}
+                        {page} / {totalPages} ページ
                       </span>
                     </PaginationItem>
                     <PaginationItem>
