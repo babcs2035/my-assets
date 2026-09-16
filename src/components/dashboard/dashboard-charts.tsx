@@ -3,13 +3,7 @@
 import dayjs from "dayjs";
 import { Loader2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import {
-  Area,
-  AreaChart,
-  CartesianGrid,
-  XAxis,
-  YAxis,
-} from "recharts";
+import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from "recharts";
 import { UnifiedTimeRangeTabs } from "@/components/charts/unified-time-range-tabs";
 import {
   type ChartConfig,
