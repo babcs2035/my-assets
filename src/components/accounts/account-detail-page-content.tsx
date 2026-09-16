@@ -14,7 +14,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { formatCurrency, formatJSTDate, formatSignedAmount } from "@/lib/utils";
+import { formatCurrency, formatJSTDate } from "@/lib/utils";
 
 /**
  * 口座詳細ページのコンテンツコンポーネントである．
@@ -29,9 +29,13 @@ export function AccountDetailPageContent() {
     ReturnType<typeof getCreditCardBillings>
   > | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // フェッチ完了のフラグ：存在しない ID では getAccountDetail が null を返すため，
+  // 「未読込み」と「口座が存在しない」を区別する必要がある
+  const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
+    setLoaded(false);
     (async () => {
       try {
         const [accountData, billingData] = await Promise.all([
@@ -41,9 +45,13 @@ export function AccountDetailPageContent() {
         if (!cancelled) {
           setAccount(accountData);
           setBillings(billingData);
+          setLoaded(true);
         }
       } catch {
-        if (!cancelled) setError("データの取得に失敗しました．");
+        if (!cancelled) {
+          setError("データの取得に失敗しました．");
+          setLoaded(true);
+        }
       }
     })();
     return () => {
@@ -59,8 +67,21 @@ export function AccountDetailPageContent() {
     );
   }
 
-  if (!account) {
+  if (!loaded) {
     return <AccountDetailPageSkeleton />;
+  }
+
+  if (!account) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-3 py-16">
+        <p className="text-sm text-zinc-400">口座が見つかりませんでした．</p>
+        <Link href="/accounts">
+          <Button variant="outline" size="sm">
+            口座一覧に戻る
+          </Button>
+        </Link>
+      </div>
+    );
   }
 
   return <AccountDetailContent account={account} billings={billings ?? []} />;
@@ -264,20 +285,24 @@ function AccountDetailContent({
                       </p>
                       <p className="text-xs text-zinc-500 truncate">{c.name}</p>
                     </div>
+                    {/* dayBeforeRatio が 0 のときも正しく表示するため null 判定を使う
+                        （falsy 判定だと 0% が「N/A」+ 赤字バッジになる） */}
                     <Badge
                       variant={
-                        c.dayBeforeRatio && c.dayBeforeRatio >= 0
-                          ? "outline"
-                          : "destructive"
+                        c.dayBeforeRatio == null
+                          ? "secondary"
+                          : c.dayBeforeRatio >= 0
+                            ? "outline"
+                            : "destructive"
                       }
                       className={`shrink-0 ${
-                        c.dayBeforeRatio && c.dayBeforeRatio >= 0
+                        c.dayBeforeRatio != null && c.dayBeforeRatio >= 0
                           ? "border-success/50 text-success"
                           : ""
                       }`}
                     >
-                      {c.dayBeforeRatio
-                        ? formatSignedAmount(c.dayBeforeRatio)
+                      {c.dayBeforeRatio != null
+                        ? `${c.dayBeforeRatio >= 0 ? "+" : ""}${c.dayBeforeRatio.toLocaleString()}%`
                         : "N/A"}
                     </Badge>
                   </div>
@@ -285,7 +310,11 @@ function AccountDetailContent({
                     <div className="flex justify-between text-xs">
                       <span className="text-zinc-500">数量</span>
                       <span className="font-mono text-zinc-300">
-                        {c.quantity.toLocaleString()} {c.symbol}
+                        {/* 暗号資産の数量は小数点多目が必要なため桁数を拡大する */}
+                        {c.quantity.toLocaleString("ja-JP", {
+                          maximumFractionDigits: 8,
+                        })}{" "}
+                        {c.symbol}
                       </span>
                     </div>
                     <div className="flex justify-between text-xs">

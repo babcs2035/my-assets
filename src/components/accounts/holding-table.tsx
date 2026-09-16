@@ -133,7 +133,10 @@ export function HoldingTable({
               {h.account}
             </TableCell>
             <TableCell className="whitespace-nowrap text-right font-mono text-zinc-300">
-              {h.quantity.toLocaleString()}
+              {/* 暗号資産の数量は小数点多目が必要なため桁数を拡大する */}
+              {h.quantity.toLocaleString("ja-JP", {
+                maximumFractionDigits: 8,
+              })}
             </TableCell>
             {showDetails && (
               <>
