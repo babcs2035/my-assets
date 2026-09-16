@@ -100,7 +100,11 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
-import { BACKFILL_START_DATE, assetTypeColor } from "@/lib/utils";
+import {
+  assetTypeColor,
+  BACKFILL_START_DATE,
+  formatJSTDateTime,
+} from "@/lib/utils";
 
 // Types
 type Provider = Awaited<ReturnType<typeof getProviders>>[number];
@@ -116,20 +120,6 @@ function getProviderTypeLabel(type: string): string {
   if (type === "mf") return "MoneyForward";
   if (type === "custom") return "カスタム";
   return type;
-}
-
-/**
- * 日時をフォーマットするヘルパー関数である．
- * @deprecated formatJSTDateTime を使用してください．
- */
-function formatDateTime(date: Date | string | null): string {
-  if (!date) return "—";
-  const d = new Date(date);
-  // JST オフセット (UTC+9)
-  const jstOffset = 9 * 60 * 60 * 1000;
-  const utc = d.getTime() + d.getTimezoneOffset() * 60 * 1000;
-  const jst = new Date(utc + jstOffset);
-  return `${jst.getFullYear()}/${(jst.getMonth() + 1).toString().padStart(2, "0")}/${jst.getDate().toString().padStart(2, "0")} ${jst.getHours().toString().padStart(2, "0")}:${jst.getMinutes().toString().padStart(2, "0")}`;
 }
 
 /**
@@ -1114,7 +1104,7 @@ export function SettingsContent() {
                                 ) : (
                                   <XCircle className="h-3 w-3" />
                                 )}
-                                {formatDateTime(provider.lastSyncAt)}
+                                {formatJSTDateTime(provider.lastSyncAt)}
                               </span>
                             ) : (
                               <span className="flex items-center gap-1">
@@ -1258,7 +1248,7 @@ export function SettingsContent() {
                           {getProviderTypeLabel(provider.type)}
                         </TableCell>
                         <TableCell className="text-zinc-400 text-xs whitespace-nowrap">
-                          {formatDateTime(provider.lastSyncAt)}
+                          {formatJSTDateTime(provider.lastSyncAt)}
                         </TableCell>
                         <TableCell>
                           {(() => {

@@ -8,7 +8,6 @@ import {
   Trash2,
   XCircle,
 } from "lucide-react";
-import type { NextPage } from "next";
 import { useCallback, useEffect, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -23,7 +22,7 @@ import { formatJSTDateTime } from "@/lib/utils";
  * 分析ページ（クライアントコンポーネント）である．
  * 分析結果の表示，履歴一覧，手動分析実行機能，削除機能を提供する．
  */
-const AnalysisPage: NextPage = () => {
+const AnalysisPage = () => {
   const [latestResult, setLatestResult] = useState<AnalysisResult | null>(null);
   const [history, setHistory] = useState<AnalysisResult[]>([]);
   const [loading, setLoading] = useState(false);
@@ -183,7 +182,7 @@ const AnalysisPage: NextPage = () => {
                 <button
                   type="button"
                   className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors flex items-center gap-1"
-                  onPointerDown={() =>
+                  onClick={() =>
                     setShowPromptId(prev =>
                       prev === "latest" ? null : "latest",
                     )
@@ -231,44 +230,44 @@ const AnalysisPage: NextPage = () => {
                         : "border-zinc-800 hover:bg-zinc-900/50"
                     }`}
                   >
-                    <div
-                      className="w-full flex items-center justify-between px-4 py-3 text-left cursor-pointer"
-                      onPointerDown={() => handleToggleExpand(result.id)}
-                    >
-                      <div className="flex items-center gap-3 min-w-0">
-                        <Calendar className="h-4 w-4 text-zinc-500 shrink-0" />
-                        <div className="min-w-0">
-                          <span className="text-sm font-medium text-zinc-200">
-                            {formatJSTDateTime(result.analysisDate as Date)}
+                    <div className="w-full flex items-center gap-2 px-4 py-3 text-left">
+                      {/* 行全体を <button> にすると削除ボタンのネストが無効な HTML になるため，
+                          展開操作と削除操作を兄弟の <button> に分離する */}
+                      <button
+                        type="button"
+                        className="flex flex-1 min-w-0 items-center justify-between gap-3 text-left cursor-pointer"
+                        onClick={() => handleToggleExpand(result.id)}
+                      >
+                        <span className="flex items-center gap-3 min-w-0">
+                          <Calendar className="h-4 w-4 text-zinc-500 shrink-0" />
+                          <span className="block min-w-0">
+                            <span className="text-sm font-medium text-zinc-200">
+                              {formatJSTDateTime(result.analysisDate as Date)}
+                            </span>
+                            <span className="block text-xs text-zinc-500 truncate">
+                              {(result.content as string).length}文字
+                            </span>
                           </span>
-                          <span className="block text-xs text-zinc-500 truncate">
-                            {(result.content as string).length}文字
-                          </span>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2 shrink-0">
+                        </span>
                         {result.status === "COMPLETED" ? (
-                          <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                          <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
                         ) : result.status === "FAILED" ? (
-                          <XCircle className="h-4 w-4 text-red-500" />
+                          <XCircle className="h-4 w-4 text-red-500 shrink-0" />
                         ) : (
-                          <Loader2 className="h-4 w-4 animate-spin text-blue-500" />
+                          <Loader2 className="h-4 w-4 animate-spin text-blue-500 shrink-0" />
                         )}
-                        <button
-                          type="button"
-                          className="p-1 text-zinc-600 hover:text-red-400 transition-colors cursor-pointer"
-                          onPointerDown={e => {
-                            e.stopPropagation();
-                            void handleDeleteAnalysis(result.id);
-                          }}
-                        >
-                          {deletingId === result.id ? (
-                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                          ) : (
-                            <Trash2 className="h-3.5 w-3.5" />
-                          )}
-                        </button>
-                      </div>
+                      </button>
+                      <button
+                        type="button"
+                        className="p-1 text-zinc-600 hover:text-red-400 transition-colors cursor-pointer shrink-0"
+                        onClick={() => void handleDeleteAnalysis(result.id)}
+                      >
+                        {deletingId === result.id ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <Trash2 className="h-3.5 w-3.5" />
+                        )}
+                      </button>
                     </div>
 
                     {isOpen && result.status === "COMPLETED" && (
@@ -294,7 +293,7 @@ const AnalysisPage: NextPage = () => {
                         <button
                           type="button"
                           className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors mb-2 flex items-center gap-1"
-                          onPointerDown={() => handleTogglePrompt(result.id)}
+                          onClick={() => handleTogglePrompt(result.id)}
                         >
                           {showPromptId === result.id ? "▼" : "▶"}
                           プロンプトを表示
