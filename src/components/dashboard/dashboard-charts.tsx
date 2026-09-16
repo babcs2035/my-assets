@@ -7,9 +7,6 @@ import {
   Area,
   AreaChart,
   CartesianGrid,
-  Cell,
-  Pie,
-  PieChart,
   XAxis,
   YAxis,
 } from "recharts";
@@ -24,7 +21,6 @@ import {
   filterByUnifiedTimeRange,
   type UnifiedTimeRange,
 } from "@/lib/chart-time-range";
-import { formatCurrency } from "@/lib/utils";
 
 /**
  * ガイドブック準拠のカラーパレット (1〜5色)
@@ -357,7 +353,7 @@ export function DashboardAreaChart({ data }: DashboardAreaChartProps) {
 }
 
 /**
- * 凡例コンポーネント（エリアチャート / ドーナツチャート共通）
+ * 凡例コンポーネント（エリアチャート用）
  */
 function SeriesLegend({
   visibleSeries,
@@ -389,158 +385,6 @@ function SeriesLegend({
           <span className="whitespace-nowrap">{item.label}</span>
         </button>
       ))}
-    </div>
-  );
-}
-
-interface DashboardDonutChartProps {
-  data: Record<string, unknown>[];
-}
-
-/**
- * 資産構成比を表示するドーナツチャートコンポーネントである．
- * ガイドブック:
- *   - 構成比（%）を凡例に数値表記
- *   - 中央に合計金額を表示
- *   - 色数を4色に制限
- */
-export function DashboardDonutChart({ data }: DashboardDonutChartProps) {
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  const source = useMemo(
-    () => data as { name: string; value: number }[],
-    [data],
-  );
-  const sourceMap = useMemo(
-    () => new Map(source.map(item => [item.name, item.value])),
-    [source],
-  );
-  // 負債は資産構成比から除外する
-  const assetOnlySeries = useMemo(
-    () => areaSeries.filter(item => item.key !== "LIABILITY"),
-    [],
-  );
-  const pieData = useMemo(
-    () =>
-      assetOnlySeries.map(item => ({
-        name: item.label,
-        value: Math.max(0, Number(sourceMap.get(item.label) ?? 0)),
-        fill: item.color,
-      })),
-    [assetOnlySeries, sourceMap],
-  );
-  const totalValue = useMemo(
-    () => pieData.reduce((sum, d) => sum + d.value, 0),
-    [pieData],
-  );
-  const pieRenderData = useMemo(
-    () =>
-      totalValue > 0
-        ? pieData
-        : pieData.map(item => ({
-            ...item,
-            value: 1,
-          })),
-    [pieData, totalValue],
-  );
-
-  if (!mounted) {
-    return (
-      <div className="relative flex mx-auto aspect-square max-h-[250px] pb-0 min-w-0 items-center justify-center rounded-lg backdrop-blur-sm">
-        <Loader2 className="h-8 w-8 animate-spin text-zinc-400" />
-      </div>
-    );
-  }
-
-  return (
-    <div className="w-full">
-      {/* ドーナツチャート + 中央に合計金額 */}
-      <div className="relative">
-        <ChartContainer
-          config={chartConfig}
-          className="mx-auto aspect-square max-h-[220px] min-w-0 [&_.recharts-pie-label-text]:fill-foreground"
-          style={{ width: "100%" }}
-        >
-          <PieChart>
-            <ChartTooltip
-              wrapperStyle={{ zIndex: 100 }}
-              content={({ active, payload }) => {
-                if (!active || !payload?.length) return null;
-                const item = payload[0];
-                const actualValue = Number(
-                  sourceMap.get(String(item.name ?? "")) ?? 0,
-                );
-                const pct =
-                  totalValue > 0
-                    ? ((actualValue / totalValue) * 100).toFixed(1)
-                    : "0";
-                return (
-                  <div className={tooltipCardClassName}>
-                    <div className="mb-1.5 text-sm text-zinc-400">
-                      {String(item.name ?? "")}
-                    </div>
-                    <div className="font-mono text-base font-bold text-zinc-100">
-                      {valueFormatter(actualValue)}
-                    </div>
-                    <div className="text-sm text-zinc-500 mt-0.5">{pct}%</div>
-                  </div>
-                );
-              }}
-            />
-            <Pie
-              data={pieRenderData}
-              dataKey="value"
-              nameKey="name"
-              innerRadius={55}
-              outerRadius={80}
-              strokeWidth={3}
-              stroke="oklch(0.19 0.01 285)"
-              fillOpacity={totalValue > 0 ? 1 : 0.25}
-            >
-              {pieRenderData.map(entry => (
-                <Cell key={entry.name} fill={entry.fill} />
-              ))}
-            </Pie>
-          </PieChart>
-        </ChartContainer>
-        {/* ガイドブック: 円グラフ中央に合計値を表示 */}
-        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-          <div className="text-center">
-            <div className="text-xs text-zinc-500">合計</div>
-            <div className="text-base font-bold text-zinc-100 font-mono">
-              {formatCurrency(totalValue)}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* ガイドブック: 凡例に構成比（%）を併記（負債は除外） */}
-      <div className="mt-3 grid w-full grid-cols-1 gap-1.5 text-sm text-zinc-300">
-        {assetOnlySeries.map(item => {
-          const val = Number(sourceMap.get(item.label) ?? 0);
-          const pct =
-            totalValue > 0 ? ((val / totalValue) * 100).toFixed(1) : "0";
-          return (
-            <div
-              key={item.key}
-              className="flex items-center gap-2 rounded-md border border-zinc-800 bg-zinc-900/40 px-2.5 py-1.5"
-            >
-              <span
-                className="h-2.5 w-2.5 rounded-full shrink-0"
-                style={{ backgroundColor: item.color }}
-              />
-              <span>{item.label}</span>
-              <span className="ml-auto text-zinc-500 shrink-0 font-mono text-xs">
-                {pct}%
-              </span>
-            </div>
-          );
-        })}
-      </div>
     </div>
   );
 }
