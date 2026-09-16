@@ -61,20 +61,24 @@ export function AssetsContent({ breakdown }: AssetsContentProps) {
     for (const a of assets) {
       typeMap.set(a.type, (typeMap.get(a.type) ?? 0) + a.amount);
     }
-    return Array.from(typeMap.entries()).map(([type, value]) => ({
-      name:
-        type === "CASH"
-          ? "預金・現金"
-          : type === "INVESTMENT"
-            ? "投資信託・証券"
-            : type === "CRYPTO"
-              ? "暗号資産"
-              : type === "POINT"
-                ? "ポイント"
-                : type,
-      value,
-      fill: assetColors[type as keyof typeof assetColors] ?? "#6b7280",
-    }));
+    // recharts の Pie は負の値を描画できないため，合計が負のタイプを除外する
+    // （マイナス残高自体は資産詳細テーブルに表示され続ける）
+    return Array.from(typeMap.entries())
+      .filter(([, value]) => value > 0)
+      .map(([type, value]) => ({
+        name:
+          type === "CASH"
+            ? "預金・現金"
+            : type === "INVESTMENT"
+              ? "投資信託・証券"
+              : type === "CRYPTO"
+                ? "暗号資産"
+                : type === "POINT"
+                  ? "ポイント"
+                  : type,
+        value,
+        fill: assetColors[type as keyof typeof assetColors] ?? "#6b7280",
+      }));
   }, [assets]);
 
   // 負債の pie chart データ（絶対値で扱う）

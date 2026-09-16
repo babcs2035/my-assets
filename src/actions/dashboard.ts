@@ -19,8 +19,10 @@ async function getDashboardKPIInternal() {
     },
   });
 
+  // 負債以外の残高をすべて合計する（マイナス残高を含む）．
+  // 資産ページ (getAssetBreakdown) と純資産の定義を一致させるため．
   const totalAssets = subAccounts
-    .filter(sa => sa.assetType !== "LIABILITY" && sa.balance > 0)
+    .filter(sa => sa.assetType !== "LIABILITY")
     .reduce((sum, sa) => sum + sa.balance, 0);
 
   const totalLiabilities = subAccounts
