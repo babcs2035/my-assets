@@ -47,8 +47,8 @@ export const viewport: Viewport = {
   themeColor: "#18181b", // manifest.jsonに合わせる
   width: "device-width",
   initialScale: 1,
-  maximumScale: 1,
-  userScalable: false,
+  // maximumScale / userScalable: false は WCAG 1.4.4（ズーム可能）に
+  // 抵触するため設定しない
   viewportFit: "cover", // Notch などセーフエリア対応
 };
 

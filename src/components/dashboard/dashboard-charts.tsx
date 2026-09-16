@@ -15,6 +15,7 @@ import {
   filterByUnifiedTimeRange,
   type UnifiedTimeRange,
 } from "@/lib/chart-time-range";
+import { formatCurrency } from "@/lib/utils";
 
 /**
  * ガイドブック準拠のカラーパレット (1〜5色)
@@ -38,9 +39,6 @@ const chartConfig = {
   point: { label: "ポイント", color: areaSeries[3].color },
   liability: { label: "負債", color: areaSeries[4].color },
 } satisfies ChartConfig;
-
-const valueFormatter = (number: number) =>
-  `¥ ${Intl.NumberFormat("ja-JP").format(number)}`;
 
 const tooltipCardClassName =
   "rounded-lg border border-zinc-700 bg-zinc-900 p-3 shadow-sm relative z-50";
@@ -293,7 +291,7 @@ export function DashboardAreaChart({ data }: DashboardAreaChartProps) {
                                 {label}
                               </span>
                               <span className="font-mono font-bold text-zinc-100">
-                                {valueFormatter(Number(item.value ?? 0))}
+                                {formatCurrency(Number(item.value ?? 0))}
                               </span>
                             </div>
                           );
@@ -363,6 +361,7 @@ function SeriesLegend({
           type="button"
           key={item.key}
           onClick={() => onToggle(item.key)}
+          aria-pressed={visibleSeries[item.key]}
           className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 transition-colors ${
             visibleSeries[item.key]
               ? "border-zinc-700 bg-zinc-800/60 text-zinc-100"

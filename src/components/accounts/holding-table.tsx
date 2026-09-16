@@ -94,10 +94,20 @@ export function HoldingTable({
             </TableHead>
           )}
           <TableHead
-            className="whitespace-nowrap text-right cursor-pointer select-none hover:text-zinc-100 transition-colors"
-            onClick={() => handleSort("gainLoss")}
+            className="whitespace-nowrap text-right"
+            aria-sort={
+              sortConfig.key === "gainLoss"
+                ? sortConfig.direction === "asc"
+                  ? "ascending"
+                  : "descending"
+                : undefined
+            }
           >
-            <span className="inline-flex items-center gap-0.5">
+            <button
+              type="button"
+              onClick={() => handleSort("gainLoss")}
+              className="mx-auto flex cursor-pointer select-none items-center justify-end gap-0.5 hover:text-zinc-100 transition-colors"
+            >
               評価損益
               {sortConfig.key === "gainLoss" &&
                 (sortConfig.direction === "desc" ? (
@@ -105,13 +115,23 @@ export function HoldingTable({
                 ) : (
                   <ChevronUp className="h-3 w-3" />
                 ))}
-            </span>
+            </button>
           </TableHead>
           <TableHead
-            className="whitespace-nowrap text-right cursor-pointer select-none hover:text-zinc-100 transition-colors"
-            onClick={() => handleSort("gainLossRate")}
+            className="whitespace-nowrap text-right"
+            aria-sort={
+              sortConfig.key === "gainLossRate"
+                ? sortConfig.direction === "asc"
+                  ? "ascending"
+                  : "descending"
+                : undefined
+            }
           >
-            <span className="inline-flex items-center gap-0.5">
+            <button
+              type="button"
+              onClick={() => handleSort("gainLossRate")}
+              className="mx-auto flex cursor-pointer select-none items-center justify-end gap-0.5 hover:text-zinc-100 transition-colors"
+            >
               損益率
               {sortConfig.key === "gainLossRate" &&
                 (sortConfig.direction === "desc" ? (
@@ -119,7 +139,7 @@ export function HoldingTable({
                 ) : (
                   <ChevronUp className="h-3 w-3" />
                 ))}
-            </span>
+            </button>
           </TableHead>
         </TableRow>
       </TableHeader>

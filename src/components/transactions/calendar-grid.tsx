@@ -46,6 +46,18 @@ function getMaxExpense(calendarData: Record<string, CalendarData>): number {
 }
 
 /**
+ * カレンダーセルの狭い幅向けに金額を短縮する。
+ * 1 万円以上は「万」表記にすることで，モバイル（1 列約 45px）で
+ * 桁の大きい側が切れるのを防ぐ。
+ */
+function formatCompactAmount(amount: number): string {
+  if (amount >= 10000) {
+    return `${Number((amount / 10000).toFixed(1))}万`;
+  }
+  return amount.toLocaleString();
+}
+
+/**
  * 月間カレンダーグリッド表示コンポーネントである．
  * DayPicker を使わず、シンプルな手作り実装で確実に 7 列グリッドを表示する．
  * 年月ナビゲーションは親コンポーネントの MonthNavigator に委ねている．
@@ -153,6 +165,16 @@ export function CalendarGrid({
                   }
                 }}
                 disabled={!cell.isCurrentMonth}
+                aria-pressed={isSelected}
+                aria-label={
+                  cell.isCurrentMonth
+                    ? `${year}年${month}月${cell.day}日${
+                        data
+                          ? ` 支出 ${data.expense.toLocaleString()} 円 収入 ${data.income.toLocaleString()} 円`
+                          : ""
+                      }`
+                    : undefined
+                }
                 className={cn(
                   "flex h-20 flex-col items-start justify-between border-r border-b border-zinc-800 p-1.5 text-left transition-colors",
                   // 行の最後のセルは右ボーダーなし
@@ -189,20 +211,17 @@ export function CalendarGrid({
                 {cell.isCurrentMonth && data && data.expense > 0 && (
                   <div className="flex w-full flex-col items-end gap-0.5 min-w-0 mt-0.5">
                     <span
-                      className="font-mono text-sm font-bold truncate w-full text-right text-red-400"
+                      className="font-mono text-[10px] sm:text-sm font-bold truncate w-full text-right text-red-400"
                       title={`支出: ¥${data.expense.toLocaleString()}`}
                     >
-                      -
-                      {data.expense >= 100000
-                        ? `${(data.expense / 10000).toFixed(0)}万`
-                        : data.expense.toLocaleString()}
+                      -{formatCompactAmount(data.expense)}
                     </span>
                     {data.income > 0 && (
                       <span
-                        className="text-emerald-400 text-sm font-mono font-semibold truncate w-full text-right"
+                        className="text-emerald-400 text-[10px] sm:text-sm font-mono font-semibold truncate w-full text-right"
                         title={`収入: ¥${data.income.toLocaleString()}`}
                       >
-                        +{data.income.toLocaleString()}
+                        +{formatCompactAmount(data.income)}
                       </span>
                     )}
                   </div>

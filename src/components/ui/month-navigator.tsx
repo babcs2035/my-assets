@@ -70,6 +70,7 @@ export function MonthNavigator({
         size={buttonSize}
         className="h-8 w-8"
         onClick={() => changeMonth(-1)}
+        aria-label="前月"
       >
         <ChevronLeft className="h-4 w-4" />
       </Button>
@@ -111,6 +112,7 @@ export function MonthNavigator({
         size={buttonSize}
         className="h-8 w-8"
         onClick={() => changeMonth(1)}
+        aria-label="次月"
       >
         <ChevronRight className="h-4 w-4" />
       </Button>
