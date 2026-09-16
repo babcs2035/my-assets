@@ -3,7 +3,7 @@
 import type { AssetType, SubAccount } from "@prisma/client";
 import { GripVertical } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { toast } from "sonner";
 import {
   reorderSubAccounts,
@@ -44,6 +44,12 @@ export function AccountSubAccountManager({
   const [items, setItems] = useState(subAccounts);
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
 
+  // props が更新されたら（router.refresh() 後の残高・区分変更など）
+  // ローカル状態を同期する（useState(props) は初回のみ参照される）
+  useEffect(() => {
+    setItems(subAccounts);
+  }, [subAccounts]);
+
   /**
    * 子口座の資産区分を変更した際に実行されるハンドラである。
    * @param subAccountId - 資産区分を変更する子口座のID。
@@ -55,11 +61,18 @@ export function AccountSubAccountManager({
   ) => {
     try {
       await updateSubAccountAssetType(subAccountId, newType);
+      // Select は制御コンポーネントなので，楽観的にローカル状態も更新する
+      setItems(prev =>
+        prev.map(item =>
+          item.id === subAccountId ? { ...item, assetType: newType } : item,
+        ),
+      );
       toast.success("資産区分を更新しました。");
       // Server Component を再フェッチしてグラフの色を即座に更新する
       router.refresh();
     } catch {
       toast.error("資産区分の更新に失敗しました。");
+      setItems(subAccounts);
     }
   };
 
@@ -115,6 +128,14 @@ export function AccountSubAccountManager({
     }
   };
 
+  if (items.length === 0) {
+    return (
+      <p className="rounded-lg border border-dashed border-zinc-800 px-4 py-6 text-center text-sm text-zinc-500">
+        子口座が登録されていません
+      </p>
+    );
+  }
+
   return (
     <div className="space-y-2">
       {/* 子口座リスト */}
@@ -157,7 +178,7 @@ export function AccountSubAccountManager({
 
             {/* 区分変更用のセレクトボックス */}
             <Select
-              defaultValue={sa.assetType}
+              value={sa.assetType}
               onValueChange={(val: string) =>
                 handleAssetTypeChange(sa.id, val as AssetType)
               }

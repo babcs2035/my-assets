@@ -3,7 +3,7 @@
 import { ChevronRight, GripVertical, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { reorderMainAccounts } from "@/actions/accounts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -42,12 +42,16 @@ type AccountListItem = {
  *   - 意味のある順列（ドラッグ並び替え維持）
  */
 export function AccountList({ accounts }: { accounts: AccountListItem[] }) {
-  const fmtDate = (d: Date) =>
-    `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, "0")}/${String(d.getDate()).padStart(2, "0")}`;
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [items, setItems] = useState(accounts);
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
+
+  // props が更新されたら（router.refresh() 後の残高・並び順変更など）
+  // ローカルのドラッグ状態を同期する（useState(props) は初回のみ参照される）
+  useEffect(() => {
+    setItems(accounts);
+  }, [accounts]);
 
   const handleDragStart = (e: React.DragEvent, index: number) => {
     e.dataTransfer.effectAllowed = "move";
@@ -119,15 +123,12 @@ export function AccountList({ accounts }: { accounts: AccountListItem[] }) {
                   <div className="flex items-center gap-2 min-w-0">
                     <GripVertical className="h-4 w-4 text-zinc-600 shrink-0" />
                     <div className="min-w-0">
-                      <CardTitle className="text-base">
+                      <CardTitle className="text-base truncate">
                         {account.label}
                       </CardTitle>
                     </div>
                   </div>
-                  <Link
-                    href={`/accounts/${account.id}`}
-                    onClick={e => e.stopPropagation()}
-                  >
+                  <Link href={`/accounts/${account.id}`}>
                     <ChevronRight className="h-4 w-4 text-zinc-600 transition-transform hover:translate-x-0.5 hover:text-zinc-400" />
                   </Link>
                 </div>
@@ -146,9 +147,9 @@ export function AccountList({ accounts }: { accounts: AccountListItem[] }) {
                         key={sa.id}
                         className="flex items-center justify-between text-sm"
                       >
-                        <span className="flex items-center gap-1.5">
+                        <span className="flex min-w-0 items-center gap-1.5">
                           <span
-                            className="inline-block h-2 w-2 rounded-full"
+                            className="inline-block h-2 w-2 shrink-0 rounded-full"
                             style={{ background: assetTypeColor(sa.assetType) }}
                           />
                           <span className="text-zinc-400 truncate">
@@ -198,7 +199,7 @@ export function AccountList({ accounts }: { accounts: AccountListItem[] }) {
                                   {b.subAccountName}
                                 </span>
                                 <span className="ml-1.5 text-[11px] text-zinc-500">
-                                  {fmtDate(new Date(b.billingDate))}
+                                  {formatJSTDate(b.billingDate)}
                                 </span>
                               </div>
                               <span className="font-mono text-red-400 text-sm shrink-0 ml-2">
