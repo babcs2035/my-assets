@@ -8,6 +8,7 @@ import {
   Cell,
   Pie,
   PieChart,
+  XAxis,
   YAxis,
 } from "recharts";
 import { HoldingTable } from "@/components/accounts/holding-table";
@@ -63,6 +64,7 @@ export function AssetsContent({ breakdown }: AssetsContentProps) {
     }
     // recharts の Pie は負の値を描画できないため，合計が負のタイプを除外する
     // （マイナス残高自体は資産詳細テーブルに表示され続ける）
+    // 金額降順にソートして返す（レンダリング中の in-place sort を避けるため）
     return Array.from(typeMap.entries())
       .filter(([, value]) => value > 0)
       .map(([type, value]) => ({
@@ -78,16 +80,19 @@ export function AssetsContent({ breakdown }: AssetsContentProps) {
                   : type,
         value,
         fill: assetColors[type as keyof typeof assetColors] ?? "#6b7280",
-      }));
+      }))
+      .sort((a, b) => b.value - a.value);
   }, [assets]);
 
   // 負債の pie chart データ（絶対値で扱う）
   const liabilityPieData = useMemo(() => {
-    return liabilities.map(l => ({
-      name: l.name,
-      value: Math.abs(l.amount),
-      fill: assetColors.LIABILITY,
-    }));
+    return liabilities
+      .map(l => ({
+        name: l.name,
+        value: Math.abs(l.amount),
+        fill: assetColors.LIABILITY,
+      }))
+      .sort((a, b) => b.value - a.value);
   }, [liabilities]);
 
   const totalAssetValue = assetPieData.reduce((s, d) => s + d.value, 0);
@@ -182,34 +187,32 @@ export function AssetsContent({ breakdown }: AssetsContentProps) {
                   </ChartContainer>
                 </div>
                 <div className="flex-1 space-y-1.5 overflow-y-auto max-h-[180px]">
-                  {assetPieData
-                    .sort((a, b) => b.value - a.value)
-                    .map(item => {
-                      const pct =
-                        totalAssetValue > 0
-                          ? ((item.value / totalAssetValue) * 100).toFixed(1)
-                          : "0";
-                      return (
-                        <div
-                          key={item.name}
-                          className="flex items-center gap-2 rounded-md border border-zinc-800 bg-zinc-900/40 px-2.5 py-1.5"
-                        >
-                          <span
-                            className="h-2.5 w-2.5 rounded-full shrink-0"
-                            style={{ backgroundColor: item.fill }}
-                          />
-                          <span className="text-sm text-zinc-300 truncate flex-1">
-                            {item.name}
-                          </span>
-                          <span className="font-mono text-sm text-zinc-100 font-medium">
-                            {formatCurrency(item.value)}
-                          </span>
-                          <span className="font-mono text-xs text-zinc-500 shrink-0">
-                            {pct}%
-                          </span>
-                        </div>
-                      );
-                    })}
+                  {assetPieData.map(item => {
+                    const pct =
+                      totalAssetValue > 0
+                        ? ((item.value / totalAssetValue) * 100).toFixed(1)
+                        : "0";
+                    return (
+                      <div
+                        key={item.name}
+                        className="flex items-center gap-2 rounded-md border border-zinc-800 bg-zinc-900/40 px-2.5 py-1.5"
+                      >
+                        <span
+                          className="h-2.5 w-2.5 rounded-full shrink-0"
+                          style={{ backgroundColor: item.fill }}
+                        />
+                        <span className="text-sm text-zinc-300 truncate flex-1">
+                          {item.name}
+                        </span>
+                        <span className="font-mono text-sm text-zinc-100 font-medium">
+                          {formatCurrency(item.value)}
+                        </span>
+                        <span className="font-mono text-xs text-zinc-500 shrink-0">
+                          {pct}%
+                        </span>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             ) : (
@@ -275,36 +278,32 @@ export function AssetsContent({ breakdown }: AssetsContentProps) {
                   </ChartContainer>
                 </div>
                 <div className="flex-1 space-y-1.5 overflow-y-auto max-h-[180px]">
-                  {liabilityPieData
-                    .sort((a, b) => b.value - a.value)
-                    .map(item => {
-                      const pct =
-                        totalLiabilityValue > 0
-                          ? ((item.value / totalLiabilityValue) * 100).toFixed(
-                              1,
-                            )
-                          : "0";
-                      return (
-                        <div
-                          key={item.name}
-                          className="flex items-center gap-2 rounded-md border border-zinc-800 bg-zinc-900/40 px-2.5 py-1.5"
-                        >
-                          <span
-                            className="h-2.5 w-2.5 rounded-full shrink-0"
-                            style={{ backgroundColor: item.fill }}
-                          />
-                          <span className="text-sm text-zinc-300 truncate flex-1">
-                            {item.name}
-                          </span>
-                          <span className="font-mono text-sm text-zinc-100 font-medium">
-                            {formatCurrency(item.value)}
-                          </span>
-                          <span className="font-mono text-xs text-zinc-500 shrink-0">
-                            {pct}%
-                          </span>
-                        </div>
-                      );
-                    })}
+                  {liabilityPieData.map(item => {
+                    const pct =
+                      totalLiabilityValue > 0
+                        ? ((item.value / totalLiabilityValue) * 100).toFixed(1)
+                        : "0";
+                    return (
+                      <div
+                        key={item.name}
+                        className="flex items-center gap-2 rounded-md border border-zinc-800 bg-zinc-900/40 px-2.5 py-1.5"
+                      >
+                        <span
+                          className="h-2.5 w-2.5 rounded-full shrink-0"
+                          style={{ backgroundColor: item.fill }}
+                        />
+                        <span className="text-sm text-zinc-300 truncate flex-1">
+                          {item.name}
+                        </span>
+                        <span className="font-mono text-sm text-zinc-100 font-medium">
+                          {formatCurrency(item.value)}
+                        </span>
+                        <span className="font-mono text-xs text-zinc-500 shrink-0">
+                          {pct}%
+                        </span>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             ) : (
@@ -435,8 +434,12 @@ export function AssetsContent({ breakdown }: AssetsContentProps) {
             >
               <BarChart
                 data={[
-                  { totalAssets: totalAssets > 0 ? totalAssets : undefined },
                   {
+                    name: "総資産",
+                    totalAssets: totalAssets > 0 ? totalAssets : undefined,
+                  },
+                  {
+                    name: "純資産・負債",
                     totalLiability:
                       totalLiabilities < 0
                         ? Math.abs(totalLiabilities)
@@ -451,13 +454,22 @@ export function AssetsContent({ breakdown }: AssetsContentProps) {
                   vertical={false}
                   stroke="#27272a"
                 />
+                {/* 棒にラベルを付けないとどちらの棒が何を表すか分からない */}
+                <XAxis
+                  dataKey="name"
+                  stroke="#52525b"
+                  tickLine={false}
+                  axisLine={false}
+                />
                 <YAxis
                   stroke="#52525b"
                   tickLine={false}
                   axisLine={false}
                   tickFormatter={value => formatCurrency(Number(value))}
                   width={70}
-                  domain={[0, totalAssets > 0 ? totalAssets : 1000000]}
+                  // 上限を totalAssets に固定すると棒が枠に接するうえ，
+                  // 純資産が負のとき負債棒がクリップされるため auto を使う
+                  domain={[0, "auto"]}
                 />
                 <ChartTooltip
                   wrapperStyle={{ zIndex: 100 }}
