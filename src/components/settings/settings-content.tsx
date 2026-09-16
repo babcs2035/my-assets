@@ -4,6 +4,7 @@ import {
   CheckCircle2,
   ChevronDown,
   ChevronRight,
+  Download,
   Edit2,
   GripVertical,
   Loader2,
@@ -103,6 +104,7 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   assetTypeColor,
   BACKFILL_START_DATE,
+  formatJSTDate,
   formatJSTDateTime,
 } from "@/lib/utils";
 
@@ -321,15 +323,19 @@ export function SettingsContent() {
       );
       toast.success("同期が完了しました．");
       fetchData();
-    } catch {
-      window.dispatchEvent(
-        new CustomEvent("provider-sync-status", {
-          detail: { providerId: id, status: "error" },
-        }),
-      );
-      // 中止された場合は別のメッセージを表示
-      const errorMessage = "同期に失敗しました。";
-      toast.error(errorMessage);
+    } catch (err) {
+      // 中止の場合は handleAbortSyncProvider が既に通知・イベントを
+      // 送出しているため，ここで重複トーストを出さない
+      const isAbort =
+        err instanceof Error && err.message === "Sync was aborted";
+      if (!isAbort) {
+        window.dispatchEvent(
+          new CustomEvent("provider-sync-status", {
+            detail: { providerId: id, status: "error" },
+          }),
+        );
+        toast.error("同期に失敗しました．");
+      }
       fetchData();
     } finally {
       setSyncingProviderIds(prev => {
@@ -434,7 +440,9 @@ export function SettingsContent() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `categories-export-${new Date().toISOString().slice(0, 10)}.json`;
+      // ファイル名の日付は JST 基準にする（toISOString は UTC ため
+      // JST 深夜帯に前日付になる）
+      a.download = `categories-export-${formatJSTDate(new Date())}.json`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -453,7 +461,17 @@ export function SettingsContent() {
     setIsImporting(true);
     try {
       const text = await file.text();
-      const data = JSON.parse(text);
+      let data: unknown;
+      try {
+        data = JSON.parse(text);
+      } catch {
+        // SyntaxError の原文はユーザーにとって意味がないため，
+        // 共通の表現にまとめる
+        toast.error(
+          "ファイルが不正な形式です．JSON ファイルを選択してください．",
+        );
+        return;
+      }
       await importCategories(data);
       toast.success("インポートしました．");
       fetchData();
@@ -1066,9 +1084,15 @@ export function SettingsContent() {
                 {providers.map(provider => (
                   <div key={provider.id} className="p-4 bg-card min-w-0">
                     {(() => {
+                      // 同期中かどうかはセッション状態，または
+                      // 「同期開始済み（lastSyncAt あり）かつ未完了
+                      // （lastSyncSuccess が null）」で判定する。
+                      // lastSyncSuccess === null のみでは「未同期」の
+                      // プロバイダーが永遠に「同期中」になる
                       const isSyncing =
                         syncingProviderIds.has(provider.id) ||
-                        provider.lastSyncSuccess === null;
+                        (provider.lastSyncAt !== null &&
+                          provider.lastSyncSuccess === null);
                       return (
                         <>
                           <div className="flex items-center justify-between gap-2 mb-2 min-w-0">
@@ -1254,7 +1278,8 @@ export function SettingsContent() {
                           {(() => {
                             const isSyncing =
                               syncingProviderIds.has(provider.id) ||
-                              provider.lastSyncSuccess === null;
+                              (provider.lastSyncAt !== null &&
+                                provider.lastSyncSuccess === null);
                             if (isSyncing) {
                               return (
                                 <Badge
@@ -1298,7 +1323,8 @@ export function SettingsContent() {
                             {(() => {
                               const isSyncingDesktop =
                                 syncingProviderIds.has(provider.id) ||
-                                provider.lastSyncSuccess === null;
+                                (provider.lastSyncAt !== null &&
+                                  provider.lastSyncSuccess === null);
                               if (isSyncingDesktop) {
                                 return (
                                   <Button
@@ -1761,7 +1787,7 @@ export function SettingsContent() {
                 onClick={handleExportCategories}
                 className="text-zinc-400 hover:text-zinc-200"
               >
-                <Upload className="mr-2 h-3.5 w-3.5" />
+                <Download className="mr-2 h-3.5 w-3.5" />
                 カテゴリーをエクスポート
               </Button>
               <Button
@@ -1957,14 +1983,36 @@ export function SettingsContent() {
                           {rule.subCategory.name}
                         </Badge>
                       </div>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => handleDeleteRule(rule.id)}
-                        className="text-zinc-500 hover:text-red-400 shrink-0"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="text-zinc-500 hover:text-red-400 shrink-0"
+                            aria-label="ルール削除"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>削除確認</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              キーワード「{rule.keyword}
+                              」の自動分類ルールを削除しますか？
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>キャンセル</AlertDialogCancel>
+                            <AlertDialogAction
+                              onClick={() => handleDeleteRule(rule.id)}
+                              className="bg-red-600"
+                            >
+                              削除
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
                     </div>
                   </div>
                 ))}
@@ -2004,14 +2052,38 @@ export function SettingsContent() {
                           </Badge>
                         </TableCell>
                         <TableCell className="text-right">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => handleDeleteRule(rule.id)}
-                            className="text-zinc-500 hover:text-red-400"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="text-zinc-500 hover:text-red-400"
+                                aria-label="ルール削除"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>削除確認</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  キーワード「{rule.keyword}
+                                  」の自動分類ルールを削除しますか？
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>
+                                  キャンセル
+                                </AlertDialogCancel>
+                                <AlertDialogAction
+                                  onClick={() => handleDeleteRule(rule.id)}
+                                  className="bg-red-600"
+                                >
+                                  削除
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
                         </TableCell>
                       </TableRow>
                     ))}
@@ -2104,14 +2176,36 @@ export function SettingsContent() {
                           {rule.targetSubAccount.currentName}）
                         </Badge>
                       </div>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => handleDeleteTransferRule(rule.id)}
-                        className="text-zinc-500 hover:text-red-400 shrink-0"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="text-zinc-500 hover:text-red-400 shrink-0"
+                            aria-label="ルール削除"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>削除確認</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              キーワード「{rule.keyword}
+                              」の振替ルールを削除しますか？
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>キャンセル</AlertDialogCancel>
+                            <AlertDialogAction
+                              onClick={() => handleDeleteTransferRule(rule.id)}
+                              className="bg-red-600"
+                            >
+                              削除
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
                     </div>
                   </div>
                 ))}
@@ -2149,14 +2243,40 @@ export function SettingsContent() {
                           {rule.targetSubAccount.currentName}）
                         </TableCell>
                         <TableCell className="text-right">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => handleDeleteTransferRule(rule.id)}
-                            className="text-zinc-500 hover:text-red-400"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="text-zinc-500 hover:text-red-400"
+                                aria-label="ルール削除"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>削除確認</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  キーワード「{rule.keyword}
+                                  」の振替ルールを削除しますか？
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>
+                                  キャンセル
+                                </AlertDialogCancel>
+                                <AlertDialogAction
+                                  onClick={() =>
+                                    handleDeleteTransferRule(rule.id)
+                                  }
+                                  className="bg-red-600"
+                                >
+                                  削除
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
                         </TableCell>
                       </TableRow>
                     ))}
