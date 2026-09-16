@@ -100,7 +100,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
-import { assetTypeColor } from "@/lib/utils";
+import { BACKFILL_START_DATE, assetTypeColor } from "@/lib/utils";
 
 // Types
 type Provider = Awaited<ReturnType<typeof getProviders>>[number];
@@ -1161,7 +1161,7 @@ export function SettingsContent() {
                                   <DialogHeader>
                                     <DialogTitle>手動同期の実行</DialogTitle>
                                     <DialogDescription>
-                                      手動同期では 2023-01-01
+                                      手動同期では {BACKFILL_START_DATE}
                                       まで遡って、入出金明細と残高推移を全件取得します。
                                     </DialogDescription>
                                   </DialogHeader>

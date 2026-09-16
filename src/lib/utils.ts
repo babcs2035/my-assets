@@ -2,6 +2,13 @@ import { type ClassValue, clsx } from "clsx";
 import { twMerge } from "tailwind-merge";
 
 /**
+ * 入出金明細・残高推移のバックフィル開始日（JST）である．
+ * スクレイパーの全量同期・手動同期ダイアログ・年別ナビゲータの
+ * 下限年がすべてこの日付を基準にしているため，定数として共有する．
+ */
+export const BACKFILL_START_DATE = "2023-01-01";
+
+/**
  * JST の時刻要素を UTC 値を持つ Date に変換するヘルパーである．
  * `Date.UTC(year, month-1, day, hour-9, minute, second)` を計算し，
  * JST の (y,M,d,h,m,s) が表す瞬間の UTC 値を持つ Date を返す．

@@ -6,6 +6,13 @@ import { prisma } from "@/lib/prisma";
 const toUtcDateOnly = (year: number, month: number, day: number) =>
   new Date(Date.UTC(year, month - 1, day, 0, 0, 0, 0));
 
+/**
+ * 入出金集計（推移・年別）の対象とする明細の開始日である．
+ * バックフィル開始日 (BACKFILL_START_DATE: 2023-01-01) とは別に，
+ * 集計対象を 2024 年以降に絞るための意図的なデータ起点である．
+ */
+const INCOME_EXPENSE_AGGREGATION_START_DATE = "2024-01-01";
+
 // ── Internal (uncached) implementations ──
 
 /**
@@ -100,7 +107,7 @@ async function getIncomeExpenseTrendInternal(
   if (subAccountId) subAccountWhere.id = subAccountId;
 
   const where: Record<string, unknown> = {
-    date: { gte: new Date("2024-01-01") },
+    date: { gte: new Date(INCOME_EXPENSE_AGGREGATION_START_DATE) },
     isTransfer: false,
     subAccount: subAccountWhere,
   };
@@ -171,7 +178,7 @@ async function getAnnualIncomeExpenseInternal(
 
   const transactions = await prisma.transaction.findMany({
     where: {
-      date: { gte: new Date("2024-01-01") },
+      date: { gte: new Date(INCOME_EXPENSE_AGGREGATION_START_DATE) },
       isTransfer: false,
       subAccount: subAccountWhere,
     },

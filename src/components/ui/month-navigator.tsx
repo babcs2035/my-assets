@@ -9,6 +9,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { BACKFILL_START_DATE } from "@/lib/utils";
 
 /**
  * 年月ナビゲーターコンポーネントである．
@@ -41,9 +42,11 @@ export function MonthNavigator({
   buttonVariant = "outline",
 }: MonthNavigatorProps) {
   const nowYear = maxYear ?? new Date().getFullYear();
+  // 年の下限はバックフィル開始年のみ（+2 の長式は現在年+1 を選択肢に含める既存挙動）
+  const minYear = Number(BACKFILL_START_DATE.slice(0, 4));
   const yearOptions = Array.from(
-    { length: nowYear - 2023 + 2 },
-    (_, i) => 2023 + i,
+    { length: nowYear - minYear + 2 },
+    (_, i) => minYear + i,
   );
 
   const changeMonth = (direction: -1 | 1) => {

@@ -7,7 +7,7 @@ import { generateTransactionId } from "../lib/hash";
 import logger from "../lib/logger";
 import { getItemField, getItemOtp } from "../lib/onepassword";
 import { prisma } from "../lib/prisma";
-import { formatJSTDate, todayJST } from "../lib/utils";
+import { BACKFILL_START_DATE, formatJSTDate, todayJST } from "../lib/utils";
 
 // エントリポイント（直接実行）のみ自動スクレイピングを許可
 const isEntry =
@@ -18,8 +18,6 @@ const isEntry =
 
 const normalizeInstitutionName = (name: string) =>
   name.split(/[（(]/)[0].replace(/\s+/g, " ").trim();
-
-const MF_BACKFILL_START_DATE = "2023-01-01";
 
 const toUtcDateOnly = (ymd: string) => {
   const [year, month, day] = ymd.split("-").map(Number);
@@ -798,7 +796,7 @@ async function scrapeTransactions(
   currentMonthStart.setDate(1);
   currentMonthStart.setHours(0, 0, 0, 0);
   const minBackfillMonthStart = new Date(
-    `${MF_BACKFILL_START_DATE}T00:00:00+09:00`,
+    `${BACKFILL_START_DATE}T00:00:00+09:00`,
   );
   minBackfillMonthStart.setDate(1);
   minBackfillMonthStart.setHours(0, 0, 0, 0);
@@ -829,7 +827,7 @@ async function scrapeTransactions(
         account: account.name,
         mode: isIncrementalSync
           ? "incremental: 2 months"
-          : `backfill to ${MF_BACKFILL_START_DATE}`,
+          : `backfill to ${BACKFILL_START_DATE}`,
       },
       "Processing transactions.",
     );
@@ -1094,7 +1092,7 @@ async function scrapeBalanceHistory(page: Page, options: MfScraperOptions) {
 
   let minDate = new Date(today);
   if (options.mode === "manual") {
-    minDate = toJstMidnight(MF_BACKFILL_START_DATE);
+    minDate = toJstMidnight(BACKFILL_START_DATE);
   } else {
     minDate.setMonth(minDate.getMonth() - 2);
   }
