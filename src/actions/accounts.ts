@@ -10,8 +10,6 @@ import {
   type MainAccountUpdateInput,
   mainAccountCreateSchema,
   mainAccountUpdateSchema,
-  type ProviderCreateInput,
-  providerCreateSchema,
 } from "@/lib/validations";
 
 /**
@@ -270,28 +268,6 @@ export async function getAccountDetail(id: string) {
       },
     },
   });
-}
-
-/**
- * すべてのプロバイダー情報を取得する関数である．
- */
-export async function getProviders() {
-  logger.info("🏢 Fetching providers...");
-  return prisma.provider.findMany({
-    orderBy: { name: "asc" },
-  });
-}
-
-/**
- * 新しいプロバイダーを作成する関数である．
- */
-export async function createProvider(input: ProviderCreateInput) {
-  const data = providerCreateSchema.parse(input);
-  logger.info(`➕ Creating new provider: ${data.name}`);
-  const result = await prisma.provider.create({ data });
-  revalidatePath("/settings");
-  revalidatePath("/accounts");
-  return result;
 }
 
 /**
