@@ -160,9 +160,7 @@ const AnalysisContent = () => {
                     <span className="text-blue-500">実行中</span>
                   </>
                 )}
-                <span>
-                  {formatJSTDateTime(latestResult.analysisDate as Date)}
-                </span>
+                <span>{formatJSTDateTime(latestResult.analysisDate)}</span>
               </div>
             </div>
           </CardHeader>
@@ -253,10 +251,10 @@ const AnalysisContent = () => {
                           <Calendar className="h-4 w-4 text-zinc-500 shrink-0" />
                           <span className="block min-w-0">
                             <span className="text-sm font-medium text-zinc-200">
-                              {formatJSTDateTime(result.analysisDate as Date)}
+                              {formatJSTDateTime(result.analysisDate)}
                             </span>
                             <span className="block text-xs text-zinc-500 truncate">
-                              {(result.content as string).length}文字
+                              {result.content.length}文字
                             </span>
                           </span>
                         </span>
@@ -272,7 +270,7 @@ const AnalysisContent = () => {
                         type="button"
                         className="p-2 text-zinc-600 hover:text-red-400 transition-colors cursor-pointer shrink-0"
                         aria-label={`分析結果を削除（${formatJSTDateTime(
-                          result.analysisDate as Date,
+                          result.analysisDate,
                         )}）`}
                         onClick={() => void handleDeleteAnalysis(result.id)}
                       >
