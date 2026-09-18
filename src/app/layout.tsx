@@ -65,6 +65,13 @@ export default function RootLayout({
   return (
     <html lang="ja" className="dark">
       <body className={inter.className}>
+        {/* キーボードユーザー向けスキップリンク（フォーカス時のみ表示） */}
+        <a
+          href="#main-content"
+          className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-[100] focus:rounded-md focus:bg-zinc-800 focus:px-3 focus:py-2 focus:text-sm focus:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-sidebar-ring"
+        >
+          メインコンテンツへスキップ
+        </a>
         <SidebarProvider>
           <div className="flex min-h-svh w-full bg-background">
             {/* サイドバーコンポーネント */}
@@ -73,13 +80,18 @@ export default function RootLayout({
             <SidebarInset>
               {/* モバイル表示用のヘッダー部分 */}
               <header className="sticky top-0 z-10 flex h-12 shrink-0 items-center gap-2 bg-background px-3 md:hidden border-b border-border/40 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-                <SidebarTrigger className="-ml-1 h-8 w-8" />
+                <SidebarTrigger className="-ml-1 h-10 w-10" />
                 <Separator orientation="vertical" className="mr-2 h-4" />
                 <div className="font-semibold text-sm">My Assets</div>
               </header>
 
-              {/* メインコンテンツエリア */}
-              <div className="flex flex-1 flex-col gap-4 p-4 pt-2 md:p-8">
+              {/* メインコンテンツエリア（スキップリンクの目的地。
+                  sticky ヘッダー 48px 分だけ下方にずらすため scroll-mt-14） */}
+              <div
+                id="main-content"
+                tabIndex={-1}
+                className="flex flex-1 flex-col gap-4 p-4 pt-2 md:p-8 scroll-mt-14 outline-none"
+              >
                 <Suspense
                   fallback={
                     <div className="flex flex-1 flex-col items-center justify-center gap-4 rounded-lg border p-8">

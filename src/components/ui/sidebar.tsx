@@ -234,7 +234,7 @@ export function SidebarMenuButton({
     <Comp
       data-active={isActive}
       className={cn(
-        "flex w-full items-center gap-2 rounded-md p-2 text-sm font-medium transition-colors hover:bg-zinc-800 hover:text-zinc-50 outline-none ring-zinc-950 focus-visible:ring-2",
+        "flex w-full items-center gap-2 rounded-md p-2 text-sm font-medium transition-colors hover:bg-zinc-800 hover:text-zinc-50 outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring",
         isActive && "bg-zinc-800 text-zinc-50 font-semibold",
         // Collapsed state: Center items, Hide text spans
         !expanded && !isMobile && "justify-center px-2",

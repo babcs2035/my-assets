@@ -142,6 +142,23 @@ input[type="radio"],
   animation: kpi-enter 0.35s ease-out both;
 }
 
+/* ユーザーがモーション軽減を希望している場合は入場アニメーションを無効化する
+   (WCAG 2.3.3 Animation from Interactions) */
+@media (prefers-reduced-motion: reduce) {
+  .animate-fade-in,
+  .kpi-card {
+    animation: none;
+  }
+}
+
+/* 分析結果の Markdown テーブルが広い場合，ページ幅を押し広げずに
+   テーブル自身を横スクロールできるようにする */
+.prose table {
+  display: block;
+  overflow-x: auto;
+  max-width: 100%;
+}
+
 /* ── データテーブル共通スタイル ─────────────── */
 /* ガイドブック: グリッド・枠線を最小限に、数値はフォントを揃える */
 .data-table {
