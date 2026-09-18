@@ -129,9 +129,6 @@ async function getIncomeExpenseTrendInternal(
     string,
     { income: number; expense: number; balance: number }
   >();
-  let cumulativeIncome = 0;
-  let cumulativeExpense = 0;
-  let cumulativeBalance = 0;
 
   for (const tx of transactions) {
     // 日付は JST 日付の UTC 0 時として保存されるため，
@@ -146,24 +143,39 @@ async function getIncomeExpenseTrendInternal(
     const m = monthlyMap.get(key)!;
     if (tx.amount > 0) {
       m.income += tx.amount;
-      cumulativeIncome += tx.amount;
     } else {
       m.expense += Math.abs(tx.amount);
-      cumulativeExpense += Math.abs(tx.amount);
     }
     m.balance = m.income - m.expense;
-    cumulativeBalance = cumulativeIncome - cumulativeExpense;
   }
 
-  const trend = Array.from(monthlyMap.entries())
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([key, values]) => ({
+  // 月ごとに集計した収入・支出を時系列順に走査し，累計（累積収支）を算出する．
+  // 元の実装はループ外の変数に最終合計を保持したまま .map() を実行していたため，
+  // 全月に最終合計が代入され，累計線が水平線になっていた．
+  const trend: Array<{
+    period: string;
+    income: number;
+    expense: number;
+    balance: number;
+    cumulativeIncome: number;
+    cumulativeExpense: number;
+    cumulativeBalance: number;
+  }> = [];
+  let cumulativeIncome = 0;
+  let cumulativeExpense = 0;
+  for (const [key, values] of Array.from(monthlyMap.entries()).sort(
+    ([a], [b]) => a.localeCompare(b),
+  )) {
+    cumulativeIncome += values.income;
+    cumulativeExpense += values.expense;
+    trend.push({
       period: key,
       ...values,
       cumulativeIncome,
       cumulativeExpense,
-      cumulativeBalance,
-    }));
+      cumulativeBalance: cumulativeIncome - cumulativeExpense,
+    });
+  }
 
   return trend;
 }
