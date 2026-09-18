@@ -392,7 +392,7 @@ export function IncomeExpenseContent({
                                 {item.subCategory}
                               </span>
                             </span>
-                            <span className="font-mono text-sm text-zinc-100 font-medium">
+                            <span className="font-mono text-sm text-zinc-100 font-medium shrink-0">
                               {formatCurrency(item.value)}
                             </span>
                             <span className="font-mono text-xs text-zinc-500 shrink-0">
@@ -498,7 +498,7 @@ export function IncomeExpenseContent({
                                 {item.subCategory}
                               </span>
                             </span>
-                            <span className="font-mono text-sm text-zinc-100 font-medium">
+                            <span className="font-mono text-sm text-zinc-100 font-medium shrink-0">
                               {formatCurrency(item.value)}
                             </span>
                             <span className="font-mono text-xs text-zinc-500 shrink-0">
@@ -566,7 +566,7 @@ export function IncomeExpenseContent({
                       tickFormatter={value =>
                         formatYAxisCurrency(Number(value))
                       }
-                      width={80}
+                      width={56}
                     />
                     <ChartTooltip
                       wrapperStyle={{ zIndex: 100 }}
@@ -693,7 +693,7 @@ export function IncomeExpenseContent({
                     tickLine={false}
                     axisLine={false}
                     tickFormatter={value => formatYAxisCurrency(Number(value))}
-                    width={80}
+                    width={56}
                   />
                   <ChartTooltip
                     wrapperStyle={{ zIndex: 100 }}

@@ -255,7 +255,7 @@ export function AccountBalanceChart({
               tickFormatter={value => formatYAxisCurrency(Number(value))}
               domain={[domainMin, domainMax]}
               tickCount={6}
-              width={70}
+              width={56}
             />
             <Tooltip
               content={({ active, payload }) => {

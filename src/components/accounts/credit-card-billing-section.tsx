@@ -28,6 +28,16 @@ type BillingRecord = {
   };
 };
 
+// 積み上げ棒のカラーパレット（2 色交互だと 3 枚以上のカードで色が重複するため）
+const BILLING_BAR_COLORS = [
+  "#ef4444",
+  "#f97316",
+  "#f59e0b",
+  "#eab308",
+  "#f43f5e",
+  "#fb7185",
+];
+
 /**
  * クレジットカード請求履歴セクションコンポーネントである．
  * 年月ごとの請求額をカード別の積み上げ棒グラフで可視化する．
@@ -111,7 +121,7 @@ export function CreditCardBillingSection({
               tickLine={false}
               axisLine={false}
               tickFormatter={value => formatYAxisCurrency(Number(value))}
-              width={70}
+              width={56}
             />
             <Tooltip
               formatter={value =>
@@ -142,7 +152,7 @@ export function CreditCardBillingSection({
                 key={card}
                 dataKey={card}
                 stackId="amount"
-                fill={index % 2 === 0 ? "#ef4444" : "#f97316"}
+                fill={BILLING_BAR_COLORS[index % BILLING_BAR_COLORS.length]}
                 strokeWidth={2}
                 radius={[
                   index === cardNames.length - 1 ? 4 : 0,

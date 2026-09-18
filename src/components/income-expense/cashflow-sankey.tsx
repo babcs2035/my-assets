@@ -207,105 +207,111 @@ export function CashflowSankey({ data }: CashflowSankeyProps) {
   );
 
   return (
-    <div className="w-full" style={{ height: `${chartHeight}px` }}>
-      <ResponsiveSankey
-        data={{ nodes, links }}
-        margin={{ top: 10, right: 120, bottom: 10, left: 120 }}
-        align="justify"
-        colors={node => {
-          // 赤字/収支ノード
-          if (node.id === "deficit") return "#ef4444";
-          if (node.id === "surplus") return "#10b981";
-          // ratioノード
-          if (node.id === "ratio") {
-            const balance = data.totalIncome - data.totalExpense;
-            return balance >= 0 ? "#3b82f6" : "#f97316";
-          }
-          // 収入カテゴリ（インデックスは income ノードのみで計算）
-          if (node.id.startsWith("income-")) {
-            const incomeNodes = nodes.filter(n => n.id.startsWith("income-"));
-            const idx = incomeNodes.findIndex(n => n.id === node.id);
-            return incomeColorPalette[idx % incomeColorPalette.length];
-          }
-          // 支出カテゴリ（インデックスは expense ノードのみで計算）
-          if (node.id.startsWith("expense-")) {
-            const expenseNodes = nodes.filter(n => n.id.startsWith("expense-"));
-            const idx = expenseNodes.findIndex(n => n.id === node.id);
-            return expenseColorPalette[idx % expenseColorPalette.length];
-          }
-          return "#6b7280";
-        }}
-        nodeOpacity={1}
-        nodeHoverOpacity={1}
-        nodeThickness={20}
-        nodeSpacing={20}
-        nodeBorderWidth={0}
-        nodeBorderRadius={3}
-        linkOpacity={0.65}
-        linkHoverOpacity={0.9}
-        linkContract={3}
-        enableLinkGradient={true}
-        labelPosition="outside"
-        labelOrientation="horizontal"
-        labelPadding={12}
-        // ダークテーマ: 白文字でコントラスト確保
-        labelTextColor="#fff"
-        label={node => {
-          const aggregate = aggregateLabel(
-            node.id,
-            data.totalIncome,
-            data.totalExpense,
-          );
-          if (aggregate) return aggregate;
+    // 左右 120px のラベルマージンは固定のため，モバイル（375px）では描画域が
+    // 不足する。最小幅を確保した内側コンテナを横スクロール可能にして対処する
+    <div className="w-full overflow-x-auto">
+      <div
+        className="w-full min-w-[560px]"
+        style={{ height: `${chartHeight}px` }}
+      >
+        <ResponsiveSankey
+          data={{ nodes, links }}
+          margin={{ top: 10, right: 120, bottom: 10, left: 120 }}
+          align="justify"
+          colors={node => {
+            // 赤字/収支ノード
+            if (node.id === "deficit") return "#ef4444";
+            if (node.id === "surplus") return "#10b981";
+            // ratioノード
+            if (node.id === "ratio") {
+              const balance = data.totalIncome - data.totalExpense;
+              return balance >= 0 ? "#3b82f6" : "#f97316";
+            }
+            // 収入カテゴリ（インデックスは income ノードのみで計算）
+            if (node.id.startsWith("income-")) {
+              const incomeNodes = nodes.filter(n => n.id.startsWith("income-"));
+              const idx = incomeNodes.findIndex(n => n.id === node.id);
+              return incomeColorPalette[idx % incomeColorPalette.length];
+            }
+            // 支出カテゴリ（インデックスは expense ノードのみで計算）
+            if (node.id.startsWith("expense-")) {
+              const expenseNodes = nodes.filter(n =>
+                n.id.startsWith("expense-"),
+              );
+              const idx = expenseNodes.findIndex(n => n.id === node.id);
+              return expenseColorPalette[idx % expenseColorPalette.length];
+            }
+            return "#6b7280";
+          }}
+          nodeOpacity={1}
+          nodeHoverOpacity={1}
+          nodeThickness={20}
+          nodeSpacing={20}
+          nodeBorderWidth={0}
+          nodeBorderRadius={3}
+          linkOpacity={0.65}
+          linkHoverOpacity={0.9}
+          linkContract={3}
+          enableLinkGradient={true}
+          labelPosition="outside"
+          labelOrientation="horizontal"
+          labelPadding={12}
+          // ダークテーマ: 白文字でコントラスト確保
+          labelTextColor="#fff"
+          label={node => {
+            const aggregate = aggregateLabel(
+              node.id,
+              data.totalIncome,
+              data.totalExpense,
+            );
+            if (aggregate) return aggregate;
 
-          // チャート上のラベルはサブカテゴリーのみ表示（幅制限のため）
-          const displayId = categoryName(node.id, true);
+            // チャート上のラベルはサブカテゴリーのみ表示（幅制限のため）
+            const displayId = categoryName(node.id, true);
 
-          const value = node.value || 0;
-          // 支出ノードは支出合計，収入ノードは収入合計を基準にする
-          // （すべてを収入合計で割ると赤字月で「120%」のような表示になる）
-          const base = node.id.startsWith("expense-")
-            ? data.totalExpense
-            : data.totalIncome;
-          const pct = base === 0 ? "0" : ((value / base) * 100).toFixed(0);
+            const value = node.value || 0;
+            // 支出ノードは支出合計，収入ノードは収入合計を基準にする
+            // （すべてを収入合計で割ると赤字月で「120%」のような表示になる）
+            const base = node.id.startsWith("expense-")
+              ? data.totalExpense
+              : data.totalIncome;
+            const pct = base === 0 ? "0" : ((value / base) * 100).toFixed(0);
 
-          return `${displayId} ${pct}%`;
-        }}
-        nodeTooltip={({ node }) => {
-          // ツールチップには幅の余裕があるため，main/sub 全体を表示する
-          let displayName = categoryName(node.id, false);
+            return `${displayId} ${pct}%`;
+          }}
+          nodeTooltip={({ node }) => {
+            // ツールチップには幅の余裕があるため，main/sub 全体を表示する
+            let displayName = categoryName(node.id, false);
 
-          // 集約ノードの displayName を日本語化
-          const aggregate = aggregateLabel(
-            node.id,
-            data.totalIncome,
-            data.totalExpense,
-          );
-          if (aggregate) displayName = aggregate;
+            // 集約ノードの displayName を日本語化
+            const aggregate = aggregateLabel(
+              node.id,
+              data.totalIncome,
+              data.totalExpense,
+            );
+            if (aggregate) displayName = aggregate;
 
-          // カラー取得
-          let dotColor = "#6b7280";
-          if (node.id === "deficit") dotColor = "#ef4444";
-          else if (node.id === "surplus") dotColor = "#10b981";
-          else if (node.id === "ratio") {
-            const balance = data.totalIncome - data.totalExpense;
-            dotColor = balance >= 0 ? "#3b82f6" : "#f97316";
-          } else if (node.id.startsWith("income-")) {
-            const incomeNodes = nodes.filter(n => n.id.startsWith("income-"));
-            const idx = incomeNodes.findIndex(n => n.id === node.id);
-            dotColor = incomeColorPalette[idx % incomeColorPalette.length];
-          } else if (node.id.startsWith("expense-")) {
-            const expenseNodes = nodes.filter(n => n.id.startsWith("expense-"));
-            const idx = expenseNodes.findIndex(n => n.id === node.id);
-            dotColor = expenseColorPalette[idx % expenseColorPalette.length];
-          }
+            // カラー取得
+            let dotColor = "#6b7280";
+            if (node.id === "deficit") dotColor = "#ef4444";
+            else if (node.id === "surplus") dotColor = "#10b981";
+            else if (node.id === "ratio") {
+              const balance = data.totalIncome - data.totalExpense;
+              dotColor = balance >= 0 ? "#3b82f6" : "#f97316";
+            } else if (node.id.startsWith("income-")) {
+              const incomeNodes = nodes.filter(n => n.id.startsWith("income-"));
+              const idx = incomeNodes.findIndex(n => n.id === node.id);
+              dotColor = incomeColorPalette[idx % incomeColorPalette.length];
+            } else if (node.id.startsWith("expense-")) {
+              const expenseNodes = nodes.filter(n =>
+                n.id.startsWith("expense-"),
+              );
+              const idx = expenseNodes.findIndex(n => n.id === node.id);
+              dotColor = expenseColorPalette[idx % expenseColorPalette.length];
+            }
 
-          return (
-            <div className="rounded-lg border border-zinc-700 bg-zinc-900 p-3 shadow-sm relative z-50 max-w-[280px]">
-              <div className="mb-1.5 text-sm text-zinc-400 truncate whitespace-nowrap">
-                {displayName}
-              </div>
-              <div className="space-y-1.5">
+            return (
+              <div className="rounded-lg border border-zinc-700 bg-zinc-900 p-3 shadow-sm relative z-50 max-w-[280px]">
                 <div className="flex items-center justify-between gap-4 text-sm">
                   <span className="flex items-center gap-1.5 text-zinc-300 min-w-0">
                     <span
@@ -321,52 +327,52 @@ export function CashflowSankey({ data }: CashflowSankeyProps) {
                   </span>
                 </div>
               </div>
-            </div>
-          );
-        }}
-        linkTooltip={({ link }) => {
-          let srcId = categoryName(link.source.id, false);
-          let tgtId = categoryName(link.target.id, false);
+            );
+          }}
+          linkTooltip={({ link }) => {
+            let srcId = categoryName(link.source.id, false);
+            let tgtId = categoryName(link.target.id, false);
 
-          // 集約ノードの日本語化
-          const srcAggregate = aggregateLabel(
-            link.source.id,
-            data.totalIncome,
-            data.totalExpense,
-          );
-          if (srcAggregate) srcId = srcAggregate;
-          const tgtAggregate = aggregateLabel(
-            link.target.id,
-            data.totalIncome,
-            data.totalExpense,
-          );
-          if (tgtAggregate) tgtId = tgtAggregate;
+            // 集約ノードの日本語化
+            const srcAggregate = aggregateLabel(
+              link.source.id,
+              data.totalIncome,
+              data.totalExpense,
+            );
+            if (srcAggregate) srcId = srcAggregate;
+            const tgtAggregate = aggregateLabel(
+              link.target.id,
+              data.totalIncome,
+              data.totalExpense,
+            );
+            if (tgtAggregate) tgtId = tgtAggregate;
 
-          return (
-            <div className="rounded-lg border border-zinc-700 bg-zinc-900 p-3 shadow-sm relative z-50 max-w-[280px]">
-              <div className="mb-1.5 text-sm text-zinc-400 truncate whitespace-nowrap">
-                {srcId} → {tgtId}
-              </div>
-              <div className="space-y-1.5">
-                <div className="flex items-center justify-between gap-4 text-sm">
-                  <span className="flex items-center gap-1.5 text-zinc-300 min-w-0">
-                    <span
-                      className="h-2 w-2 rounded-full shrink-0"
-                      style={{ backgroundColor: "#6b7280" }}
-                    />
-                    <span className="truncate whitespace-nowrap flex-1">
-                      流量
+            return (
+              <div className="rounded-lg border border-zinc-700 bg-zinc-900 p-3 shadow-sm relative z-50 max-w-[280px]">
+                <div className="mb-1.5 text-sm text-zinc-400 truncate whitespace-nowrap">
+                  {srcId} → {tgtId}
+                </div>
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between gap-4 text-sm">
+                    <span className="flex items-center gap-1.5 text-zinc-300 min-w-0">
+                      <span
+                        className="h-2 w-2 rounded-full shrink-0"
+                        style={{ backgroundColor: "#6b7280" }}
+                      />
+                      <span className="truncate whitespace-nowrap flex-1">
+                        流量
+                      </span>
                     </span>
-                  </span>
-                  <span className="font-mono font-bold text-zinc-100 shrink-0">
-                    {formatCurrency(link.value)}
-                  </span>
+                    <span className="font-mono font-bold text-zinc-100 shrink-0">
+                      {formatCurrency(link.value)}
+                    </span>
+                  </div>
                 </div>
               </div>
-            </div>
-          );
-        }}
-      />
+            );
+          }}
+        />
+      </div>
     </div>
   );
 }

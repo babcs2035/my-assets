@@ -144,7 +144,7 @@ export function AssetsContent({ breakdown }: AssetsContentProps) {
           </CardHeader>
           <CardContent>
             {assetPieData.length > 0 ? (
-              <div className="flex items-center gap-6">
+              <div className="flex flex-col items-center gap-4 sm:flex-row sm:gap-6">
                 <div className="w-40 h-40 shrink-0">
                   <ChartContainer
                     config={Object.fromEntries(
@@ -235,7 +235,7 @@ export function AssetsContent({ breakdown }: AssetsContentProps) {
           </CardHeader>
           <CardContent>
             {liabilityPieData.length > 0 ? (
-              <div className="flex items-center gap-6">
+              <div className="flex flex-col items-center gap-4 sm:flex-row sm:gap-6">
                 <div className="w-40 h-40 shrink-0">
                   <ChartContainer
                     config={{
