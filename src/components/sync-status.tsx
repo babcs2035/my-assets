@@ -1,6 +1,6 @@
 "use client";
 
-import { CheckCircle2, Loader2, XCircle } from "lucide-react";
+import { CheckCircle2, Loader2, Minus, XCircle } from "lucide-react";
 import { useEffect, useState } from "react";
 import { getLastSyncInfo } from "@/actions/system";
 import { useSidebar } from "@/components/ui/sidebar";
@@ -14,8 +14,9 @@ import { cn, formatJSTDate, formatJSTDateTime, nowJST } from "@/lib/utils";
 
 /**
  * 同期状態の型定義である．
+ * "aborted" はユーザーが意図的に中止した状態（失敗とは区別して表示する）．
  */
-type SyncState = "idle" | "syncing" | "success" | "error";
+type SyncState = "idle" | "syncing" | "success" | "error" | "aborted";
 
 /**
  * システムの同期状態を表示するコンポーネントである．
@@ -115,6 +116,13 @@ export function SyncStatus() {
         setStatus("error");
         setLastSyncText("失敗");
         void checkSync();
+        return;
+      }
+      if (customEvent.detail?.status === "aborted") {
+        // 中止は失敗とは区別して表示する（ユーザーの意図的な操作）
+        setStatus("aborted");
+        setLastSyncText("中止");
+        void checkSync();
       }
     };
 
@@ -144,6 +152,9 @@ export function SyncStatus() {
     if (status === "error") {
       return <XCircle className="h-4 w-4 text-red-500" />;
     }
+    if (status === "aborted") {
+      return <Minus className="h-4 w-4 text-zinc-400" />;
+    }
     return <CheckCircle2 className="h-4 w-4 text-zinc-500" />;
   };
 
@@ -159,6 +170,9 @@ export function SyncStatus() {
     }
     if (status === "error") {
       return "border-red-500/30 bg-red-500/10 text-red-400";
+    }
+    if (status === "aborted") {
+      return "border-zinc-700 bg-zinc-800/50 text-zinc-300";
     }
     return "border-zinc-800 bg-zinc-900/50 text-zinc-500";
   };
@@ -200,7 +214,9 @@ export function SyncStatus() {
           getStatusColor(),
         )}
       >
-        <span className="font-medium opacity-70">同期ステータス</span>
+        {/* opacity-70 を重ねると idle 状態のコントラストが ~2.3:1 になるため，
+            色だけで階調を出す */}
+        <span className="font-medium">同期ステータス</span>
         <div className="flex items-center gap-1.5">
           {getStatusIcon()}
           <span className="font-mono font-medium">{lastSyncText}</span>

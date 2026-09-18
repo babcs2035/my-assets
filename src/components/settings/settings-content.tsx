@@ -155,7 +155,8 @@ export function SettingsContent() {
   const [syncDialogProviderId, setSyncDialogProviderId] = useState<
     string | null
   >(null);
-  const [isLoading, setIsLoading] = useState(false);
+  // 初期値 true で初回 fetch 中の空状態フラッシュを防ぐ
+  const [isLoading, setIsLoading] = useState(true);
   const [, startTransition] = useTransition();
 
   // Provider Form State
@@ -163,10 +164,16 @@ export function SettingsContent() {
   const [providerType, setProviderType] = useState<"mf" | "custom">("mf");
   const [scraperScript, setScraperScript] = useState("");
   const [isCustomProvider, setIsCustomProvider] = useState(false);
+  // 追加中のフラグ（ダブルクリックによる二重送信を防ぐ）
+  const [isAddingProvider, setIsAddingProvider] = useState(false);
+  // カスタムプロバイダー Dialog の開閉状態
+  const [providerDialogOpen, setProviderDialogOpen] = useState(false);
 
   // Category Form State
   const [newCategoryName, setNewCategoryName] = useState("");
   const [newCategoryType, setNewCategoryType] = useState<string>("EXPENSE");
+  // 追加中のフラグ（ダブルクリックによる二重作成を防ぐ）
+  const [isAddingCategory, setIsAddingCategory] = useState(false);
   const [selectedMainCategory, setSelectedMainCategory] = useState<
     string | null
   >(null);
@@ -210,6 +217,9 @@ export function SettingsContent() {
 
   // Category Import State
   const [isImporting, setIsImporting] = useState(false);
+  // インポート対象ファイル（確認ダイアログで承認されるまで保持する．
+  // インポートは既存カテゴリー・ルールの全削除という破壊的操作のため）
+  const [pendingImportFile, setPendingImportFile] = useState<File | null>(null);
 
   // Account Creation Form State
   const [newAccountLabel, setNewAccountLabel] = useState("");
@@ -278,10 +288,13 @@ export function SettingsContent() {
   };
 
   const handleAddProvider = async () => {
-    if (!providerName) return;
+    // trim しないと空白のみが zod min(1) を通過し，空白名のプロバイダーが作成される
+    const name = providerName.trim();
+    if (!name) return;
+    setIsAddingProvider(true);
     try {
       await createProvider({
-        name: providerName,
+        name,
         type: providerType,
         scraperScript: isCustomProvider ? scraperScript : undefined,
       });
@@ -289,9 +302,13 @@ export function SettingsContent() {
       setProviderName("");
       setScraperScript("");
       setIsCustomProvider(false);
+      // 非制御 Dialog では成功後も開いたままになるため，明示的に閉じる
+      setProviderDialogOpen(false);
       fetchData();
     } catch {
       toast.error("プロバイダーの追加に失敗しました．");
+    } finally {
+      setIsAddingProvider(false);
     }
   };
 
@@ -350,9 +367,10 @@ export function SettingsContent() {
     toast.info("同期を中止しています...");
     try {
       await abortSyncProvider(id);
+      // 中止は失敗とは区別して通知する（SyncStatus が赤い失敗表示にならないよう）
       window.dispatchEvent(
         new CustomEvent("provider-sync-status", {
-          detail: { providerId: id, status: "error" },
+          detail: { providerId: id, status: "aborted" },
         }),
       );
       toast.success("同期を中止しました．");
@@ -369,10 +387,13 @@ export function SettingsContent() {
   };
 
   const handleAddMainCategory = async () => {
-    if (!newCategoryName) return;
+    // trim しないと空白のみが zod min(1) を通過し，空白名のカテゴリーが作成される
+    const name = newCategoryName.trim();
+    if (!name || isAddingCategory) return;
+    setIsAddingCategory(true);
     try {
       await createMainCategory({
-        name: newCategoryName,
+        name,
         type: newCategoryType as "INCOME" | "EXPENSE",
       });
       toast.success("カテゴリーを追加しました．");
@@ -380,6 +401,8 @@ export function SettingsContent() {
       fetchData();
     } catch {
       toast.error("カテゴリーの追加に失敗しました．");
+    } finally {
+      setIsAddingCategory(false);
     }
   };
 
@@ -394,15 +417,21 @@ export function SettingsContent() {
   };
 
   const handleUpdateMainCategory = async (id: string, name: string) => {
+    // trim して空の場合は更新しない（zod min(1) は空白のみを通過させるため）
+    const trimmed = name.trim();
+    if (!trimmed) {
+      toast.error("カテゴリー名は空にできません．");
+      return;
+    }
     try {
-      await updateMainCategory(id, { name });
+      await updateMainCategory(id, { name: trimmed });
       toast.success("カテゴリー名を更新しました．");
       setEditingMainCategory(null);
       fetchData();
-    } catch (e: unknown) {
-      const message =
-        e instanceof Error ? e.message : "カテゴリー名の更新に失敗しました．";
-      toast.error(message);
+    } catch {
+      // server action の ZodError の message は issues の JSON 文字列になるため，
+      // ユーザーには共通の表現で通知する（内部状態を推測させない）
+      toast.error("カテゴリー名の更新に失敗しました．");
     }
   };
 
@@ -417,17 +446,21 @@ export function SettingsContent() {
   };
 
   const handleUpdateSubCategory = async (id: string, name: string) => {
+    // trim して空の場合は更新しない（zod min(1) は空白のみを通過させるため）
+    const trimmed = name.trim();
+    if (!trimmed) {
+      toast.error("サブカテゴリー名は空にできません．");
+      return;
+    }
     try {
-      await updateSubCategory(id, { name });
+      await updateSubCategory(id, { name: trimmed });
       toast.success("サブカテゴリー名を更新しました．");
       setEditingSubCategory(null);
       fetchData();
-    } catch (e: unknown) {
-      const message =
-        e instanceof Error
-          ? e.message
-          : "サブカテゴリー名の更新に失敗しました．";
-      toast.error(message);
+    } catch {
+      // server action の ZodError の message は issues の JSON 文字列になるため，
+      // ユーザーには共通の表現で通知する（内部状態を推測させない）
+      toast.error("サブカテゴリー名の更新に失敗しました．");
     }
   };
 
@@ -453,11 +486,8 @@ export function SettingsContent() {
     }
   };
 
-  const handleImportCategories = async (
-    event: React.ChangeEvent<HTMLInputElement>,
-  ) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
+  const handleImportCategories = async (file: File) => {
+    setPendingImportFile(null);
     setIsImporting(true);
     try {
       const text = await file.text();
@@ -475,22 +505,25 @@ export function SettingsContent() {
       await importCategories(data);
       toast.success("インポートしました．");
       fetchData();
-    } catch (e: unknown) {
-      const message =
-        e instanceof Error ? e.message : "インポートに失敗しました．";
-      toast.error(message);
+    } catch {
+      // server action の ZodError の message は issues の JSON 文字列になるため，
+      // ユーザーには共通の表現で通知する（内部状態を推測させない）
+      toast.error(
+        "インポートに失敗しました．ファイルの内容を確認してください．",
+      );
     } finally {
       setIsImporting(false);
-      event.target.value = "";
     }
   };
 
   const handleAddSubCategory = async () => {
-    if (!selectedMainCategory || !newSubCategoryName) return;
+    // trim しないと空白のみが zod min(1) を通過し，空白名のカテゴリーが作成される
+    const name = newSubCategoryName.trim();
+    if (!selectedMainCategory || !name) return;
     try {
       await createSubCategory({
         mainCategoryId: selectedMainCategory,
-        name: newSubCategoryName,
+        name,
       });
       toast.success("サブカテゴリーを追加しました．");
       setNewSubCategoryName("");
@@ -660,10 +693,13 @@ export function SettingsContent() {
   };
 
   const handleAddRule = async () => {
-    if (!ruleKeywords || !ruleSubCategoryId) return;
+    // trim しないと空白のみが検証を通過し，Prisma の contains 検索で
+    // ほぼ全明細にマッチして大量の誤分類が発生する
+    const keyword = ruleKeywords.trim();
+    if (!keyword || !ruleSubCategoryId) return;
     try {
       await createCategoryRule({
-        keyword: ruleKeywords,
+        keyword,
         subCategoryId: ruleSubCategoryId,
         priority: 0,
       });
@@ -689,10 +725,13 @@ export function SettingsContent() {
   // --- 振替ルール ハンドラ ---
 
   const handleAddTransferRule = async () => {
-    if (!transferRuleKeyword || !transferRuleTargetSubAccountId) return;
+    // trim しないと空白のみが検証を通過し，全明細を対象にした
+    // 振替ペア検出が無関係な明細を大量にマークする
+    const keyword = transferRuleKeyword.trim();
+    if (!keyword || !transferRuleTargetSubAccountId) return;
     try {
       await createTransferRule({
-        keyword: transferRuleKeyword,
+        keyword,
         targetSubAccountId: transferRuleTargetSubAccountId,
       });
       toast.success("振替ルールを追加しました．");
@@ -743,7 +782,8 @@ export function SettingsContent() {
             }`}
           >
             <div className="flex flex-1 items-center gap-2 min-w-0 mr-2">
-              <GripVertical className="h-4 w-4 shrink-0 text-zinc-500" />
+              {/* ドラッグハンドル（HTML5 DnD はタッチ非対応のためモバイルでは非表示） */}
+              <GripVertical className="hidden h-4 w-4 shrink-0 text-zinc-400 md:block" />
               <CollapsibleTrigger asChild>
                 <Button
                   variant="ghost"
@@ -775,12 +815,13 @@ export function SettingsContent() {
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="h-7 w-7 text-zinc-500 hover:text-blue-400"
+                    className="h-8 w-8 text-zinc-400 hover:text-blue-400"
+                    aria-label={`カテゴリー「${mc.name}」を編集`}
                     onClick={() =>
                       setEditingMainCategory({ id: mc.id, name: mc.name })
                     }
                   >
-                    <Edit2 className="h-3.5 w-3.5" />
+                    <Edit2 className="h-4 w-4" />
                   </Button>
                 </DialogTrigger>
                 <DialogContent>
@@ -827,10 +868,11 @@ export function SettingsContent() {
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="h-7 w-7 text-zinc-500 hover:text-red-400"
+                    className="h-8 w-8 text-zinc-400 hover:text-red-400"
+                    aria-label={`カテゴリー「${mc.name}」を削除`}
                     onClick={e => e.stopPropagation()}
                   >
-                    <Trash2 className="h-3.5 w-3.5" />
+                    <Trash2 className="h-4 w-4" />
                   </Button>
                 </AlertDialogTrigger>
                 <AlertDialogContent>
@@ -838,7 +880,7 @@ export function SettingsContent() {
                     <AlertDialogTitle>削除確認</AlertDialogTitle>
                     <AlertDialogDescription>
                       メインカテゴリー「{mc.name}
-                      」を削除します。サブカテゴリーがある場合は削除できません。
+                      」を削除します．サブカテゴリーがある場合は削除できません．
                     </AlertDialogDescription>
                   </AlertDialogHeader>
                   <AlertDialogFooter>
@@ -872,11 +914,11 @@ export function SettingsContent() {
                   }`}
                 >
                   <div className="flex items-center gap-2 min-w-0 overflow-hidden">
-                    <GripVertical className="h-3 w-3 shrink-0 text-zinc-500" />
+                    <GripVertical className="hidden h-3 w-3 shrink-0 text-zinc-400 md:block" />
                     <span className="text-sm text-zinc-300 truncate">
                       {sc.name}
                     </span>
-                    <span className="text-xs text-zinc-600 shrink-0">
+                    <span className="text-xs text-zinc-400 shrink-0">
                       ({sc._count.transactions} 明細, {sc._count.rules} ルール)
                     </span>
                   </div>
@@ -891,12 +933,13 @@ export function SettingsContent() {
                         <Button
                           variant="ghost"
                           size="icon"
-                          className="h-6 w-6 text-zinc-600 hover:text-blue-400"
+                          className="h-8 w-8 text-zinc-400 hover:text-blue-400"
+                          aria-label={`サブカテゴリー「${sc.name}」を編集`}
                           onClick={() =>
                             setEditingSubCategory({ id: sc.id, name: sc.name })
                           }
                         >
-                          <Edit2 className="h-3 w-3" />
+                          <Edit2 className="h-4 w-4" />
                         </Button>
                       </DialogTrigger>
                       <DialogContent>
@@ -944,16 +987,17 @@ export function SettingsContent() {
                         <Button
                           variant="ghost"
                           size="icon"
-                          className="h-6 w-6 text-zinc-600 hover:text-red-400"
+                          className="h-8 w-8 text-zinc-400 hover:text-red-400"
+                          aria-label={`サブカテゴリー「${sc.name}」を削除`}
                         >
-                          <Trash2 className="h-3 w-3" />
+                          <Trash2 className="h-4 w-4" />
                         </Button>
                       </AlertDialogTrigger>
                       <AlertDialogContent>
                         <AlertDialogHeader>
                           <AlertDialogTitle>削除確認</AlertDialogTitle>
                           <AlertDialogDescription>
-                            サブカテゴリー「{sc.name}」を削除します。
+                            サブカテゴリー「{sc.name}」を削除します．
                           </AlertDialogDescription>
                         </AlertDialogHeader>
                         <AlertDialogFooter>
@@ -1033,9 +1077,15 @@ export function SettingsContent() {
               </div>
               <div className="flex items-end">
                 {isCustomProvider ? (
-                  <Dialog>
+                  <Dialog
+                    open={providerDialogOpen}
+                    onOpenChange={setProviderDialogOpen}
+                  >
                     <DialogTrigger asChild>
-                      <Button className="w-full" disabled={!providerName}>
+                      <Button
+                        className="w-full"
+                        disabled={!providerName.trim()}
+                      >
                         <Plus className="mr-2 h-4 w-4" />
                         追加
                       </Button>
@@ -1044,13 +1094,16 @@ export function SettingsContent() {
                       <DialogHeader>
                         <DialogTitle>スクレーパースクリプトの設定</DialogTitle>
                         <DialogDescription>
-                          Playwrightを使用したスクレーピングスクリプトを入力してください。
+                          Playwrightを使用したスクレーピングスクリプトを入力してください．
                         </DialogDescription>
                       </DialogHeader>
                       <div className="space-y-4">
                         <div className="space-y-2">
-                          <Label>スクリプト (TypeScript)</Label>
+                          <Label htmlFor="provider-script">
+                            スクリプト (TypeScript)
+                          </Label>
                           <Textarea
+                            id="provider-script"
                             className="font-mono text-xs min-h-[300px]"
                             placeholder="// Playwright script..."
                             value={scraperScript}
@@ -1059,7 +1112,11 @@ export function SettingsContent() {
                         </div>
                       </div>
                       <DialogFooter>
-                        <Button onClick={handleAddProvider}>
+                        <Button
+                          onClick={handleAddProvider}
+                          loading={isAddingProvider}
+                          disabled={!providerName.trim()}
+                        >
                           保存して追加
                         </Button>
                       </DialogFooter>
@@ -1068,8 +1125,9 @@ export function SettingsContent() {
                 ) : (
                   <Button
                     className="w-full"
-                    disabled={!providerName}
+                    disabled={!providerName.trim()}
                     onClick={handleAddProvider}
+                    loading={isAddingProvider}
                   >
                     <Plus className="mr-2 h-4 w-4" />
                     追加
@@ -1176,7 +1234,7 @@ export function SettingsContent() {
                                     <DialogTitle>手動同期の実行</DialogTitle>
                                     <DialogDescription>
                                       手動同期では {BACKFILL_START_DATE}
-                                      まで遡って、入出金明細と残高推移を全件取得します。
+                                      まで遡って，入出金明細と残高推移を全件取得します．
                                     </DialogDescription>
                                   </DialogHeader>
                                   <DialogFooter>
@@ -1208,7 +1266,7 @@ export function SettingsContent() {
                                   <AlertDialogDescription>
                                     プロバイダー「{provider.name}
                                     」を削除しますか？
-                                    関連する口座データも削除される可能性があります。
+                                    関連する口座データも削除される可能性があります．
                                   </AlertDialogDescription>
                                 </AlertDialogHeader>
                                 <AlertDialogFooter>
@@ -1334,6 +1392,7 @@ export function SettingsContent() {
                                       handleAbortSyncProvider(provider.id)
                                     }
                                     title="中止"
+                                    aria-label={`プロバイダー「${provider.name}」の同期を中止`}
                                     className="text-red-400 hover:text-red-300"
                                   >
                                     <Square className="h-4 w-4" />
@@ -1348,6 +1407,7 @@ export function SettingsContent() {
                                     handleSyncProvider(provider.id)
                                   }
                                   title="同期"
+                                  aria-label={`プロバイダー「${provider.name}」を同期`}
                                 >
                                   <RefreshCw className="h-4 w-4 text-blue-400" />
                                 </Button>
@@ -1358,7 +1418,8 @@ export function SettingsContent() {
                                 <Button
                                   variant="ghost"
                                   size="icon"
-                                  className="text-zinc-500 hover:text-red-400"
+                                  className="text-zinc-400 hover:text-red-400"
+                                  aria-label={`プロバイダー「${provider.name}」を削除`}
                                 >
                                   <Trash2 className="h-4 w-4" />
                                 </Button>
@@ -1369,7 +1430,7 @@ export function SettingsContent() {
                                   <AlertDialogDescription>
                                     プロバイダー「{provider.name}
                                     」を削除しますか？
-                                    関連する口座データも削除される可能性があります。
+                                    関連する口座データも削除される可能性があります．
                                   </AlertDialogDescription>
                                 </AlertDialogHeader>
                                 <AlertDialogFooter>
@@ -1421,12 +1482,12 @@ export function SettingsContent() {
           <CardContent className="space-y-6">
             {/* Account Creation Form */}
             <div className="rounded-md border border-zinc-800 bg-zinc-900/20 p-4 space-y-3">
-              <h3 className="text-sm font-medium text-zinc-400">口座の追加</h3>
+              <h2 className="text-sm font-medium text-zinc-400">口座の追加</h2>
               <div className="flex flex-wrap gap-3">
                 <div className="flex-1 min-w-[160px]">
                   <Label
                     htmlFor="new-account-provider"
-                    className="text-xs text-zinc-500"
+                    className="text-xs text-zinc-400"
                   >
                     プロバイダー
                   </Label>
@@ -1449,7 +1510,7 @@ export function SettingsContent() {
                 <div className="flex-1 min-w-[160px]">
                   <Label
                     htmlFor="new-account-label"
-                    className="text-xs text-zinc-500"
+                    className="text-xs text-zinc-400"
                   >
                     金融機関名
                   </Label>
@@ -1465,11 +1526,13 @@ export function SettingsContent() {
                   <Button
                     size="sm"
                     onClick={async () => {
-                      if (!newAccountProviderId || !newAccountLabel) return;
+                      // trim しないと空白のみが zod min(1) を通過し，空白名の口座が作成される
+                      const label = newAccountLabel.trim();
+                      if (!newAccountProviderId || !label) return;
                       setIsCreatingAccount(true);
                       try {
                         await createMainAccount({
-                          label: newAccountLabel,
+                          label,
                           providerId: newAccountProviderId,
                         });
                         toast.success("口座を作成しました");
@@ -1484,7 +1547,7 @@ export function SettingsContent() {
                     }}
                     disabled={
                       !newAccountProviderId ||
-                      !newAccountLabel ||
+                      !newAccountLabel.trim() ||
                       isCreatingAccount
                     }
                   >
@@ -1496,7 +1559,7 @@ export function SettingsContent() {
 
             {/* Account List by Provider */}
             <div className="space-y-4">
-              <h3 className="text-sm font-medium text-zinc-400">口座一覧</h3>
+              <h2 className="text-sm font-medium text-zinc-400">口座一覧</h2>
               {providers.map(provider => {
                 const providerAccounts = accounts.filter(
                   a => a.providerId === provider.id,
@@ -1553,7 +1616,7 @@ export function SettingsContent() {
                                         }
                                       }}
                                     >
-                                      <SelectTrigger className="h-6 w-24">
+                                      <SelectTrigger className="h-8 w-28">
                                         <SelectValue />
                                       </SelectTrigger>
                                       <SelectContent>
@@ -1569,7 +1632,8 @@ export function SettingsContent() {
                                         <Button
                                           variant="ghost"
                                           size="icon"
-                                          className="h-6 w-6 text-zinc-600 hover:text-red-400 -mt-1 -mr-2"
+                                          className="h-8 w-8 text-zinc-400 hover:text-red-400"
+                                          aria-label={`口座「${ac.label}」を削除`}
                                         >
                                           <Trash2 className="h-4 w-4" />
                                         </Button>
@@ -1581,7 +1645,7 @@ export function SettingsContent() {
                                           </AlertDialogTitle>
                                           <AlertDialogDescription>
                                             口座「{ac.label}
-                                            」を削除しますか？関連する明細履歴もすべて削除されます。
+                                            」を削除しますか？関連する明細履歴もすべて削除されます．
                                           </AlertDialogDescription>
                                         </AlertDialogHeader>
                                         <AlertDialogFooter>
@@ -1609,7 +1673,7 @@ export function SettingsContent() {
                                     <Badge
                                       key={sub.id}
                                       variant="secondary"
-                                      className="text-[9px] max-w-[120px] truncate px-1.5 py-0"
+                                      className="text-[10px] max-w-[120px] truncate px-1.5 py-0"
                                       style={{
                                         background: `${assetTypeColor(sub.assetType)}20`,
                                         borderColor: assetTypeColor(
@@ -1657,7 +1721,7 @@ export function SettingsContent() {
                                           <Badge
                                             key={sub.id}
                                             variant="secondary"
-                                            className="text-[9px] max-w-[140px] truncate px-1.5 py-0"
+                                            className="text-[10px] max-w-[140px] truncate px-1.5 py-0"
                                             style={{
                                               background: `${assetTypeColor(sub.assetType)}20`,
                                               borderColor: assetTypeColor(
@@ -1693,7 +1757,7 @@ export function SettingsContent() {
                                             }
                                           }}
                                         >
-                                          <SelectTrigger className="h-7 w-28">
+                                          <SelectTrigger className="h-8 w-28">
                                             <SelectValue />
                                           </SelectTrigger>
                                           <SelectContent>
@@ -1712,7 +1776,8 @@ export function SettingsContent() {
                                             <Button
                                               variant="ghost"
                                               size="icon"
-                                              className="h-7 w-7 text-zinc-600 hover:text-red-400"
+                                              className="h-8 w-8 text-zinc-400 hover:text-red-400"
+                                              aria-label={`口座「${ac.label}」を削除`}
                                             >
                                               <Trash2 className="h-3.5 w-3.5" />
                                             </Button>
@@ -1724,7 +1789,7 @@ export function SettingsContent() {
                                               </AlertDialogTitle>
                                               <AlertDialogDescription>
                                                 口座「{ac.label}
-                                                」を削除しますか？関連する明細履歴もすべて削除されます。
+                                                」を削除しますか？関連する明細履歴もすべて削除されます．
                                               </AlertDialogDescription>
                                             </AlertDialogHeader>
                                             <AlertDialogFooter>
@@ -1779,8 +1844,8 @@ export function SettingsContent() {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            {/* Export/Import Buttons */}
-            <div className="flex gap-2">
+            {/* Export/Import Buttons（モバイルでは折り返して水平オーバーフローを防ぐ） */}
+            <div className="flex flex-wrap gap-2">
               <Button
                 variant="outline"
                 size="sm"
@@ -1807,13 +1872,53 @@ export function SettingsContent() {
                 type="file"
                 accept=".json"
                 className="hidden"
-                onChange={handleImportCategories}
+                onChange={e => {
+                  const file = e.target.files?.[0];
+                  if (file) setPendingImportFile(file);
+                  // 同一ファイルを再選択しても onChange が発火するようリセット
+                  e.target.value = "";
+                }}
               />
+              {/* インポートは全カテゴリー・ルールの削除という破壊的操作のため，
+                  ファイル選択後に確認ステップを挟む */}
+              <AlertDialog
+                open={pendingImportFile !== null}
+                onOpenChange={open => {
+                  if (!open) setPendingImportFile(null);
+                }}
+              >
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>インポートの確認</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      インポートすると，既存のカテゴリー・ルールがすべて削除され，
+                      すべての明細のカテゴリー関連付けが解除されます．
+                      <br />
+                      引き続きインポートしますか？
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>キャンセル</AlertDialogCancel>
+                    <AlertDialogAction
+                      onClick={() => {
+                        if (pendingImportFile) {
+                          void handleImportCategories(pendingImportFile);
+                        }
+                      }}
+                      className="bg-red-600"
+                    >
+                      インポートする
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
             </div>
 
             <div className="grid gap-6 md:grid-cols-2 md:gap-4">
               <div className="space-y-2">
-                <Label>メインカテゴリー追加</Label>
+                <Label htmlFor="new-main-category-name">
+                  メインカテゴリー追加
+                </Label>
                 <div className="flex gap-2 w-full">
                   <Select
                     value={newCategoryType}
@@ -1828,16 +1933,18 @@ export function SettingsContent() {
                     </SelectContent>
                   </Select>
                   <Input
-                    placeholder="食費、日用品など"
+                    id="new-main-category-name"
+                    placeholder="食費，日用品など"
                     value={newCategoryName}
                     onChange={e => setNewCategoryName(e.target.value)}
                     className="flex-1 min-w-0 text-sm"
                   />
                   <Button
                     onClick={handleAddMainCategory}
-                    disabled={!newCategoryName}
+                    disabled={!newCategoryName.trim() || isAddingCategory}
                     size="icon"
                     className="shrink-0"
+                    aria-label="メインカテゴリーを追加"
                   >
                     <Plus className="h-4 w-4" />
                   </Button>
@@ -1876,9 +1983,12 @@ export function SettingsContent() {
                     />
                     <Button
                       onClick={handleAddSubCategory}
-                      disabled={!selectedMainCategory || !newSubCategoryName}
+                      disabled={
+                        !selectedMainCategory || !newSubCategoryName.trim()
+                      }
                       size="icon"
                       className="shrink-0"
+                      aria-label="サブカテゴリーを追加"
                     >
                       <Plus className="h-4 w-4" />
                     </Button>
@@ -1958,7 +2068,7 @@ export function SettingsContent() {
               </div>
               <Button
                 onClick={handleAddRule}
-                disabled={!ruleKeywords || !ruleSubCategoryId}
+                disabled={!ruleKeywords.trim() || !ruleSubCategoryId}
                 className="w-full md:w-auto"
               >
                 ルール追加
@@ -2153,7 +2263,7 @@ export function SettingsContent() {
               <Button
                 onClick={handleAddTransferRule}
                 disabled={
-                  !transferRuleKeyword || !transferRuleTargetSubAccountId
+                  !transferRuleKeyword.trim() || !transferRuleTargetSubAccountId
                 }
                 className="w-full md:w-auto"
               >

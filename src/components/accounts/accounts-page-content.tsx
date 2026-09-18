@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { getAccountList } from "@/actions/accounts";
 import { AccountList } from "@/components/accounts/account-list";
+import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 
 /**
@@ -14,7 +15,10 @@ export function AccountsPageContent() {
     ReturnType<typeof getAccountList>
   > | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // エラー時の再試行用（増やすとフェッチ effect が再実行される）
+  const [reloadKey, setReloadKey] = useState(0);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: reloadKey は再試行トリガーであり，effect 本体では使用しない
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -28,12 +32,22 @@ export function AccountsPageContent() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [reloadKey]);
 
   if (error) {
     return (
-      <div className="flex flex-col items-center justify-center py-16">
+      <div className="flex flex-col items-center justify-center gap-3 py-16">
         <p className="text-sm text-red-400">{error}</p>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => {
+            setError(null);
+            setReloadKey(k => k + 1);
+          }}
+        >
+          再試行する
+        </Button>
       </div>
     );
   }
