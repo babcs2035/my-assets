@@ -10,7 +10,13 @@ import { Button } from "@/components/ui/button";
  */
 export default function NotFound() {
   return (
-    <div className="flex flex-col items-center justify-center gap-4 py-24">
+    // data-myassets-not-found は sync-status.tsx が 404 画面での
+    // サーバーアクション呼び出し（POST が 404 になる）をスキップするための
+    // 検知用マーカーである．
+    <div
+      data-myassets-not-found
+      className="flex flex-col items-center justify-center gap-4 py-24"
+    >
       <FileQuestion className="h-10 w-10 text-zinc-500" />
       <div className="text-center space-y-1">
         <p className="text-base font-medium text-zinc-200">

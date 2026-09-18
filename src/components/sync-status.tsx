@@ -32,6 +32,14 @@ export function SyncStatus() {
      * 最新の同期状態を取得し，ステータスを更新する関数である．
      */
     const checkSync = async () => {
+      // 404 画面ではルートが存在しないため，サーバーアクションの POST が 404 になる．
+      // ブラウザが「Failed to load resource: 404」をコンソールに出力するため，
+      // not-found.tsx が付けた data 属性を検知したらポーリングをスキップする．
+      // checkSync 先頭で判定することで，通常画面から 404 へ遷移した後も
+      // 既に始まっている interval ポーリングを止めることができる．
+      if (document.querySelector("[data-myassets-not-found]")) {
+        return;
+      }
       try {
         const info = await getLastSyncInfo();
         const now = nowJST();
