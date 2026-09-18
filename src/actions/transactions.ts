@@ -604,8 +604,18 @@ export async function applyAllTransferRules() {
   let pairsMarked = 0;
   let pairsSkipped = 0;
 
+  // 確定したペアの更新を蓄積し，最後に一括適用する．
+  // 元の実装は 1 ペア候補ごとに findFirst + findUnique + $transaction を発しており，
+  // ルール数 × 明細数に比例した DB 往復（N+1）になっていた．
+  const updates: Array<{
+    where: { id: string };
+    data: { isTransfer: boolean; transferId: string; linkedTransId: string };
+  }> = [];
+  const markedSourceIds = new Set<string>();
+  const markedTargetIds = new Set<string>();
+
   for (const rule of rules) {
-    // キーワードに一致する未処理の取引を取得
+    // キーワードに一致する未処理の出金側取引を取得（1 クエリ / ルール）
     const sourceTransactions = await prisma.transaction.findMany({
       where: {
         desc: { contains: rule.keyword, mode: "insensitive" },
@@ -620,64 +630,79 @@ export async function applyAllTransferRules() {
       },
     });
 
+    if (sourceTransactions.length === 0) continue;
+
+    // 振替先口座の，対象日付・金額の取引を 1 クエリで取得しメモリで照合する
+    const targetTransactions = await prisma.transaction.findMany({
+      where: {
+        subAccountId: rule.targetSubAccountId,
+        isTransfer: false,
+        date: { in: sourceTransactions.map(t => t.date) },
+        amount: { in: sourceTransactions.map(t => -t.amount) },
+      },
+      select: { id: true, amount: true, date: true },
+    });
+
+    // (JST 日付, 金額) → 未使用 target id のスタックで O(1) 照合
+    const targetIndex = new Map<string, string[]>();
+    for (const t of targetTransactions) {
+      const key = `${formatJSTDate(t.date)}|${t.amount}`;
+      const stack = targetIndex.get(key);
+      if (stack) stack.push(t.id);
+      else targetIndex.set(key, [t.id]);
+    }
+
     for (const sourceTx of sourceTransactions) {
-      // すでに処理済みの場合はスキップ
-      const sourceCheck = await prisma.transaction.findUnique({
-        where: { id: sourceTx.id },
-        select: { isTransfer: true },
-      });
-      if (!sourceCheck || sourceCheck.isTransfer) continue;
-
-      // 振替先口座で反対符号・同額の取引を検索
-      const targetTx = await prisma.transaction.findFirst({
-        where: {
-          subAccountId: rule.targetSubAccountId,
-          amount: -sourceTx.amount,
-          date: sourceTx.date,
-          isTransfer: false,
-        },
-        select: { id: true },
-      });
-
-      if (!targetTx) {
-        // 相手方が見つからない場合はスキップ
+      // 別のルールで既にマーク済み（メモリ上）の場合はスキップ．
+      // 出金側として消費済み（markedSourceIds）か，振替先として消費済み
+      // （markedTargetIds）かの両方を確認する．バッチ適用のためループ中は
+      // DB の isTransfer がまだ更新されないので，メモリ上のフラグで排他し，
+      // 同一明細が updates に 2 件入って transferId が上書きされるのを防ぐ．
+      if (
+        markedSourceIds.has(sourceTx.id) ||
+        markedTargetIds.has(sourceTx.id)
+      ) {
         continue;
       }
 
-      // 相手方も未処理か確認
-      const targetCheck = await prisma.transaction.findUnique({
-        where: { id: targetTx.id },
-        select: { isTransfer: true },
-      });
-      if (!targetCheck || targetCheck.isTransfer) {
+      const key = `${formatJSTDate(sourceTx.date)}|${-sourceTx.amount}`;
+      const stack = targetIndex.get(key);
+      if (!stack) continue;
+
+      // 未使用の target を 1 つ取り出す
+      let targetId: string | undefined;
+      while (stack.length > 0) {
+        const id = stack.pop() as string;
+        if (!markedTargetIds.has(id)) {
+          targetId = id;
+          break;
+        }
+      }
+      if (!targetId) {
         pairsSkipped++;
         continue;
       }
 
-      // ペアを振替扱いにマーク
-      const transferId = `tf_${sourceTx.id.slice(0, 8)}_${targetTx.id.slice(0, 8)}`;
+      markedSourceIds.add(sourceTx.id);
+      markedTargetIds.add(targetId);
 
-      await prisma.$transaction([
-        prisma.transaction.update({
+      const transferId = `tf_${sourceTx.id.slice(0, 8)}_${targetId.slice(0, 8)}`;
+      updates.push(
+        {
           where: { id: sourceTx.id },
-          data: {
-            isTransfer: true,
-            transferId,
-            linkedTransId: targetTx.id,
-          },
-        }),
-        prisma.transaction.update({
-          where: { id: targetTx.id },
-          data: {
-            isTransfer: true,
-            transferId,
-            linkedTransId: sourceTx.id,
-          },
-        }),
-      ]);
-
+          data: { isTransfer: true, transferId, linkedTransId: targetId },
+        },
+        {
+          where: { id: targetId },
+          data: { isTransfer: true, transferId, linkedTransId: sourceTx.id },
+        },
+      );
       pairsMarked++;
     }
+  }
+
+  if (updates.length > 0) {
+    await prisma.$transaction(updates.map(u => prisma.transaction.update(u)));
   }
 
   logger.info(
