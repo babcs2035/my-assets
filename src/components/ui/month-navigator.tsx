@@ -9,7 +9,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { BACKFILL_START_DATE } from "@/lib/utils";
+import { BACKFILL_START_DATE, formatJSTDate, nowJST } from "@/lib/utils";
 
 /**
  * 年月ナビゲーターコンポーネントである．
@@ -41,7 +41,8 @@ export function MonthNavigator({
   buttonSize = "icon",
   buttonVariant = "outline",
 }: MonthNavigatorProps) {
-  const nowYear = maxYear ?? new Date().getFullYear();
+  // JST 基準の現在年（ローカル TZ の getFullYear では JST 日付境界でずれる）
+  const nowYear = maxYear ?? Number(formatJSTDate(nowJST()).slice(0, 4));
   // 年の下限はバックフィル開始年のみ（+2 の長式は現在年+1 を選択肢に含める既存挙動）
   const minYear = Number(BACKFILL_START_DATE.slice(0, 4));
   const yearOptions = Array.from(
@@ -63,7 +64,7 @@ export function MonthNavigator({
   };
 
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex flex-wrap items-center gap-2">
       <Button
         type="button"
         variant={buttonVariant}
@@ -79,7 +80,7 @@ export function MonthNavigator({
           value={String(year)}
           onValueChange={v => onMonthChange(Number(v), month)}
         >
-          <SelectTrigger size="sm" className="h-9 w-32">
+          <SelectTrigger size="sm" className="h-9 w-24 sm:w-32">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -94,7 +95,7 @@ export function MonthNavigator({
           value={String(month)}
           onValueChange={v => onMonthChange(year, Number(v))}
         >
-          <SelectTrigger size="sm" className="h-9 w-20">
+          <SelectTrigger size="sm" className="h-9 w-16 sm:w-20">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>

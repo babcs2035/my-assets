@@ -58,7 +58,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { formatJSTDate, nowJST } from "@/lib/utils";
+import { formatJSTDate, formatSignedCurrency, nowJST } from "@/lib/utils";
 
 /**
  * 取引明細の型定義である．
@@ -105,11 +105,14 @@ export function TransactionsContent() {
   const [transferTargetTx, setTransferTargetTx] = useState<{
     id: string;
     desc: string;
+    sourceSubAccountId: string | null;
   } | null>(null);
 
-  const year = currentDate.getFullYear();
-  const month = currentDate.getMonth() + 1;
-  const now = nowJST();
+  // JST 基準で年月を導出する（ローカル TZ の getFullYear/getMonth では
+  // JST 日付境界で前後 1 日ずれる）
+  const currentDateKey = formatJSTDate(currentDate);
+  const year = Number(currentDateKey.slice(0, 4));
+  const month = Number(currentDateKey.slice(5, 7));
   const activeMainAccountId =
     selectedMainAccountId === "all" ? undefined : selectedMainAccountId;
   const activeSubAccountId =
@@ -265,7 +268,11 @@ export function TransactionsContent() {
    * 振替設定ダイアログを開くハンドラである．
    */
   const openTransferDialog = (tx: Transaction) => {
-    setTransferTargetTx({ id: tx.id, desc: tx.desc });
+    setTransferTargetTx({
+      id: tx.id,
+      desc: tx.desc,
+      sourceSubAccountId: tx.subAccount?.id ?? null,
+    });
     setTransferDialogOpen(true);
   };
 
@@ -288,12 +295,15 @@ export function TransactionsContent() {
           year={year}
           month={month}
           onMonthChange={(newYear, newMonth) => {
-            setCurrentDate(new Date(newYear, newMonth - 1, 1));
+            // UTC 真夜中で生成する（DB の日付規約と同一）。
+            // ローカル TZ コンストラクタだと JST より東の TZ で formatJSTDate が 1 日ずれる
+            setCurrentDate(new Date(Date.UTC(newYear, newMonth - 1, 1)));
             setSelectedDay(null);
             setPage(1);
           }}
           onThisMonth={() => {
-            setCurrentDate(new Date(now.getFullYear(), now.getMonth(), 1));
+            // 年月導出が JST 基準になったため，「今月」も nowJST() で一貫させる
+            setCurrentDate(nowJST());
             setSelectedDay(null);
             setPage(1);
           }}
@@ -441,12 +451,16 @@ export function TransactionsContent() {
                 </div>
               </div>
             )}
-            {transactions.length === 0 ? (
-              // データがない場合の表示
+            {transactions.length === 0 && !isLoading ? (
+              // データがない場合の表示（読み込み中はオーバーレイで覆われるため表示しない）
               <div className="flex flex-col items-center justify-center py-16">
                 <List className="h-10 w-10 text-zinc-600" />
                 <p className="mt-3 text-sm text-zinc-500">
-                  この月の明細はありません．
+                  {selectedMainAccountId !== "all" ||
+                  selectedSubAccountId !== "all" ||
+                  selectedDay !== null
+                    ? "条件に一致する明細はありません．"
+                    : "この月の明細はありません．"}
                 </p>
               </div>
             ) : (
@@ -461,7 +475,7 @@ export function TransactionsContent() {
                       <div className="flex justify-between items-start gap-2 min-w-0">
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 mb-0.5">
-                            <span className="text-xs text-zinc-500 shrink-0">
+                            <span className="text-xs text-zinc-400 shrink-0">
                               {formatJSTDate(tx.date)
                                 .slice(5)
                                 .replace("-", "/")}
@@ -469,7 +483,7 @@ export function TransactionsContent() {
                             {tx.isTransfer ? (
                               <Badge
                                 variant="secondary"
-                                className="text-[9px] px-1 py-0 h-4 bg-blue-500/10 text-blue-400 border-blue-500/30"
+                                className="text-[10px] px-1 py-0 h-4 bg-blue-500/10 text-blue-400 border-blue-500/30"
                               >
                                 振替
                               </Badge>
@@ -497,7 +511,7 @@ export function TransactionsContent() {
                               </div>
                             </div>
                           ) : (
-                            <div className="text-xs text-zinc-500 truncate">
+                            <div className="text-xs text-zinc-400 truncate">
                               {tx.subAccount.mainAccount.label}（
                               {tx.subAccount.currentName}）
                             </div>
@@ -513,8 +527,7 @@ export function TransactionsContent() {
                                   : "text-red-400"
                             }`}
                           >
-                            {tx.amount >= 0 && "+"}
-                            {tx.amount.toLocaleString()}
+                            {formatSignedCurrency(tx.amount)}
                           </div>
                         </div>
                       </div>
@@ -530,7 +543,7 @@ export function TransactionsContent() {
                               )
                             }
                           >
-                            <SelectTrigger className="h-8 w-[120px] text-xs">
+                            <SelectTrigger className="h-9 w-[120px] text-xs">
                               <SelectValue placeholder="未分類" />
                             </SelectTrigger>
                             <SelectContent>
@@ -553,11 +566,11 @@ export function TransactionsContent() {
                           <button
                             type="button"
                             onClick={() => openTransferDialog(tx)}
-                            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-zinc-700 bg-zinc-800 text-zinc-400 transition-colors hover:border-blue-500/50 hover:text-blue-400"
+                            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-zinc-700 bg-zinc-800 text-zinc-400 transition-colors hover:border-blue-500/50 hover:text-blue-400"
                             aria-label="振替設定"
                             title="振替設定"
                           >
-                            <ArrowDownUp className="h-3 w-3" />
+                            <ArrowDownUp className="h-3.5 w-3.5" />
                           </button>
                         </div>
                       )}
@@ -634,7 +647,7 @@ export function TransactionsContent() {
                                 <div className="flex items-center gap-1.5 truncate">
                                   <Badge
                                     variant="secondary"
-                                    className="text-[9px] px-1 py-0 h-4 bg-blue-500/10 text-blue-400 border-blue-500/30 shrink-0"
+                                    className="text-[10px] px-1 py-0 h-4 bg-blue-500/10 text-blue-400 border-blue-500/30 shrink-0"
                                   >
                                     振替
                                   </Badge>
@@ -658,7 +671,7 @@ export function TransactionsContent() {
                                   {tx.subAccount.mainAccount.label}
                                 </span>
                                 <br />
-                                <span className="text-zinc-500 text-xs">
+                                <span className="text-zinc-400 text-xs">
                                   {tx.subAccount.currentName}
                                 </span>
                               </>
@@ -682,8 +695,7 @@ export function TransactionsContent() {
                                   : "text-red-400"
                             }`}
                           >
-                            {tx.amount >= 0 ? "+" : ""}
-                            {tx.amount.toLocaleString()}
+                            {formatSignedCurrency(tx.amount)}
                           </TableCell>
                           <TableCell>
                             {tx.isTransfer ? (
@@ -752,6 +764,8 @@ export function TransactionsContent() {
                     <PaginationItem>
                       <PaginationPrevious
                         href="#"
+                        aria-disabled={page <= 1 || undefined}
+                        tabIndex={page <= 1 ? -1 : undefined}
                         onClick={e => {
                           e.preventDefault();
                           if (page > 1) {
@@ -771,6 +785,8 @@ export function TransactionsContent() {
                     <PaginationItem>
                       <PaginationNext
                         href="#"
+                        aria-disabled={page >= totalPages || undefined}
+                        tabIndex={page >= totalPages ? -1 : undefined}
                         onClick={e => {
                           e.preventDefault();
                           if (page < totalPages) {
@@ -799,6 +815,7 @@ export function TransactionsContent() {
           onOpenChange={setTransferDialogOpen}
           transactionId={transferTargetTx.id}
           transactionDesc={transferTargetTx.desc}
+          sourceSubAccountId={transferTargetTx.sourceSubAccountId}
           filterOptions={filterOptions}
           onDone={fetchData}
         />

@@ -139,16 +139,15 @@ export function CalendarGrid({
         {/* カレンダーセル */}
         <div className="grid grid-cols-7 gap-0">
           {calendarCells.map((cell, idx) => {
-            const date = new Date(
-              year,
-              month - 1,
-              cell.isCurrentMonth
-                ? cell.day
-                : cell.isPastMonth
-                  ? -startDayOfWeek + 1 + idx
-                  : daysInMonth + idx - 41,
-            );
-            const dateKey = formatJSTDate(date);
+            // JST 日付文字列を年月日から直接構築する（サーバーの calendarData
+            // のキーも JST 日付）。ローカル TZ の Date コンストラクタ +
+            // formatJSTDate では JST より東の TZ でキーが 1 日ずれる。
+            // 当月以外のセルは data/isToday とも参照されないためキーは不要。
+            const dateKey = cell.isCurrentMonth
+              ? `${year}-${String(month).padStart(2, "0")}-${String(
+                  cell.day,
+                ).padStart(2, "0")}`
+              : "";
             const data = cell.isCurrentMonth
               ? calendarData[dateKey]
               : undefined;

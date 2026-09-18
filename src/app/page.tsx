@@ -101,7 +101,7 @@ export default async function DashboardPage() {
           {diff > 0 && "+"}
           {diff.toLocaleString()} 円
         </span>
-        <span className="text-zinc-500">前月比</span>
+        <span className="text-zinc-400">前月比</span>
       </>
     );
   };
@@ -112,7 +112,7 @@ export default async function DashboardPage() {
 
       {/* ── KPI 指標エリア ──────────────────────── */}
       {/* 純資産のみ表示（総資産・総負債は削除） */}
-      <div className="grid gap-4 md:grid-cols-1">
+      <div className="grid gap-4">
         <Card className="kpi-card" style={{ animationDelay: "0ms" }}>
           <CardContent className="pt-2 pb-1">
             <p className="text-[13px] font-medium text-zinc-400 mb-0.5">
@@ -129,8 +129,8 @@ export default async function DashboardPage() {
             <div className="flex items-center text-sm text-muted-foreground mt-2.5 gap-1.5">
               {kpi.dailyChange === null ? (
                 <>
-                  <span className="text-zinc-500">—</span>
-                  <span className="text-zinc-500">前日比</span>
+                  <span className="text-zinc-400">—</span>
+                  <span className="text-zinc-400">前日比</span>
                 </>
               ) : (
                 <>
@@ -153,7 +153,7 @@ export default async function DashboardPage() {
                     {kpi.dailyChange > 0 && "+"}
                     {kpi.dailyChange.toLocaleString()} 円
                   </span>
-                  <span className="text-zinc-500">前日比</span>
+                  <span className="text-zinc-400">前日比</span>
                 </>
               )}
             </div>
@@ -268,13 +268,15 @@ export default async function DashboardPage() {
             <TableBody>
               {(() => {
                 const history = chartData;
-                const now = new Date();
-                const oneWeekAgo = new Date(now);
-                oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
-                const oneMonthAgo = new Date(now);
-                oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
-                const oneYearAgo = new Date(now);
-                oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
+                // 比較対象日は JST カレンダー基準で計算する（DB の日付は JST 日付の
+                // UTC 真夜中で保存されるため，Date.UTC で同形式の Date を生成する）。
+                // ローカル TZ の setDate/setMonth では DST 移行日で時刻が 1 時間ずれ，
+                // JST 日付が 1 日ずれる可能性がある
+                const nowKey = formatJSTDate(new Date());
+                const [ny, nm, nd] = nowKey.split("-").map(Number);
+                const oneWeekAgo = new Date(Date.UTC(ny, nm - 1, nd - 7));
+                const oneMonthAgo = new Date(Date.UTC(ny, nm - 2, nd));
+                const oneYearAgo = new Date(Date.UTC(ny - 1, nm - 1, nd));
 
                 // chartData のキーは JST 日付文字列のため，JST で検索する
                 // （サーバーの TZ が JST でない環境でも正しくヒットする）
@@ -299,7 +301,7 @@ export default async function DashboardPage() {
                 // 0 と比較すると「+X (0.00%)」という誤解を招く表示になるため．
                 const renderChange = (current: number, ago: number | null) => {
                   if (ago === null) {
-                    return <span className="text-zinc-500">—</span>;
+                    return <span className="text-zinc-400">—</span>;
                   }
                   const d = diff(current, ago);
                   return (
@@ -312,7 +314,7 @@ export default async function DashboardPage() {
                         {d.num >= 0 && "+"}
                         {d.num.toLocaleString()}
                       </span>
-                      <span className="whitespace-nowrap text-zinc-500 ml-0.5">
+                      <span className="whitespace-nowrap text-zinc-400 ml-0.5">
                         ({d.num >= 0 && "+"}
                         {d.pct}%)
                       </span>
@@ -393,7 +395,7 @@ export default async function DashboardPage() {
                     <span className="font-medium text-zinc-200 truncate text-sm">
                       {p.subAccount.mainAccount.label}
                     </span>
-                    <span className="text-xs text-zinc-500 truncate">
+                    <span className="text-xs text-zinc-400 truncate">
                       {p.subAccount.currentName}
                     </span>
                   </div>
@@ -402,14 +404,20 @@ export default async function DashboardPage() {
                       {p.points.toLocaleString()} pt
                     </div>
                     <div className="text-xs text-amber-600">
-                      あと{" "}
-                      {p.expirationDate
-                        ? Math.ceil(
-                            (p.expirationDate.getTime() - Date.now()) /
-                              (1000 * 60 * 60 * 24),
-                          )
-                        : "?"}{" "}
-                      日
+                      {(() => {
+                        if (!p.expirationDate) return "—";
+                        // JST カレンダー日数の差で計算する（expirationDate は JST 日付の
+                        // UTC 真夜中で保存されるため，時刻差の ceil では JST 00:00-09:00
+                        // の窓で +1 日ずれる）
+                        const daysLeft = Math.round(
+                          (Date.parse(formatJSTDate(p.expirationDate)) -
+                            Date.parse(formatJSTDate(new Date()))) /
+                            86400000,
+                        );
+                        return daysLeft <= 0
+                          ? "本日中に期限"
+                          : `あと ${daysLeft} 日`;
+                      })()}
                     </div>
                   </div>
                 </div>

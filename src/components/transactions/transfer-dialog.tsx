@@ -39,6 +39,7 @@ export function TransferDialog({
   onOpenChange,
   transactionId,
   transactionDesc,
+  sourceSubAccountId,
   filterOptions,
   onDone,
 }: {
@@ -46,6 +47,8 @@ export function TransferDialog({
   onOpenChange: (open: boolean) => void;
   transactionId: string;
   transactionDesc: string;
+  // 出金元明細自身のサブ口座（振替先候補から除外する）
+  sourceSubAccountId: string | null;
   filterOptions: FilterOption[];
   onDone: () => void;
 }) {
@@ -65,7 +68,10 @@ export function TransferDialog({
     }
   }, [open]);
 
-  const availableSubAccounts =
+  // 出金元明細自身のサブ口座は振替先候補から除外する
+  // （選択して送信するまで「同じ口座には振替できません」エラーで
+  //  失敗が分からないのを防ぐ）
+  const availableSubAccounts = (
     selectedMainAccountId === "all" || selectedMainAccountId === ""
       ? filterOptions.flatMap(ma =>
           ma.subAccounts.map(sa => ({
@@ -81,7 +87,8 @@ export function TransferDialog({
           mainLabel:
             filterOptions.find(ma => ma.id === selectedMainAccountId)?.label ??
             "",
-        }));
+        }))
+  ).filter(sa => sa.id !== sourceSubAccountId);
 
   /**
    * 振替設定を実行するハンドラである．
@@ -100,7 +107,7 @@ export function TransferDialog({
         createRule: true,
       });
       toast.success("振替扱いに設定しました．", {
-        description: `"${transactionDesc}" が振替明細になり、自動で振替ルールが登録されました．`,
+        description: `"${transactionDesc}" が振替明細になり，自動で振替ルールが登録されました．`,
       });
       onOpenChange(false);
       onDone();

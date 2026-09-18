@@ -2,7 +2,7 @@ import { ArrowLeftRight } from "lucide-react";
 import type { Metadata } from "next";
 import { IncomeExpenseContent } from "@/components/income-expense/income-expense-content";
 import { PageHeader } from "@/components/page-header";
-import { nowJST } from "@/lib/utils";
+import { formatJSTDate, nowJST } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
@@ -20,15 +20,17 @@ export const metadata: Metadata = {
  * 年別推移データはクライアントサイドで年切り替え時にfetchする．
  */
 export default async function IncomeExpensePage() {
-  const now = nowJST();
+  // JST 基準で年月を導出する（ローカル TZ の getFullYear/getMonth では
+  // JST 日付境界で前後 1 日ずれる）
+  const nowKey = formatJSTDate(nowJST());
 
   return (
     <div className="space-y-6 animate-fade-in">
       <PageHeader title="収支" icon={ArrowLeftRight} />
 
       <IncomeExpenseContent
-        initialYear={now.getFullYear()}
-        initialMonth={now.getMonth() + 1}
+        initialYear={Number(nowKey.slice(0, 4))}
+        initialMonth={Number(nowKey.slice(5, 7))}
       />
     </div>
   );
