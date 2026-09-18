@@ -61,6 +61,18 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
     ref,
   ) => {
     const Comp = asChild ? Slot.Root : "button";
+    // asChild (Slot) は子要素が単一エレメントであることを要求する。
+    // loading アイコンを兄弟として注入すると children が配列になり，
+    // react-slot 1.3.x の検証で例外が投げられるため，
+    // asChild 時は children をそのままスロットに渡す（スピナーは非表示）。
+    const content = asChild ? (
+      children
+    ) : (
+      <>
+        {loading && <Loader2 className="h-4 w-4 animate-spin" />}
+        {children}
+      </>
+    );
     return (
       <Comp
         className={cn(buttonVariants({ variant, size, className }))}
@@ -68,8 +80,7 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
         disabled={disabled || loading}
         {...props}
       >
-        {loading && <Loader2 className="h-4 w-4 animate-spin" />}
-        {children}
+        {content}
       </Comp>
     );
   },
