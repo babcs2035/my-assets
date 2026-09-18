@@ -108,25 +108,37 @@ export async function updateMainCategory(
  */
 export async function deleteMainCategory(id: string) {
   logger.info(`🗑️ Deleting main category: ${id}`);
-  // サブカテゴリーに紐付くトランザクションのsubCategoryIdをnullにする
-  const subCategories = await prisma.subCategoryItem.findMany({
-    where: { mainCategoryId: id },
-    select: { id: true },
-  });
-  const subCategoryIds = subCategories.map(sc => sc.id);
-
-  if (subCategoryIds.length > 0) {
-    await prisma.transaction.updateMany({
-      where: { subCategoryId: { in: subCategoryIds } },
-      data: { subCategoryId: null },
+  // 参照解除・ルール削除・サブカテゴリー削除・メインカテゴリー削除を
+  // 1 つのトランザクションにまとめる．別クエリに分割すると，最後の
+  // mainCategory 削除が失敗したとき（SubCategoryItem.mainCategory は
+  // Restrict なのでサブカテゴリー存在時は必ず失敗する）前半の
+  // 「ルール削除・取引の subCategoryId null 化」だけ確定し，分類が
+  // 失われたままカテゴリーが残る破損状態になるため．
+  const result = await prisma.$transaction(async tx => {
+    const subCategories = await tx.subCategoryItem.findMany({
+      where: { mainCategoryId: id },
+      select: { id: true },
     });
-    await prisma.categoryRule.deleteMany({
-      where: { subCategoryId: { in: subCategoryIds } },
-    });
-  }
+    const subCategoryIds = subCategories.map(sc => sc.id);
 
-  const result = await prisma.mainCategory.delete({
-    where: { id },
+    if (subCategoryIds.length > 0) {
+      // サブカテゴリーに紐付くトランザクションの subCategoryId を null にする
+      await tx.transaction.updateMany({
+        where: { subCategoryId: { in: subCategoryIds } },
+        data: { subCategoryId: null },
+      });
+      await tx.categoryRule.deleteMany({
+        where: { subCategoryId: { in: subCategoryIds } },
+      });
+      // Restrict 制約を回避するため，サブカテゴリー自体も削除する
+      await tx.subCategoryItem.deleteMany({
+        where: { id: { in: subCategoryIds } },
+      });
+    }
+
+    return tx.mainCategory.delete({
+      where: { id },
+    });
   });
   revalidatePath("/settings");
   revalidatePath("/transactions");
