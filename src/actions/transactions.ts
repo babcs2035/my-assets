@@ -474,6 +474,22 @@ export async function markTransactionAsTransfer(input: TransferMarkInput) {
   const targetId = crypto.randomUUID();
 
   await prisma.$transaction(async tx => {
+    // 出金側を原子に「確保」する．isTransfer=false を条件に updateMany し，
+    // 並行呼び出しが既にマークした場合 count=0 になるのでロールバックして
+    // 受信側明細の重複生成を防ぐ（単独の update ではチェックと更新が分離され
+    // レースが生じるため）．
+    const claimed = await tx.transaction.updateMany({
+      where: { id: source.id, isTransfer: false },
+      data: {
+        isTransfer: true,
+        transferId,
+        linkedTransId: targetId,
+      },
+    });
+    if (claimed.count === 0) {
+      throw new Error("既に振替扱いの明細です．");
+    }
+
     // 受信側明細を生成
     await tx.transaction.create({
       data: {
@@ -485,16 +501,6 @@ export async function markTransactionAsTransfer(input: TransferMarkInput) {
         isTransfer: true,
         transferId,
         linkedTransId: source.id,
-      },
-    });
-
-    // 出金側明細を更新（相手側IDをセット）
-    await tx.transaction.update({
-      where: { id: source.id },
-      data: {
-        isTransfer: true,
-        transferId,
-        linkedTransId: targetId,
       },
     });
   });
