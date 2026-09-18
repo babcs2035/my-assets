@@ -32,7 +32,10 @@ export function AccountDetailPageContent() {
   // フェッチ完了のフラグ：存在しない ID では getAccountDetail が null を返すため，
   // 「未読込み」と「口座が存在しない」を区別する必要がある
   const [loaded, setLoaded] = useState(false);
+  // エラー時の再試行用（増やすとフェッチ effect が再実行される）
+  const [reloadKey, setReloadKey] = useState(0);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: reloadKey は再試行トリガーであり，effect 本体では使用しない
   useEffect(() => {
     let cancelled = false;
     setLoaded(false);
@@ -57,12 +60,22 @@ export function AccountDetailPageContent() {
     return () => {
       cancelled = true;
     };
-  }, [id]);
+  }, [id, reloadKey]);
 
   if (error) {
     return (
-      <div className="flex flex-col items-center justify-center py-16">
+      <div className="flex flex-col items-center justify-center gap-3 py-16">
         <p className="text-sm text-red-400">{error}</p>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => {
+            setError(null);
+            setReloadKey(k => k + 1);
+          }}
+        >
+          再試行する
+        </Button>
       </div>
     );
   }
@@ -84,7 +97,15 @@ export function AccountDetailPageContent() {
     );
   }
 
-  return <AccountDetailContent account={account} billings={billings ?? []} />;
+  // key を account.id にすると口座切替（/accounts/A → /accounts/B）で
+  // 子コンポーネント（銘柄選択状態など）が確実にリセットされる
+  return (
+    <AccountDetailContent
+      key={account.id}
+      account={account}
+      billings={billings ?? []}
+    />
+  );
 }
 
 /**
@@ -207,13 +228,19 @@ function AccountDetailContent({
       {/* ヘッダー */}
       <div className="flex items-center gap-3">
         <Link href="/accounts">
-          <Button variant="ghost" size="icon" className="h-8 w-8">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-9 w-9"
+            aria-label="口座一覧に戻る"
+          >
             <ArrowLeft className="h-4 w-4" />
           </Button>
         </Link>
         <div className="min-w-0">
-          <h1 className="flex items-center gap-2 text-xl font-bold tracking-tight text-zinc-50 sm:text-2xl truncate">
-            {account.label}
+          {/* truncate は flex コンテナ（h1）では効かないため，内側の span に付与する */}
+          <h1 className="flex items-center gap-2 text-xl font-bold tracking-tight text-zinc-50 sm:text-2xl">
+            <span className="truncate">{account.label}</span>
           </h1>
         </div>
       </div>

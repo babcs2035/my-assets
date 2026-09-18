@@ -33,7 +33,7 @@ export default function GlobalError({
         <p className="text-base font-medium text-zinc-200">
           表示中に問題が発生しました
         </p>
-        <p className="text-sm text-zinc-500">
+        <p className="text-sm text-zinc-400">
           ページを再読み込みしても解決しない場合は，時間を空けてから再度お試しください．
         </p>
       </div>

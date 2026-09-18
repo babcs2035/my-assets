@@ -77,10 +77,10 @@ export function AccountList({ accounts }: { accounts: AccountListItem[] }) {
     startTransition(async () => {
       try {
         await reorderMainAccounts(orderedIds);
-        toast.success("並び順を更新しました。");
+        toast.success("並び順を更新しました．");
         router.refresh();
       } catch {
-        toast.error("並び順の更新に失敗しました。");
+        toast.error("並び順の更新に失敗しました．");
         setItems(accounts);
       }
     });
@@ -121,15 +121,20 @@ export function AccountList({ accounts }: { accounts: AccountListItem[] }) {
               <CardHeader className="gap-0 py-2">
                 <div className="flex items-start justify-between">
                   <div className="flex items-center gap-2 min-w-0">
-                    <GripVertical className="h-4 w-4 text-zinc-600 shrink-0" />
+                    {/* ドラッグハンドル（HTML5 DnD はタッチ非対応のためモバイルでは非表示） */}
+                    <GripVertical className="hidden h-4 w-4 text-zinc-400 shrink-0 md:block" />
                     <div className="min-w-0">
                       <CardTitle className="text-base truncate">
                         {account.label}
                       </CardTitle>
                     </div>
                   </div>
-                  <Link href={`/accounts/${account.id}`}>
-                    <ChevronRight className="h-4 w-4 text-zinc-600 transition-transform hover:translate-x-0.5 hover:text-zinc-400" />
+                  <Link
+                    href={`/accounts/${account.id}`}
+                    className="p-2 -m-1"
+                    aria-label={`${account.label} の詳細を見る`}
+                  >
+                    <ChevronRight className="h-4 w-4 text-zinc-400 transition-transform hover:translate-x-0.5 hover:text-zinc-400" />
                   </Link>
                 </div>
               </CardHeader>
@@ -189,16 +194,17 @@ export function AccountList({ accounts }: { accounts: AccountListItem[] }) {
                           <div className="mb-1.5 text-xs font-medium text-zinc-400">
                             クレジットカード請求
                           </div>
-                          {futureBillings.map(b => (
+                          {futureBillings.map((b, i) => (
                             <div
-                              key={b.subAccountName}
+                              key={`${b.subAccountName}-${i}`}
                               className="flex items-center justify-between text-sm"
                             >
+                              {/* 名前と日付を縦に積む（横並びだと狭い幅で日付が切れる） */}
                               <div className="min-w-0 flex-1">
-                                <span className="text-zinc-400 truncate">
+                                <span className="block text-zinc-400 truncate">
                                   {b.subAccountName}
                                 </span>
-                                <span className="ml-1.5 text-[11px] text-zinc-500">
+                                <span className="block text-[11px] text-zinc-400">
                                   {formatJSTDate(b.billingDate)}
                                 </span>
                               </div>
