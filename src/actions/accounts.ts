@@ -336,6 +336,11 @@ export async function deleteMainAccount(id: string) {
       await tx.pointDetail.deleteMany({
         where: { subAccountId: { in: subAccountIds } },
       });
+      // TransferRule.targetSubAccount は Restrict なので，
+      // 削除対象のサブ口座が転送ルールの対象である場合は先にルールを削除する
+      await tx.transferRule.deleteMany({
+        where: { targetSubAccountId: { in: subAccountIds } },
+      });
       await tx.subAccount.deleteMany({
         where: { id: { in: subAccountIds } },
       });
