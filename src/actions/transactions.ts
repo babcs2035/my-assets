@@ -545,12 +545,13 @@ export async function createTransferRule(input: TransferRuleCreateInput) {
   const data = transferRuleCreateSchema.parse(input);
   logger.info(`➕ Creating transfer rule for keyword: ${data.keyword}`);
 
-  // 同じキーワードを持つ既存のルールを削除してから新規作成する
-  await prisma.transferRule.deleteMany({
-    where: { keyword: data.keyword },
+  // 同じキーワードを持つ既存のルールを削除してから新規作成する．
+  // 削除と作成を 1 つのトランザクションにまとめる（作成失敗で既存ルールが
+  // 消えないようにするため）
+  const result = await prisma.$transaction(async tx => {
+    await tx.transferRule.deleteMany({ where: { keyword: data.keyword } });
+    return tx.transferRule.create({ data });
   });
-
-  const result = await prisma.transferRule.create({ data });
   revalidatePath("/settings");
   revalidatePath("/transactions");
   return result;

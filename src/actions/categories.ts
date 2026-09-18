@@ -240,12 +240,13 @@ export async function createCategoryRule(input: CategoryRuleCreateInput) {
   const data = categoryRuleCreateSchema.parse(input);
   logger.info(`➕ Creating category rule for keyword: ${data.keyword}`);
 
-  // 同じキーワードを持つ既存のルールを削除してから新規作成する
-  await prisma.categoryRule.deleteMany({
-    where: { keyword: data.keyword },
+  // 同じキーワードを持つ既存のルールを削除してから新規作成する．
+  // 削除と作成を 1 つのトランザクションにまとめる（作成失敗で既存ルールが
+  // 消えないようにするため）
+  const result = await prisma.$transaction(async tx => {
+    await tx.categoryRule.deleteMany({ where: { keyword: data.keyword } });
+    return tx.categoryRule.create({ data });
   });
-
-  const result = await prisma.categoryRule.create({ data });
   revalidatePath("/settings");
   revalidatePath("/transactions");
   return result;
@@ -493,47 +494,49 @@ export async function importCategories(data: unknown) {
     `Importing categories with ${parsed.categories.length} main categories`,
   );
 
-  // 既存データを全削除（Transaction は保持）
-  // Transaction.subCategory には cascade が無いため (Restrict)，
-  // 参照を先に null 化する（deleteMainCategory / deleteSubCategory と同じパターン）
-  await prisma.$transaction([
-    prisma.transaction.updateMany({
+  // 全削除と再構築を 1 つの相互作用トランザクションにまとめる．
+  // 別トランザクションに分割すると，作成側が失敗したとき（例: インポートに
+  // 同名の重複があり unique 制約に違反）削除は確定したまま作成だけロールバックし，
+  // 全カテゴリー・ルールが失われるため，原子性を保つ．
+  await prisma.$transaction(async tx => {
+    // 既存データを全削除（Transaction は保持）
+    // Transaction.subCategory には cascade が無いため (Restrict)，
+    // 参照を先に null 化する（deleteMainCategory / deleteSubCategory と同じパターン）
+    await tx.transaction.updateMany({
       where: { subCategoryId: { not: null } },
       data: { subCategoryId: null },
-    }),
-    prisma.categoryRule.deleteMany(),
-    prisma.subCategoryItem.deleteMany(),
-    prisma.mainCategory.deleteMany(),
-  ]);
-
-  // 各 type 内の sortOrder をインデックスで計算（DB は空なので自前で管理）
-  const typeCounter: Record<string, number> = { INCOME: 0, EXPENSE: 0 };
-  const createPromises = parsed.categories.map(mc => {
-    const sortOrder = typeCounter[mc.type]++;
-
-    return prisma.mainCategory.create({
-      data: {
-        name: mc.name,
-        type: mc.type,
-        sortOrder: sortOrder,
-        subCategories: {
-          create: mc.subCategories.map((sc, scIndex) => ({
-            name: sc.name,
-            sortOrder: scIndex,
-            rules: {
-              create: sc.rules.map(r => ({
-                keyword: r.keyword,
-                priority: r.priority,
-              })),
-            },
-          })),
-        },
-      },
     });
-  });
+    await tx.categoryRule.deleteMany();
+    await tx.subCategoryItem.deleteMany();
+    await tx.mainCategory.deleteMany();
 
-  // トランザクションで新規作成
-  await prisma.$transaction(createPromises);
+    // 各 type 内の sortOrder をインデックスで計算（DB は空なので自前で管理）
+    const typeCounter: Record<string, number> = { INCOME: 0, EXPENSE: 0 };
+    const createPromises = parsed.categories.map(mc => {
+      const sortOrder = typeCounter[mc.type]++;
+
+      return tx.mainCategory.create({
+        data: {
+          name: mc.name,
+          type: mc.type,
+          sortOrder: sortOrder,
+          subCategories: {
+            create: mc.subCategories.map((sc, scIndex) => ({
+              name: sc.name,
+              sortOrder: scIndex,
+              rules: {
+                create: sc.rules.map(r => ({
+                  keyword: r.keyword,
+                  priority: r.priority,
+                })),
+              },
+            })),
+          },
+        },
+      });
+    });
+    await Promise.all(createPromises);
+  });
 
   revalidatePath("/settings");
   revalidatePath("/transactions");
