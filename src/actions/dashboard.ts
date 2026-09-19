@@ -196,11 +196,16 @@ async function getAssetHistoryInternal(days?: number) {
 async function getExpiringPointsInternal() {
   logger.info("Checking for expiring points...");
   const now = nowJST();
-  // 現在の JST 年月から「翌月 1 日」を組む（TZ 非依存）
+  // 現在の JST 年月から「翌月 1 日」を組む（TZ 非依存）．
+  // 保存日付は JST 暦日の UTC 0 時なので，Date.UTC（0 始まり月）で境界を組む．
+  // 現在月が 12 月なら翌年の 1 月になる（Date.UTC の月オーバーフローに
+  // 依存せず，意図を明示する）．
   const jst = formatJSTDate(now);
-  const oneMonthLater = new Date(
-    Date.UTC(Number(jst.slice(0, 4)), Number(jst.slice(5, 7)), 1),
-  );
+  const currentYear = Number(jst.slice(0, 4));
+  const currentMonth = Number(jst.slice(5, 7)); // 1 始まり
+  const nextMonth = currentMonth === 12 ? 1 : currentMonth + 1;
+  const nextYear = currentMonth === 12 ? currentYear + 1 : currentYear;
+  const oneMonthLater = new Date(Date.UTC(nextYear, nextMonth - 1, 1));
 
   return prisma.pointDetail.findMany({
     where: {
