@@ -143,11 +143,21 @@ async function runAllProvidersSync() {
   }
 }
 
+// register() が dev のホットリロード等で複数回呼ばれた場合に備え，
+// タイマーの重複生成を防ぐためのフラグである．
+let schedulerStarted = false;
+
 /**
  * 08:00 JST に同期を実行するスケジューラを開始する関数である．
  * 最初の実行は次回の 08:00 JST に，その後は 24 時間ごとに繰り返す．
+ * 冪等であり，2 回目以降の呼び出しは何もしない．
  */
 export function startScheduler() {
+  if (schedulerStarted) {
+    return;
+  }
+  schedulerStarted = true;
+
   const msUntilNext = msUntilNext0800JST();
   const hoursUntilNext = (msUntilNext / (1000 * 60 * 60)).toFixed(2);
 
