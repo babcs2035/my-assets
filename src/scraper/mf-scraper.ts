@@ -792,6 +792,11 @@ async function scrapeTransactions(
   }> = [];
   const seenActIds = new Set<number>();
 
+  // 日付ウィンドウの計算はサーバーのローカル TZ が JST (TZ=Asia/Tokyo) であることを
+  // 前提としている（Dockerfile / docker-compose / .env.example で設定済み）．
+  // そのためローカル TZ の Date メソッド（new Date()/setDate/getMonth 等）が
+  // JST 暦日に沿って正しく動作する．TZ を JST 以外に変更するとこれらの計算が
+  // ずれるため，変更時は本ファイルを JST 非依存（formatJSTDate 等）に書き換えること．
   const currentMonthStart = new Date();
   currentMonthStart.setDate(1);
   currentMonthStart.setHours(0, 0, 0, 0);
@@ -1090,11 +1095,23 @@ async function scrapeBalanceHistory(page: Page, options: MfScraperOptions) {
   const today = todayJST();
   today.setHours(0, 0, 0, 0);
 
-  let minDate = new Date(today);
+  let minDate: Date;
   if (options.mode === "manual") {
     minDate = toJstMidnight(BACKFILL_START_DATE);
   } else {
-    minDate.setMonth(minDate.getMonth() - 2);
+    // 2 ヶ月前を求める．setMonth は月末で rollover するため（例: 4/30 → 3/2），
+    // 対象月の末日に日付をクランプして JST 暦日ベースで計算する．
+    // 月インデックスを負数にすると Date.UTC が年またぎを処理してくれる．
+    const [y, m, d] = formatJSTDate(today).split("-").map(Number);
+    const targetMonthIndex = m - 1 - 2;
+    const lastDay = new Date(Date.UTC(y, targetMonthIndex + 1, 0)).getUTCDate();
+    const dt = new Date(Date.UTC(y, targetMonthIndex, Math.min(d, lastDay)));
+    minDate = toJstMidnight(
+      `${dt.getUTCFullYear()}-${String(dt.getUTCMonth() + 1).padStart(
+        2,
+        "0",
+      )}-${String(dt.getUTCDate()).padStart(2, "0")}`,
+    );
   }
   minDate.setHours(0, 0, 0, 0);
 
