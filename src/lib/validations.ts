@@ -162,9 +162,30 @@ export type CategoryExportData = z.infer<typeof categoryExportSchema>;
 
 /**
  * カテゴリインポートデータのスキーマである．
- * エクスポートデータと同じ構造．
+ * エクスポートデータと同じ構造だが，インポートはユーザー提供データなので
+ * 名前・キーワードに空文字列を許容しない（min(1) を適用）．
+ * エクスポートは DB 由来で既に検証済みのため categoryExportSchema は緩いままにする．
  */
-export const categoryImportSchema = categoryExportSchema;
+export const categoryImportSchema = z.object({
+  exportedAt: z.string().optional(),
+  categories: z.array(
+    z.object({
+      name: z.string().min(1, "カテゴリー名は必須です"),
+      type: z.enum(["INCOME", "EXPENSE"]),
+      subCategories: z.array(
+        z.object({
+          name: z.string().min(1, "サブカテゴリー名は必須です"),
+          rules: z.array(
+            z.object({
+              keyword: z.string().min(1, "キーワードは必須です"),
+              priority: z.number().int(),
+            }),
+          ),
+        }),
+      ),
+    }),
+  ),
+});
 export type CategoryImportData = z.infer<typeof categoryImportSchema>;
 
 // providerCreateSchema を流用する．既存の ProviderCreateInput 型で十分である．
