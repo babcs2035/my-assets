@@ -214,8 +214,10 @@ export function getItemField(itemId: string, field: string): string {
         { err: error, field, itemId },
         `Failed to get field '${field}' from 1Password CLI for item: ${itemId}.`,
       );
+      // stderr は機密情報を含む可能性があるためユーザー向けエラーには含めない．
+      // 詳細は上記の logger.error({ err: error }) で既にログ出力済み．
       throw new Error(
-        `Failed to get field '${field}' from 1Password CLI for item: ${itemId}. ${stderr}`,
+        `Failed to get field '${field}' from 1Password CLI for item: ${itemId}.`,
       );
     }
   }
@@ -277,8 +279,10 @@ export function getItemOtp(itemId: string): string {
         { err: error, itemId },
         `Failed to get OTP from 1Password CLI for item: ${itemId}.`,
       );
+      // stderr は機密情報を含む可能性があるためユーザー向けエラーには含めない．
+      // 詳細は上記の logger.error({ err: error }) で既にログ出力済み．
       throw new Error(
-        `Failed to get OTP from 1Password CLI for item: ${itemId}. ${stderr}`,
+        `Failed to get OTP from 1Password CLI for item: ${itemId}.`,
       );
     }
   }
