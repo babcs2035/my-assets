@@ -2297,13 +2297,6 @@ async function recalculateLiabilityHistory(
   const today = todayJST();
   const todayStr = formatJSTDate(today);
 
-  // 既存のBalanceHistoryを全削除（ゼロからやり直す）
-  for (const sa of subAccounts) {
-    await prisma.balanceHistory.deleteMany({
-      where: { subAccountId: sa.id },
-    });
-  }
-
   // DBから全取引を取得（スクレイピング結果に依存しない）
   const liabilityTransferIds = subAccounts.map(sa => sa.id);
   const allTransactions = await prisma.transaction.findMany({
@@ -2374,6 +2367,7 @@ async function recalculateLiabilityHistory(
     // 日付昇順でソート
     txsByDate.sort((a, b) => a.date.localeCompare(b.date));
 
+    // 明細がない口座は逆算できないので，既存の履歴（Phase 1 で保存した当日分を含む）を残す
     if (txsByDate.length === 0) {
       logger.debug(
         { subAccount: sa.currentName },
@@ -2438,29 +2432,18 @@ async function recalculateLiabilityHistory(
       cursor.setDate(cursor.getDate() + 1);
     }
 
-    // 全エントリを日付昇順に upsert
-    for (const [dateStr, bal] of Array.from(entries.entries()).sort((a, b) =>
-      a[0].localeCompare(b[0]),
-    )) {
-      const historyDate = new Date(`${dateStr}T08:00:00+09:00`);
-      await prisma.balanceHistory.upsert({
-        where: {
-          subAccountId_date: {
-            subAccountId: sa.id,
-            date: historyDate,
-          },
-        },
-        create: {
-          subAccountId: sa.id,
-          date: historyDate,
-          balance: bal,
-        },
-        update: {
-          balance: bal,
-        },
-      });
-      totalSaved++;
-    }
+    // 口座ごとに削除と再作成を 1 つのトランザクションで行う．
+    // 途中で失敗や中止が起きても，その口座の履歴は再計算前の状態で残る
+    const historyRows = Array.from(entries.entries()).map(([dateStr, bal]) => ({
+      subAccountId: sa.id,
+      date: new Date(`${dateStr}T08:00:00+09:00`),
+      balance: bal,
+    }));
+    await prisma.$transaction([
+      prisma.balanceHistory.deleteMany({ where: { subAccountId: sa.id } }),
+      prisma.balanceHistory.createMany({ data: historyRows }),
+    ]);
+    totalSaved += historyRows.length;
 
     logger.info(
       {
