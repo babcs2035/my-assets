@@ -41,6 +41,9 @@ jobs:
       - name: Run Type Check
         run: pnpm tsc --noEmit
 
+      - name: Run Unit Tests
+        run: pnpm test
+
   build-and-push:
     name: Build & Push Docker Image
     runs-on: ubuntu-latest

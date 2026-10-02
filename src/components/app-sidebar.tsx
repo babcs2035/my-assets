@@ -23,6 +23,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
+import { isNavHrefActive } from "@/lib/navigation";
 
 /**
  * サイドバーのナビゲーション項目を定義する配列である．
@@ -77,13 +78,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
    * 指定されたパスが現在のパスと一致するか，またはその配下であるかを判定する関数である．
    * usePathname() は basePath を除いたパス（例: `/assets`）を返すため，href とそのまま比べる．
    */
-  const isActive = (href: string) => {
-    if (href === "/") {
-      return pathname === "/";
-    }
-    // `/accounts` が `/accounts-foo` のような別のページに一致しないよう，区切りの `/` まで含めて比べる
-    return pathname === href || pathname.startsWith(`${href}/`);
-  };
+  const isActive = (href: string) => isNavHrefActive(pathname, href);
 
   return (
     <Sidebar collapsible="icon" {...props} className="border-r-0">

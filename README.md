@@ -28,6 +28,7 @@
 | コンテナ | Docker / Docker Compose |
 | 型チェッカー | tsc |
 | Linter / Formatter | Biome 2.5 |
+| テスト | Vitest 5 |
 | タスクランナー | mise |
 
 ## プロジェクト構造
@@ -151,7 +152,7 @@ basePath が `/my-assets` のため，ブラウザで `http://localhost:3000/my-
 
 ## デプロイ (GitHub Actions)
 
-`main` への push により，`.github/workflows/ci-cd.yml` が自動実行される（PR には `ci-checks`（biome / tsc）が実行される）．
+`main` への push により，`.github/workflows/ci-cd.yml` が自動実行される（PR には `ci-checks`（biome / tsc / vitest）が実行される）．
 
 ### デプロイフロー
 
