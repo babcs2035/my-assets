@@ -32,6 +32,8 @@
   CSP の直し方は次の 2 つから選ぶ．
   - nonce を使う（`node_modules/next/dist/docs/01-app/02-guides/content-security-policy.md` の方式）．全ページが動的レンダリングになる．
   - `script-src 'self' 'unsafe-inline'` に緩める．静的レンダリングは保てるが，インラインスクリプトの注入は防げない．
+- **対応**: `18bed25` で matcher を直し，CSP をいったん `'unsafe-inline'` に緩めた．その後 `4f8f4c8` で nonce 方式に移した．
+  8 ページのうち 7 ページはもともと `force-dynamic` だったので，動的レンダリングに変わったのは `/analysis` と `/_not-found` だけである．
 - **あわせて直す点**: 同じオリジンから呼ぶ Server Actions には CORS ヘッダーは要らない．`Access-Control-Allow-Credentials: true` を全応答に付ける処理は削除してよい．
   `X-XSS-Protection` は現在のブラウザでは使われていないので，削除するか `0` にする．
 
@@ -144,12 +146,16 @@
 | S1 | `getExpiringPoints` が `expirationDate` を ISO 文字列で返すようにした | `91d4806` |
 | D1 | Dockerfile の `tsx` を lockfile と同じ `4.23.15` にした | `a5cfec8` |
 | P4 | Vitest を導入し，sidebar の判定ロジックに回帰テストを付けた | `b41534f` |
+| C2 | CSP の `script-src` をリクエストごとの nonce と `'strict-dynamic'` にし，root layout で全ページを動的レンダリングにした | `4f8f4c8` |
 
 ## 調べてわかったこと
 
 - **proxy の matcher には `basePath` が自動で付く**: `basePath` を設定しているときは，matcher に `basePath` を含めない．ビルドが実際にどう解釈したかは `.next/server/functions-config-manifest.json` の `matchers[].regexp` で確かめられる．
 - **`'strict-dynamic'` には nonce か hash が要る**: `'strict-dynamic'` があると，`'self'` などのホストによる許可は無視される．nonce なしで指定すると，すべてのスクリプトが止まる．
 - **`vite` の `minimumReleaseAge`**: `vite@8.3.2`（2026-10-01T10:17Z 公開）は，2026-10-02 の作業時点で 24 時間経っていなかった．`^8.3.1` と幅を持たせて指定すると，pnpm は期間の条件を満たす最新版を選ぶ．
+- **nonce はリクエストの CSP ヘッダーから読まれる**: Next.js は描画時に，応答ではなくリクエストの `Content-Security-Policy` から nonce を取り出す．そのため proxy では，`NextResponse.next({ request: { headers } })` を使ってリクエストにも同じ CSP を付ける．
+- **`style-src` には nonce を使わない**: Radix UI と recharts は `style` 属性を，`chart.tsx` は `<style>` 要素を出力する．nonce は `style` 属性には効かない．また，nonce を書くとブラウザは `'unsafe-inline'` を無視するので，表示が崩れる．
+- **CSP の確認手順**: production build を `next start` で起動し，HTML の `<script>` すべてにヘッダーと同じ nonce が付いていることを確かめる．さらに Playwright で `securitypolicyviolation` event を記録しながら，ページを開く場合と，リンクでクライアント側の遷移をする場合の両方を確かめる．
 - **zsh には `PIPESTATUS` がない**: `cmd | tail` のあとの `$?` は `tail` の終了コードになる．コマンドの成否は，パイプを通さずに実行して確かめる．
 - **Docker での確認手順**: 開発用の DB を汚さないために，専用のネットワークと，ポートを公開しない使い捨ての `postgres:16-alpine` を使う．イメージには `verify` タグを付ける．
   この手順で `prisma migrate deploy`（18 件），`tsx prisma/seed.ts`，`CMD` による起動（200 応答）を確かめた．
