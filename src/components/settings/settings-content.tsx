@@ -544,30 +544,6 @@ export function SettingsContent() {
     setExpandedCategories(newExpanded);
   };
 
-  const handleReorderCategory = async (
-    type: "INCOME" | "EXPENSE",
-    orderedIds: string[],
-  ) => {
-    try {
-      await reorderMainCategories(type, orderedIds);
-      fetchData();
-    } catch {
-      toast.error("カテゴリーの並べ替えに失敗しました．");
-    }
-  };
-
-  const handleReorderSubCategory = async (
-    mainCategoryId: string,
-    orderedIds: string[],
-  ) => {
-    try {
-      await reorderSubCategories(mainCategoryId, orderedIds);
-      fetchData();
-    } catch {
-      toast.error("サブカテゴリーの並べ替えに失敗しました．");
-    }
-  };
-
   const handleMainDragStart = (
     e: React.DragEvent,
     type: "INCOME" | "EXPENSE",
@@ -618,10 +594,13 @@ export function SettingsContent() {
 
     startTransition(async () => {
       try {
-        await handleReorderCategory(currentType, orderedIds);
+        await reorderMainCategories(currentType, orderedIds);
         toast.success("並び順を更新しました．");
       } catch {
         toast.error("カテゴリーの並べ替えに失敗しました．");
+      } finally {
+        // 成功時は保存結果を，失敗時は DB に残っている元の順序を画面に反映する
+        fetchData();
       }
     });
   };
@@ -684,10 +663,13 @@ export function SettingsContent() {
 
     startTransition(async () => {
       try {
-        await handleReorderSubCategory(mainCategoryId, orderedIds);
+        await reorderSubCategories(mainCategoryId, orderedIds);
         toast.success("並び順を更新しました．");
       } catch {
         toast.error("サブカテゴリーの並べ替えに失敗しました．");
+      } finally {
+        // 成功時は保存結果を，失敗時は DB に残っている元の順序を画面に反映する
+        fetchData();
       }
     });
   };
