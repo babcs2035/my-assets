@@ -512,18 +512,31 @@ async function saveHoldingsFromAccountPage(
           },
         });
 
-        await tx.holdingHistory.create({
-          data: {
+        // 同じ日に 2 回同期すると @@unique([subAccountId, name, date]) に当たる．
+        // create ではトランザクション全体（holding の更新を含む）が巻き戻るため upsert にする
+        const historyValues = {
+          quantity: qty,
+          avgCostBasis,
+          unitPrice,
+          valuation,
+          gainLoss: profit,
+          gainLossRate,
+        };
+        await tx.holdingHistory.upsert({
+          where: {
+            subAccountId_name_date: {
+              subAccountId,
+              name: holdingName,
+              date: today,
+            },
+          },
+          create: {
             subAccountId,
             name: holdingName,
-            quantity: qty,
-            avgCostBasis,
-            unitPrice,
-            valuation,
-            gainLoss: profit,
-            gainLossRate,
             date: today,
+            ...historyValues,
           },
+          update: historyValues,
         });
       });
       savedCount++;
