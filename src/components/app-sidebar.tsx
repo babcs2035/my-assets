@@ -75,16 +75,14 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
 
   /**
    * 指定されたパスが現在のパスと一致するか，またはその配下であるかを判定する関数である．
+   * usePathname() は basePath を除いたパス（例: `/assets`）を返すため，href とそのまま比べる．
    */
   const isActive = (href: string) => {
-    const fullPath =
-      href === "/" ? basePath : `${basePath}${href}`.replace(/\/$/, "");
-
-    // ルートパスの場合の特殊判定を行う．
     if (href === "/") {
-      return pathname === "/my-assets" || pathname === "/my-assets/";
+      return pathname === "/";
     }
-    return pathname.startsWith(fullPath);
+    // `/accounts` が `/accounts-foo` のような別のページに一致しないよう，区切りの `/` まで含めて比べる
+    return pathname === href || pathname.startsWith(`${href}/`);
   };
 
   return (
