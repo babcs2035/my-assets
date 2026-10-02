@@ -39,6 +39,9 @@ op-secrets.json
 # local runtime data (secrets, logs, etc.)
 /data/
 
+# Playwright MCP debug output (console logs and page snapshots)
+/.playwright-mcp/
+
 # vercel
 .vercel
 
