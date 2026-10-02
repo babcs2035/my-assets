@@ -207,7 +207,7 @@ async function getExpiringPointsInternal() {
   const nextYear = currentMonth === 12 ? currentYear + 1 : currentYear;
   const oneMonthLater = new Date(Date.UTC(nextYear, nextMonth - 1, 1));
 
-  return prisma.pointDetail.findMany({
+  const points = await prisma.pointDetail.findMany({
     where: {
       subAccount: { isHidden: false },
       expirationDate: {
@@ -215,10 +215,14 @@ async function getExpiringPointsInternal() {
         gt: now,
       },
     },
-    include: {
+    select: {
+      id: true,
+      points: true,
+      expirationDate: true,
       subAccount: {
-        include: {
-          mainAccount: true,
+        select: {
+          currentName: true,
+          mainAccount: { select: { label: true } },
         },
       },
     },
@@ -226,6 +230,13 @@ async function getExpiringPointsInternal() {
       expirationDate: "asc",
     },
   });
+
+  // unstable_cache は結果を JSON で保存するため，キャッシュから返ると Date は
+  // ISO 文字列になる．キャッシュの有無で値の型が変わらないよう，ここで文字列にそろえる
+  return points.map(p => ({
+    ...p,
+    expirationDate: p.expirationDate?.toISOString() ?? null,
+  }));
 }
 
 // ── Cached exports (TTL: 5分) ──
@@ -252,6 +263,7 @@ export const getAssetHistory = unstable_cache(
 
 /**
  * 有効期限が 1 ヶ月以内に迫っているポイント情報を取得する関数である．
+ * expirationDate は ISO 8601 形式の文字列で返す（Date ではない）．
  */
 export const getExpiringPoints = unstable_cache(
   getExpiringPointsInternal,

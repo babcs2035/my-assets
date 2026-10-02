@@ -408,8 +408,8 @@ export default async function DashboardPage() {
                         if (!p.expirationDate) return "—";
                         // JST カレンダー日数の差で計算する（expirationDate は JST 日付の
                         // UTC 真夜中で保存されるため，時刻差の ceil では JST 00:00-09:00
-                        // の窓で +1 日ずれる）．unstable_cache は結果を JSON で保存するため，
-                        // キャッシュから返ると expirationDate は ISO 文字列になる．new Date で戻す
+                        // の窓で +1 日ずれる）．getExpiringPoints は expirationDate を
+                        // ISO 文字列で返すため，new Date で Date に戻してから整形する
                         const daysLeft = Math.round(
                           (Date.parse(
                             formatJSTDate(new Date(p.expirationDate)),
