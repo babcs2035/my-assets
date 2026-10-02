@@ -7,6 +7,7 @@ import { generateTransactionId } from "../lib/hash";
 import logger from "../lib/logger";
 import { getItemField, getItemOtp } from "../lib/onepassword";
 import { prisma } from "../lib/prisma";
+import { acquireSyncLock, releaseSyncLock } from "../lib/sync-lock";
 import { BACKFILL_START_DATE, formatJSTDate, todayJST } from "../lib/utils";
 
 // エントリポイント（直接実行）のみ自動スクレイピングを許可
@@ -2794,16 +2795,11 @@ export async function runMfScraper(
     signal?.removeEventListener("abort", abortHandler);
     activeBrowsers.delete(provider.id);
     await browser.close();
-    // 直接実行（エントリポイント）時のみ切断する．
-    // スケジューラや Server Action からプロセス内で呼ばれた場合は，
-    // アプリ全体で共有する Prisma クライアントを切らない
-    if (isEntry) {
-      await prisma.$disconnect();
-    }
   }
 }
 
-// 直接実行された場合の処理（複数 OP_MF_ITEM_ID 対応）
+// 直接実行された場合の処理（複数 OP_MF_ITEM_ID 対応）．
+// `mise sync` はアプリとは別のプロセスで動くので，DB のロックで画面や自動同期の同期と重ならないようにする
 if (isEntry && process.env.OP_MF_ITEM_ID) {
   const itemIds = process.env.OP_MF_ITEM_ID.split(",")
     .map(s => s.trim())
@@ -2812,13 +2808,36 @@ if (isEntry && process.env.OP_MF_ITEM_ID) {
   (async () => {
     for (const itemId of itemIds) {
       try {
-        logger.info(`🚀 Running scraper for item: ${itemId}`);
-        await runMfScraper(itemId);
+        // runMfScraper と同じく，プロバイダーがなければ作ってからロックを取る
+        const provider = await prisma.provider.upsert({
+          where: { name: itemId },
+          create: { name: itemId, type: "mf", isActive: true },
+          update: {},
+        });
+        const lockedAt = await acquireSyncLock(provider.id);
+        if (!lockedAt) {
+          logger.warn(
+            { itemId },
+            "⚠️ Another sync is running for this provider. Skipping.",
+          );
+          continue;
+        }
+
+        let success = false;
+        try {
+          logger.info(`🚀 Running scraper for item: ${itemId}`);
+          await runMfScraper(itemId);
+          success = true;
+        } finally {
+          await releaseSyncLock(provider.id, lockedAt, success);
+        }
       } catch (err) {
         logger.error({ err, itemId }, "❌ Failed to run MF scraper.");
         process.exit(1);
       }
     }
     logger.info("✅ All scrapers completed.");
+    // 共有の Prisma クライアントは，すべてのアイテムを終えてから 1 回だけ切断する
+    await prisma.$disconnect();
   })();
 }

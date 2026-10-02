@@ -55,6 +55,9 @@ async function runAllProvidersSync() {
   try {
     const { prisma } = await import("@/lib/prisma");
     const { runMfScraper } = await import("@/scraper/mf-scraper");
+    const { acquireSyncLock, releaseSyncLock } = await import(
+      "@/lib/sync-lock"
+    );
 
     const providers = await prisma.provider.findMany({
       where: { isActive: true },
@@ -70,30 +73,31 @@ async function runAllProvidersSync() {
     );
 
     for (const provider of providers) {
+      // ロックを取る前に判定する．取ってから飛ばすと「同期中」のまま残る
+      if (provider.type !== "mf") {
+        logger.warn(
+          `⏰ [Scheduler] Provider type ${provider.type} is not synced by the scheduler. Skipping.`,
+        );
+        continue;
+      }
+
       logger.info(
         `⏰ [Scheduler] Syncing provider: [${provider.type}] ${provider.name}`,
       );
 
+      let lockedAt: Date | null = null;
       try {
-        const nowJST = getNowJST();
-        await prisma.provider.update({
-          where: { id: provider.id },
-          data: { lastSyncAt: nowJST, lastSyncSuccess: null },
-        });
-
-        if (provider.type === "mf") {
-          await runMfScraper(provider.name, undefined, { mode: "scheduled" });
-        } else {
+        lockedAt = await acquireSyncLock(provider.id);
+        if (!lockedAt) {
           logger.warn(
-            `⏰ [Scheduler] Unknown provider type: ${provider.type}. Skipping.`,
+            { name: provider.name },
+            "⏰ [Scheduler] Another sync is running for provider. Skipping.",
           );
           continue;
         }
 
-        await prisma.provider.update({
-          where: { id: provider.id },
-          data: { lastSyncAt: getNowJST(), lastSyncSuccess: true },
-        });
+        await runMfScraper(provider.name, undefined, { mode: "scheduled" });
+        await releaseSyncLock(provider.id, lockedAt, true);
 
         logger.info(
           { name: provider.name },
@@ -105,16 +109,15 @@ async function runAllProvidersSync() {
           "⏰ [Scheduler] ❌ Sync failed for provider.",
         );
 
-        try {
-          await prisma.provider.update({
-            where: { id: provider.id },
-            data: { lastSyncAt: getNowJST(), lastSyncSuccess: false },
-          });
-        } catch {
-          logger.error(
-            { err: error },
-            "⏰ [Scheduler] ❌ Failed to update sync status.",
-          );
+        if (lockedAt) {
+          try {
+            await releaseSyncLock(provider.id, lockedAt, false);
+          } catch (releaseError) {
+            logger.error(
+              { err: releaseError },
+              "⏰ [Scheduler] ❌ Failed to update sync status.",
+            );
+          }
         }
       }
     }

@@ -6,7 +6,11 @@ import {
   revalidateSettingsAndDashboardPages,
   revalidateSettingsPage,
 } from "@/lib/revalidate";
-import { nowJST } from "@/lib/utils";
+import {
+  acquireSyncLock,
+  forceReleaseSyncLock,
+  releaseSyncLock,
+} from "@/lib/sync-lock";
 import {
   type ProviderCreateInput,
   providerCreateSchema,
@@ -136,25 +140,26 @@ export async function syncProvider(id: string) {
     throw new Error(`Provider not found: ${id}`);
   }
 
-  // 既存の同期があれば中止
-  if (activeSyncControllers.has(id)) {
+  // このプロセスで前の手動同期が動いていれば中止し，そのロックを奪う．
+  // 中止された側も自分の印でロックを解除しようとするが，印が変わっているので何も書かない
+  const previous = activeSyncControllers.get(id);
+  if (previous) {
     logger.info(`⚠️ Previous sync for ${id} is still running. Aborting it.`);
-    activeSyncControllers.get(id)?.abort();
+    previous.abort();
     activeSyncControllers.delete(id);
+  }
+
+  // 自動同期や `mise sync` の同期は中止できないので，それらがロックを持っていればエラーにする
+  const lockedAt = await acquireSyncLock(id, { force: previous !== undefined });
+  if (!lockedAt) {
+    logger.warn(`⚠️ Another sync for ${id} is already running.`);
+    throw new Error("別の同期が実行中です．");
   }
 
   const abortController = new AbortController();
   activeSyncControllers.set(id, abortController);
 
   try {
-    await prisma.provider.update({
-      where: { id },
-      data: {
-        lastSyncAt: nowJST(),
-        lastSyncSuccess: null,
-      },
-    });
-
     logger.info(`🚀 Executing scraper for provider: ${provider.name}`);
     await runMfScraper(provider.name, abortController.signal, {
       mode: "manual",
@@ -162,24 +167,12 @@ export async function syncProvider(id: string) {
     logger.info(`✅ Sync completed for provider: ${provider.name}`);
 
     // 同期成功を記録する．
-    await prisma.provider.update({
-      where: { id },
-      data: {
-        lastSyncAt: nowJST(),
-        lastSyncSuccess: true,
-      },
-    });
+    await releaseSyncLock(id, lockedAt, true);
   } catch (error) {
     // 中止された場合は特別な処理
     if (abortController.signal.aborted) {
       logger.info(`🛑 Sync aborted for provider: ${provider.name}`);
-      await prisma.provider.update({
-        where: { id },
-        data: {
-          lastSyncAt: nowJST(),
-          lastSyncSuccess: false,
-        },
-      });
+      await releaseSyncLock(id, lockedAt, false);
       throw new Error("Sync was aborted");
     }
 
@@ -189,17 +182,14 @@ export async function syncProvider(id: string) {
     );
 
     // 同期失敗を記録する．
-    await prisma.provider.update({
-      where: { id },
-      data: {
-        lastSyncAt: nowJST(),
-        lastSyncSuccess: false,
-      },
-    });
+    await releaseSyncLock(id, lockedAt, false);
 
     throw error;
   } finally {
-    activeSyncControllers.delete(id);
+    // 後から始まった同期が登録した controller を消さないよう，自分のものだけを消す
+    if (activeSyncControllers.get(id) === abortController) {
+      activeSyncControllers.delete(id);
+    }
   }
 
   revalidateSettingsAndDashboardPages();
@@ -220,14 +210,8 @@ export async function abortSyncProvider(id: string) {
   // スクレイパー側でも中止処理を呼ぶ
   await abortMfScraper(id);
 
-  // ステータスを失敗に更新
-  await prisma.provider.update({
-    where: { id },
-    data: {
-      lastSyncAt: nowJST(),
-      lastSyncSuccess: false,
-    },
-  });
+  // ステータスを失敗に更新し，ロックを外す
+  await forceReleaseSyncLock(id);
 
   revalidateSettingsAndDashboardPages();
 
