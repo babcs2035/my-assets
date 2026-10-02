@@ -60,7 +60,8 @@ RUN groupadd --system --gid 1001 nodejs && \
     useradd --system --uid 1001 --gid nodejs nextjs
 
 # Install global tools (needed for CMD: prisma migrate deploy, seed)
-RUN pnpm add -g prisma@7.9.1 tsx@4.23.11
+# Keep these versions in sync with pnpm-lock.yaml; global installs ignore workspace overrides
+RUN pnpm add -g prisma@7.9.1 tsx@4.23.15
 
 # Copy standalone build
 COPY --from=build-cache --chown=nextjs:nodejs /app/.next/standalone ./
