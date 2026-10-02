@@ -1381,18 +1381,44 @@ export function SettingsContent() {
                                   </Button>
                                 );
                               }
+                              // モバイル用の Dialog と state を共有すると，CSS で隠れている側も
+                              // portal で同時に開くため，state を持たない AlertDialog にする
                               return (
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  onClick={() =>
-                                    handleSyncProvider(provider.id)
-                                  }
-                                  title="同期"
-                                  aria-label={`プロバイダー「${provider.name}」を同期`}
-                                >
-                                  <RefreshCw className="h-4 w-4 text-blue-400" />
-                                </Button>
+                                <AlertDialog>
+                                  <AlertDialogTrigger asChild>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      title="同期"
+                                      aria-label={`プロバイダー「${provider.name}」を同期`}
+                                    >
+                                      <RefreshCw className="h-4 w-4 text-blue-400" />
+                                    </Button>
+                                  </AlertDialogTrigger>
+                                  <AlertDialogContent>
+                                    <AlertDialogHeader>
+                                      <AlertDialogTitle>
+                                        手動同期の実行
+                                      </AlertDialogTitle>
+                                      <AlertDialogDescription>
+                                        手動同期では {BACKFILL_START_DATE}
+                                        まで遡って，入出金明細と残高推移を全件取得します．
+                                      </AlertDialogDescription>
+                                    </AlertDialogHeader>
+                                    <AlertDialogFooter>
+                                      <AlertDialogCancel>
+                                        キャンセル
+                                      </AlertDialogCancel>
+                                      <AlertDialogAction
+                                        onClick={() =>
+                                          handleSyncProvider(provider.id)
+                                        }
+                                      >
+                                        実行
+                                      </AlertDialogAction>
+                                    </AlertDialogFooter>
+                                  </AlertDialogContent>
+                                </AlertDialog>
                               );
                             })()}
                             <AlertDialog>
