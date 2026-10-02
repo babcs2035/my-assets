@@ -51,11 +51,3 @@ export async function getLastSyncInfo() {
     providerName: provider.name,
   };
 }
-
-/**
- * 後方互換性のために残す関数である．
- */
-export async function getLastSyncTime() {
-  const info = await getLastSyncInfo();
-  return info?.date ?? null;
-}

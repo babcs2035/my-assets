@@ -202,10 +202,3 @@ export function assetTypeColor(type: string): string {
   };
   return colors[type] ?? "#94a3b8";
 }
-
-/**
- * @deprecated formatJSTDate を使用してください．
- */
-export function formatDisplayDate(date: Date): string {
-  return formatJSTDate(date);
-}
