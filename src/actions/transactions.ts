@@ -1,8 +1,12 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
 import logger from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
+import {
+  revalidateSettingsAndTransactionPages,
+  revalidateSettingsPage,
+  revalidateTransactionsPage,
+} from "@/lib/revalidate";
 import { formatJSTDate } from "@/lib/utils";
 import {
   type TransactionCategoryUpdateInput,
@@ -331,7 +335,7 @@ export async function updateTransactionCategory(
     logger.info(`✅ Rule applied to ${result.count} transactions.`);
   }
 
-  revalidatePath("/transactions");
+  revalidateTransactionsPage();
   return transaction;
 }
 
@@ -425,7 +429,7 @@ export async function detectTransfers() {
   }
 
   logger.info(`✅ Detected and linked ${matched} transfer pairs.`);
-  revalidatePath("/transactions");
+  revalidateTransactionsPage();
   return { matched };
 }
 
@@ -519,10 +523,10 @@ export async function markTransactionAsTransfer(input: TransferMarkInput) {
         targetSubAccountId: data.targetSubAccountId,
       },
     });
-    revalidatePath("/settings");
+    revalidateSettingsPage();
   }
 
-  revalidatePath("/transactions");
+  revalidateTransactionsPage();
   return { transferId };
 }
 
@@ -558,8 +562,7 @@ export async function createTransferRule(input: TransferRuleCreateInput) {
     await tx.transferRule.deleteMany({ where: { keyword: data.keyword } });
     return tx.transferRule.create({ data });
   });
-  revalidatePath("/settings");
-  revalidatePath("/transactions");
+  revalidateSettingsAndTransactionPages();
   return result;
 }
 
@@ -576,7 +579,7 @@ export async function updateTransferRule(
     where: { id },
     data,
   });
-  revalidatePath("/settings");
+  revalidateSettingsPage();
   return result;
 }
 
@@ -588,7 +591,7 @@ export async function deleteTransferRule(id: string) {
   const result = await prisma.transferRule.delete({
     where: { id },
   });
-  revalidatePath("/settings");
+  revalidateSettingsPage();
   return result;
 }
 
@@ -708,6 +711,6 @@ export async function applyAllTransferRules() {
   logger.info(
     `Transfer rules applied: ${pairsMarked} pairs marked, ${pairsSkipped} pairs skipped.`,
   );
-  revalidatePath("/transactions");
+  revalidateTransactionsPage();
   return { pairsMarked, pairsSkipped };
 }

@@ -1,8 +1,12 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
 import logger from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
+import {
+  revalidateSettingsAndTransactionPages,
+  revalidateSettingsPage,
+  revalidateTransactionsPage,
+} from "@/lib/revalidate";
 import {
   type CategoryRuleCreateInput,
   type CategoryRuleUpdateInput,
@@ -60,8 +64,7 @@ export async function createMainCategory(input: MainCategoryCreateInput) {
       sortOrder: nextOrder,
     },
   });
-  revalidatePath("/settings");
-  revalidatePath("/transactions");
+  revalidateSettingsAndTransactionPages();
   return result;
 }
 
@@ -98,8 +101,7 @@ export async function updateMainCategory(
     where: { id },
     data: { name: data.name },
   });
-  revalidatePath("/settings");
-  revalidatePath("/transactions");
+  revalidateSettingsAndTransactionPages();
   return result;
 }
 
@@ -140,8 +142,7 @@ export async function deleteMainCategory(id: string) {
       where: { id },
     });
   });
-  revalidatePath("/settings");
-  revalidatePath("/transactions");
+  revalidateSettingsAndTransactionPages();
   return result;
 }
 
@@ -165,8 +166,7 @@ export async function createSubCategory(input: SubCategoryCreateInput) {
       sortOrder: nextOrder,
     },
   });
-  revalidatePath("/settings");
-  revalidatePath("/transactions");
+  revalidateSettingsAndTransactionPages();
   return result;
 }
 
@@ -201,8 +201,7 @@ export async function updateSubCategory(
     where: { id },
     data: { name: data.name },
   });
-  revalidatePath("/settings");
-  revalidatePath("/transactions");
+  revalidateSettingsAndTransactionPages();
   return result;
 }
 
@@ -222,8 +221,7 @@ export async function deleteSubCategory(id: string) {
   const result = await prisma.subCategoryItem.delete({
     where: { id },
   });
-  revalidatePath("/settings");
-  revalidatePath("/transactions");
+  revalidateSettingsAndTransactionPages();
   return result;
 }
 
@@ -259,8 +257,7 @@ export async function createCategoryRule(input: CategoryRuleCreateInput) {
     await tx.categoryRule.deleteMany({ where: { keyword: data.keyword } });
     return tx.categoryRule.create({ data });
   });
-  revalidatePath("/settings");
-  revalidatePath("/transactions");
+  revalidateSettingsAndTransactionPages();
   return result;
 }
 
@@ -277,7 +274,7 @@ export async function updateCategoryRule(
     where: { id },
     data,
   });
-  revalidatePath("/settings");
+  revalidateSettingsPage();
   return result;
 }
 
@@ -289,7 +286,7 @@ export async function deleteCategoryRule(id: string) {
   const result = await prisma.categoryRule.delete({
     where: { id },
   });
-  revalidatePath("/settings");
+  revalidateSettingsPage();
   return result;
 }
 
@@ -319,7 +316,7 @@ export async function applyAllCategoryRules() {
   }
 
   logger.info(`Category rules applied to ${applied} transactions.`);
-  revalidatePath("/transactions");
+  revalidateTransactionsPage();
   return { applied };
 }
 
@@ -367,7 +364,7 @@ export async function reorderMainCategory(
     ),
   );
 
-  revalidatePath("/settings");
+  revalidateSettingsPage();
   logger.info(`Reordered category ${id} ${direction}.`);
 }
 
@@ -411,7 +408,7 @@ export async function reorderSubCategory(id: string, direction: "up" | "down") {
     ),
   );
 
-  revalidatePath("/settings");
+  revalidateSettingsPage();
   logger.info(`Reordered sub category ${id} ${direction}.`);
 }
 
@@ -432,7 +429,7 @@ export async function reorderMainCategories(
       }),
     ),
   );
-  revalidatePath("/settings");
+  revalidateSettingsPage();
 }
 
 /**
@@ -454,7 +451,7 @@ export async function reorderSubCategories(
       }),
     ),
   );
-  revalidatePath("/settings");
+  revalidateSettingsPage();
 }
 
 /**
@@ -550,7 +547,6 @@ export async function importCategories(data: unknown) {
     await Promise.all(createPromises);
   });
 
-  revalidatePath("/settings");
-  revalidatePath("/transactions");
+  revalidateSettingsAndTransactionPages();
   logger.info("Categories imported successfully.");
 }

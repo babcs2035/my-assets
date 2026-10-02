@@ -1,9 +1,14 @@
 "use server";
 
 import type { AssetType } from "@prisma/client";
-import { revalidatePath } from "next/cache";
 import logger from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
+import {
+  revalidateAccountAndDashboardPages,
+  revalidateAccountDetailPage,
+  revalidateAccountsPage,
+  revalidateTransactionsPage,
+} from "@/lib/revalidate";
 import { formatJSTDate } from "@/lib/utils";
 import {
   type MainAccountCreateInput,
@@ -282,8 +287,7 @@ export async function createMainAccount(input: MainAccountCreateInput) {
       mfUrlId: data.mfUrlId?.trim() || null,
     },
   });
-  revalidatePath("/accounts");
-  revalidatePath("/");
+  revalidateAccountAndDashboardPages();
   return result;
 }
 
@@ -300,8 +304,8 @@ export async function updateMainAccount(
     where: { id },
     data,
   });
-  revalidatePath("/accounts");
-  revalidatePath(`/accounts/${id}`);
+  revalidateAccountsPage();
+  revalidateAccountDetailPage(id);
   return result;
 }
 
@@ -350,8 +354,7 @@ export async function deleteMainAccount(id: string) {
       where: { id },
     });
   });
-  revalidatePath("/accounts");
-  revalidatePath("/");
+  revalidateAccountAndDashboardPages();
   return result;
 }
 
@@ -367,8 +370,7 @@ export async function updateSubAccountAssetType(
     where: { id },
     data: { assetType },
   });
-  revalidatePath("/accounts");
-  revalidatePath("/");
+  revalidateAccountAndDashboardPages();
   return result;
 }
 
@@ -386,10 +388,9 @@ export async function updateSubAccountHidden(id: string, isHidden: boolean) {
       isHidden: true,
     },
   });
-  revalidatePath("/accounts");
-  revalidatePath(`/accounts/${result.mainAccountId}`);
-  revalidatePath("/");
-  revalidatePath("/transactions");
+  revalidateAccountAndDashboardPages();
+  revalidateAccountDetailPage(result.mainAccountId);
+  revalidateTransactionsPage();
   return result;
 }
 
@@ -407,7 +408,7 @@ export async function remapSubAccount(
     where: { id: subAccountId },
     data: { mainAccountId: newMainAccountId },
   });
-  revalidatePath("/accounts");
+  revalidateAccountsPage();
   return result;
 }
 
@@ -452,8 +453,7 @@ export async function createManualAccount({
       },
     },
   });
-  revalidatePath("/accounts");
-  revalidatePath("/");
+  revalidateAccountAndDashboardPages();
   return result;
 }
 
@@ -470,7 +470,7 @@ export async function reorderMainAccounts(orderedIds: string[]) {
     }),
   );
   await prisma.$transaction(updates);
-  revalidatePath("/accounts");
+  revalidateAccountsPage();
 }
 
 /**
@@ -486,5 +486,5 @@ export async function reorderSubAccounts(orderedIds: string[]) {
     }),
   );
   await prisma.$transaction(updates);
-  revalidatePath("/accounts");
+  revalidateAccountsPage();
 }

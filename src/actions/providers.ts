@@ -1,8 +1,11 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
 import logger from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
+import {
+  revalidateSettingsAndDashboardPages,
+  revalidateSettingsPage,
+} from "@/lib/revalidate";
 import { nowJST } from "@/lib/utils";
 import {
   type ProviderCreateInput,
@@ -57,7 +60,7 @@ export async function createProvider(input: ProviderCreateInput) {
       isActive: true,
     },
   });
-  revalidatePath("/settings");
+  revalidateSettingsPage();
 }
 
 /**
@@ -114,7 +117,7 @@ export async function deleteProvider(id: string) {
       where: { id },
     });
   });
-  revalidatePath("/settings");
+  revalidateSettingsPage();
 }
 
 /**
@@ -199,8 +202,7 @@ export async function syncProvider(id: string) {
     activeSyncControllers.delete(id);
   }
 
-  revalidatePath("/settings");
-  revalidatePath("/");
+  revalidateSettingsAndDashboardPages();
 }
 
 /**
@@ -227,8 +229,7 @@ export async function abortSyncProvider(id: string) {
     },
   });
 
-  revalidatePath("/settings");
-  revalidatePath("/");
+  revalidateSettingsAndDashboardPages();
 
   return { success: true };
 }
