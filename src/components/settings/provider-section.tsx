@@ -85,6 +85,12 @@ export function ProviderSection({
   const [syncDialogProviderId, setSyncDialogProviderId] = useState<
     string | null
   >(null);
+  // 同期中かどうかはこのセッションで開始した同期，または
+  // 「同期開始済み（lastSyncAt あり）かつ未完了（lastSyncSuccess が null）」で判定する．
+  // lastSyncSuccess === null のみでは「未同期」のプロバイダーが永遠に「同期中」になる
+  const isProviderSyncing = (provider: Provider) =>
+    syncingProviderIds.has(provider.id) ||
+    (provider.lastSyncAt !== null && provider.lastSyncSuccess === null);
 
   // Provider Form State
   const [providerName, setProviderName] = useState("");
@@ -305,15 +311,7 @@ export function ProviderSection({
             {providers.map(provider => (
               <div key={provider.id} className="p-4 bg-card min-w-0">
                 {(() => {
-                  // 同期中かどうかはセッション状態，または
-                  // 「同期開始済み（lastSyncAt あり）かつ未完了
-                  // （lastSyncSuccess が null）」で判定する。
-                  // lastSyncSuccess === null のみでは「未同期」の
-                  // プロバイダーが永遠に「同期中」になる
-                  const isSyncing =
-                    syncingProviderIds.has(provider.id) ||
-                    (provider.lastSyncAt !== null &&
-                      provider.lastSyncSuccess === null);
+                  const isSyncing = isProviderSyncing(provider);
                   return (
                     <>
                       <div className="flex items-center justify-between gap-2 mb-2 min-w-0">
@@ -489,11 +487,7 @@ export function ProviderSection({
                     </TableCell>
                     <TableCell>
                       {(() => {
-                        const isSyncing =
-                          syncingProviderIds.has(provider.id) ||
-                          (provider.lastSyncAt !== null &&
-                            provider.lastSyncSuccess === null);
-                        if (isSyncing) {
+                        if (isProviderSyncing(provider)) {
                           return (
                             <Badge
                               variant="outline"
@@ -532,11 +526,7 @@ export function ProviderSection({
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-2">
                         {(() => {
-                          const isSyncingDesktop =
-                            syncingProviderIds.has(provider.id) ||
-                            (provider.lastSyncAt !== null &&
-                              provider.lastSyncSuccess === null);
-                          if (isSyncingDesktop) {
+                          if (isProviderSyncing(provider)) {
                             return (
                               <Button
                                 variant="ghost"
