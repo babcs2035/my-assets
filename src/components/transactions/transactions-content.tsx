@@ -545,7 +545,7 @@ export function TransactionsContent() {
                               {categories
                                 .filter(
                                   mc =>
-                                    (mc as Category & { type: string }).type ===
+                                    mc.type ===
                                     (tx.amount >= 0 ? "INCOME" : "EXPENSE"),
                                 )
                                 .map(mc =>
@@ -715,8 +715,7 @@ export function TransactionsContent() {
                                     {categories
                                       .filter(
                                         mc =>
-                                          (mc as Category & { type: string })
-                                            .type ===
+                                          mc.type ===
                                           (tx.amount >= 0
                                             ? "INCOME"
                                             : "EXPENSE"),

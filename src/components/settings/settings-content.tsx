@@ -249,16 +249,8 @@ export function SettingsContent() {
         setProviders(p);
         setAccounts(a);
         setCategories(c);
-        setExpenseCategoryItems(
-          c.filter(
-            cat => (cat as Category & { type: string }).type === "EXPENSE",
-          ),
-        );
-        setIncomeCategoryItems(
-          c.filter(
-            cat => (cat as Category & { type: string }).type === "INCOME",
-          ),
-        );
+        setExpenseCategoryItems(c.filter(cat => cat.type === "EXPENSE"));
+        setIncomeCategoryItems(c.filter(cat => cat.type === "INCOME"));
         setRules(r);
         setTransferRules(t);
       } catch {
@@ -1980,7 +1972,7 @@ export function SettingsContent() {
                         <SelectItem key={c.id} value={c.id}>
                           <span className="flex items-center gap-1">
                             <CategoryTypeIcon
-                              type={(c as Category & { type: string }).type}
+                              type={c.type}
                               className="h-3 w-3"
                             />
                             {c.name}
@@ -2070,7 +2062,7 @@ export function SettingsContent() {
                         <SelectItem key={sc.id} value={sc.id}>
                           <span className="flex items-center gap-1">
                             <CategoryTypeIcon
-                              type={(mc as Category & { type: string }).type}
+                              type={mc.type}
                               className="h-3 w-3"
                             />
                             {mc.name} / {sc.name}
