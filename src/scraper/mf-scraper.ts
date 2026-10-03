@@ -1545,6 +1545,168 @@ async function saveBalancesToDatabase(
   );
 }
 
+type ScrapedTransaction = Awaited<
+  ReturnType<typeof scrapeTransactions>
+>[number];
+
+/**
+ * メイン口座内でまだ振替になっていない明細のうち，同日・逆符号・同額で，
+ * 両方の説明に「振替」を含む 2 件を振替のペアとして結び付ける．
+ */
+async function buildTransferPairs(mainAccountId: string) {
+  const unresolved = await prisma.transaction.findMany({
+    where: {
+      subAccount: { mainAccount: { id: mainAccountId } },
+      isTransfer: false,
+    },
+    orderBy: [{ date: "asc" }, { amount: "asc" }],
+  });
+
+  const used = new Set<string>();
+  for (let i = 0; i < unresolved.length; i++) {
+    const a = unresolved[i];
+    if (used.has(a.id) || a.amount === 0) continue;
+
+    for (let j = i + 1; j < unresolved.length; j++) {
+      const b = unresolved[j];
+      if (used.has(b.id)) continue;
+      if (a.id === b.id) continue;
+      if (a.date.getTime() !== b.date.getTime()) continue;
+      if (a.subAccountId === b.subAccountId) continue;
+      if (a.amount + b.amount !== 0) continue;
+      // 同日同額（±amount）だけでは無関係な収入＋支出ペアを振替と誤認するため，
+      // 両明細の説明に「振替」を含むこと（スクレイパーは振替を
+      // `振替: X → Y` で保存し，MF の生データも「…への振替」を含む）を要求する．
+      // ペアリングできない明細は通常取引として表示され続ける（安全側）．
+      if (!a.desc.includes("振替") || !b.desc.includes("振替")) continue;
+
+      // 片方だけ更新されると linkedTransId が相手を指さない半端なペアが残るため，
+      // 2 件の更新を 1 つのトランザクションにまとめる
+      await prisma.$transaction([
+        prisma.transaction.update({
+          where: { id: a.id },
+          data: {
+            isTransfer: true,
+            linkedTransId: b.id,
+          },
+        }),
+        prisma.transaction.update({
+          where: { id: b.id },
+          data: {
+            isTransfer: true,
+            linkedTransId: a.id,
+          },
+        }),
+      ]);
+      used.add(a.id);
+      used.add(b.id);
+      break;
+    }
+  }
+}
+
+/**
+ * カテゴリー分類ルールを優先度の高い順に，カテゴリー未設定の明細へ適用する（大文字小文字を区別しない）．
+ */
+async function applyCategoryRules() {
+  const rules = await prisma.categoryRule.findMany({
+    orderBy: { priority: "desc" },
+  });
+
+  for (const rule of rules) {
+    await prisma.transaction.updateMany({
+      where: {
+        desc: { contains: rule.keyword, mode: "insensitive" },
+        subCategoryId: null,
+      },
+      data: {
+        subCategoryId: rule.subCategoryId,
+      },
+    });
+  }
+}
+
+/**
+ * 解決できなかった振替の生データを debug/unresolved_transfers.json に追記する．
+ * 生の摘要・金額と子口座一覧を含み，削除もローテーションもされないため開発時だけに限る．
+ * 本番コンテナ (Dockerfile で NODE_ENV=production) では書き込み可能レイヤーに溜まり続ける．
+ */
+function writeUnresolvedTransferDebugJson(
+  tx: ScrapedTransaction,
+  subAccounts: Array<{
+    id: string;
+    currentName: string;
+    assetType: string;
+    mainAccount: { label: string };
+  }>,
+) {
+  if (process.env.NODE_ENV === "production") return;
+  const debugDir = join(process.cwd(), "debug");
+  const debugFile = join(debugDir, "unresolved_transfers.json");
+  try {
+    mkdirSync(debugDir, { recursive: true });
+    let records: Array<{
+      date: string;
+      amount: number;
+      desc: string;
+      subAccountName: string;
+      isTransfer: boolean;
+      transferFromSubAccount?: string;
+      transferToSubAccount?: string;
+      subAccountIdHash?: string;
+      partnerSubAccountIdHash?: string;
+      partnerInstitutionName?: string;
+      partnerSubAccountName?: string;
+      rawApiData?: Record<string, unknown>;
+      availableSubAccounts: Array<{
+        id: string;
+        currentName: string;
+        mainAccountLabel: string;
+        assetType: string;
+      }>;
+    }> = [];
+    try {
+      const existing = readFileSync(debugFile, "utf-8");
+      records = JSON.parse(existing);
+    } catch {
+      // file does not exist or invalid JSON
+    }
+    records.push({
+      date: tx.date,
+      amount: tx.amount,
+      desc: tx.desc,
+      subAccountName: tx.subAccountName,
+      isTransfer: tx.isTransfer,
+      transferFromSubAccount: tx.transferFromSubAccount,
+      transferToSubAccount: tx.transferToSubAccount,
+      subAccountIdHash: tx.subAccountIdHash,
+      partnerSubAccountIdHash: tx.partnerSubAccountIdHash,
+      partnerInstitutionName: tx.partnerInstitutionName,
+      partnerSubAccountName: tx.partnerSubAccountName,
+      rawApiData: (tx as { rawApiData?: Record<string, unknown> }).rawApiData,
+      availableSubAccounts: subAccounts.map(sa => ({
+        id: sa.id,
+        currentName: sa.currentName,
+        mainAccountLabel: sa.mainAccount.label,
+        assetType: sa.assetType,
+      })),
+    });
+    writeFileSync(debugFile, JSON.stringify(records, null, 2), "utf-8");
+    logger.info(
+      {
+        file: debugFile,
+        totalRecords: records.length,
+      },
+      "Debug: saved unresolved transfer data.",
+    );
+  } catch (error) {
+    logger.warn(
+      { err: error },
+      "⚠️ Failed to write debug JSON for unresolved transfer.",
+    );
+  }
+}
+
 /**
  * 取引明細をDBに保存する関数
  */
@@ -1667,58 +1829,6 @@ async function saveTransactionsToDatabase(
       savedCount++;
     } catch (error) {
       logger.error({ err: error, txId }, "❌ Failed to save transaction.");
-    }
-  };
-
-  const buildTransferPairs = async (mainAccountId: string) => {
-    const unresolved = await prisma.transaction.findMany({
-      where: {
-        subAccount: { mainAccount: { id: mainAccountId } },
-        isTransfer: false,
-      },
-      orderBy: [{ date: "asc" }, { amount: "asc" }],
-    });
-
-    const used = new Set<string>();
-    for (let i = 0; i < unresolved.length; i++) {
-      const a = unresolved[i];
-      if (used.has(a.id) || a.amount === 0) continue;
-
-      for (let j = i + 1; j < unresolved.length; j++) {
-        const b = unresolved[j];
-        if (used.has(b.id)) continue;
-        if (a.id === b.id) continue;
-        if (a.date.getTime() !== b.date.getTime()) continue;
-        if (a.subAccountId === b.subAccountId) continue;
-        if (a.amount + b.amount !== 0) continue;
-        // 同日同額（±amount）だけでは無関係な収入＋支出ペアを振替と誤認するため，
-        // 両明細の説明に「振替」を含むこと（スクレイパーは振替を
-        // `振替: X → Y` で保存し，MF の生データも「…への振替」を含む）を要求する．
-        // ペアリングできない明細は通常取引として表示され続ける（安全側）．
-        if (!a.desc.includes("振替") || !b.desc.includes("振替")) continue;
-
-        // 片方だけ更新されると linkedTransId が相手を指さない半端なペアが残るため，
-        // 2 件の更新を 1 つのトランザクションにまとめる
-        await prisma.$transaction([
-          prisma.transaction.update({
-            where: { id: a.id },
-            data: {
-              isTransfer: true,
-              linkedTransId: b.id,
-            },
-          }),
-          prisma.transaction.update({
-            where: { id: b.id },
-            data: {
-              isTransfer: true,
-              linkedTransId: a.id,
-            },
-          }),
-        ]);
-        used.add(a.id);
-        used.add(b.id);
-        break;
-      }
     }
   };
 
@@ -1927,76 +2037,7 @@ async function saveTransactionsToDatabase(
 
       // 振替先/元が解決できない場合は保存しない（不正確な単独明細を残さない）
       if (!fromSubAccount || !toSubAccount) {
-        // デバッグ用: 解決失敗した振替の生データをJSONに出力．
-        // 生の摘要・金額と子口座一覧を含み，削除もローテーションもされないため開発時だけに限る．
-        // 本番コンテナ (Dockerfile で NODE_ENV=production) では書き込み可能レイヤーに溜まり続ける．
-        if (process.env.NODE_ENV !== "production") {
-          const debugDir = join(process.cwd(), "debug");
-          const debugFile = join(debugDir, "unresolved_transfers.json");
-          try {
-            mkdirSync(debugDir, { recursive: true });
-            let records: Array<{
-              date: string;
-              amount: number;
-              desc: string;
-              subAccountName: string;
-              isTransfer: boolean;
-              transferFromSubAccount?: string;
-              transferToSubAccount?: string;
-              subAccountIdHash?: string;
-              partnerSubAccountIdHash?: string;
-              partnerInstitutionName?: string;
-              partnerSubAccountName?: string;
-              rawApiData?: Record<string, unknown>;
-              availableSubAccounts: Array<{
-                id: string;
-                currentName: string;
-                mainAccountLabel: string;
-                assetType: string;
-              }>;
-            }> = [];
-            try {
-              const existing = readFileSync(debugFile, "utf-8");
-              records = JSON.parse(existing);
-            } catch {
-              // file does not exist or invalid JSON
-            }
-            records.push({
-              date: tx.date,
-              amount: tx.amount,
-              desc: tx.desc,
-              subAccountName: tx.subAccountName,
-              isTransfer: tx.isTransfer,
-              transferFromSubAccount: tx.transferFromSubAccount,
-              transferToSubAccount: tx.transferToSubAccount,
-              subAccountIdHash: tx.subAccountIdHash,
-              partnerSubAccountIdHash: tx.partnerSubAccountIdHash,
-              partnerInstitutionName: tx.partnerInstitutionName,
-              partnerSubAccountName: tx.partnerSubAccountName,
-              rawApiData: (tx as { rawApiData?: Record<string, unknown> })
-                .rawApiData,
-              availableSubAccounts: allSubAccountsInDb.map(sa => ({
-                id: sa.id,
-                currentName: sa.currentName,
-                mainAccountLabel: sa.mainAccount.label,
-                assetType: sa.assetType,
-              })),
-            });
-            writeFileSync(debugFile, JSON.stringify(records, null, 2), "utf-8");
-            logger.info(
-              {
-                file: debugFile,
-                totalRecords: records.length,
-              },
-              "Debug: saved unresolved transfer data.",
-            );
-          } catch (error) {
-            logger.warn(
-              { err: error },
-              "⚠️ Failed to write debug JSON for unresolved transfer.",
-            );
-          }
-        }
+        writeUnresolvedTransferDebugJson(tx, allSubAccountsInDb);
 
         logger.warn(
           {
@@ -2269,22 +2310,8 @@ async function saveTransactionsToDatabase(
     await buildTransferPairs(ma.id);
   }
 
-  // 4. カテゴリ分類ルールの適用（大文字小文字を区別しない）
-  const rules = await prisma.categoryRule.findMany({
-    orderBy: { priority: "desc" },
-  });
-
-  for (const rule of rules) {
-    await prisma.transaction.updateMany({
-      where: {
-        desc: { contains: rule.keyword, mode: "insensitive" },
-        subCategoryId: null,
-      },
-      data: {
-        subCategoryId: rule.subCategoryId,
-      },
-    });
-  }
+  // 4. カテゴリ分類ルールの適用
+  await applyCategoryRules();
 
   logger.info(
     { saved: savedCount, total: transactions.length },
