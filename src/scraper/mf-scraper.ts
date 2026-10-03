@@ -2576,21 +2576,23 @@ export async function runMfScraper(
   };
   signal?.addEventListener("abort", abortHandler);
 
-  const context = await browser.newContext({
-    userAgent:
-      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-    locale: "ja-JP",
-    timezoneId: "Asia/Tokyo",
-  });
-  const page = await context.newPage();
-
-  await page.addInitScript(() => {
-    Object.defineProperty(navigator, "webdriver", {
-      get: () => undefined,
-    });
-  });
-
+  // context や page の作成も try の中で行う．失敗したときに finally で
+  // ブラウザを閉じ，activeBrowsers とリスナーを片付けるため
   try {
+    const context = await browser.newContext({
+      userAgent:
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+      locale: "ja-JP",
+      timezoneId: "Asia/Tokyo",
+    });
+    const page = await context.newPage();
+
+    await page.addInitScript(() => {
+      Object.defineProperty(navigator, "webdriver", {
+        get: () => undefined,
+      });
+    });
+
     logger.info("🔐 Logging in to MoneyForward...");
     await page.goto("https://moneyforward.com/sign_in");
 
