@@ -320,13 +320,16 @@ async function fetchAccountHoldingsPage(
 ): Promise<MfAccountDetailPageData | null> {
   const url = `https://moneyforward.com/sp2/accounts/${showAccountId}`;
   await page.goto(url, { waitUntil: "domcontentloaded", timeout: 15000 });
-  const html = await page.content();
 
-  const preMatch = html.match(/<pre[^>]*>([\s\S]*?)<\/pre>/);
-  if (!preMatch) return null;
+  // page.content() の HTML から正規表現で抜き出すと，`&` が `&amp;` のまま残り
+  // 銘柄名が変わって別の Holding 行が作られる．DOM の textContent は実体参照を戻した文字列を返す
+  const pre = page.locator("pre").first();
+  if ((await pre.count()) === 0) return null;
+  const jsonText = await pre.textContent();
+  if (!jsonText) return null;
 
   try {
-    const data = JSON.parse(preMatch[1]) as MfAccountDetailPageData;
+    const data = JSON.parse(jsonText) as MfAccountDetailPageData;
     return data;
   } catch {
     return null;
