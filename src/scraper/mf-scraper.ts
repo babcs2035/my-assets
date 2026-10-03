@@ -155,11 +155,23 @@ async function fetchLiabilities(page: Page): Promise<MfLiabilitiesResponse> {
 }
 
 /**
+ * 同期 1 回の中で，例外を握りつぶして処理を続けた件数を種類ごとに数える．
+ * 続けられる失敗でも，1 件でもあれば runMfScraper が最後に例外を投げ，同期を失敗として記録する．
+ * 同時に複数のプロバイダーを同期することがあるので，モジュールの変数ではなく同期ごとに作って渡す
+ */
+type SyncFailureCounts = Map<string, number>;
+
+function countSyncFailure(failures: SyncFailureCounts, kind: string) {
+  failures.set(kind, (failures.get(kind) ?? 0) + 1);
+}
+
+/**
  * クレジットカードの請求データを DB に保存する
  */
 async function saveCreditCardBillings(
   liabilities: MfLiabilitiesResponse,
   providerId: string,
+  failures: SyncFailureCounts,
 ) {
   const accounts = liabilities.accounts ?? [];
   if (accounts.length === 0) {
@@ -248,6 +260,7 @@ async function saveCreditCardBillings(
             },
             "⚠️ Failed to save credit card billing record.",
           );
+          countSyncFailure(failures, "creditCardBilling");
         }
       }
     }
@@ -458,6 +471,7 @@ async function saveHoldingsFromAccountPage(
   subAccountName: string,
   assetDetails: MfAssetDetail[],
   date: string,
+  failures: SyncFailureCounts,
 ) {
   logger.info(
     { holdingsCount: assetDetails.length, subAccount: subAccountName },
@@ -549,6 +563,7 @@ async function saveHoldingsFromAccountPage(
         { err: error, name: holdingName, subAccount: subAccountName },
         "⚠️ Failed to save holding history.",
       );
+      countSyncFailure(failures, "holding");
     }
   }
 
@@ -984,6 +999,7 @@ async function scrapeTransactions(
   _balances: Awaited<ReturnType<typeof scrapeBalances>>,
   _allSubAccountNames: Map<string, string[]>, // 全金融機関の子口座名（将来のフォールバック用）
   options: MfScraperOptions,
+  failures: SyncFailureCounts,
 ) {
   logger.info("📝 Scraping transactions via MF APIs...");
 
@@ -1112,6 +1128,7 @@ async function scrapeTransactions(
             "⚠️ Failed to fetch transactions.",
             error,
           );
+          countSyncFailure(failures, "transactionFetch");
         }
       }
     }
@@ -1160,6 +1177,7 @@ async function saveInvestmentHoldings(
   mainAccount: { label: string; subAccounts: SubAccount[] },
   summary: MfAccountSummary,
   today: Date,
+  failures: SyncFailureCounts,
 ): Promise<void> {
   const mainSubAccountsForHolding = mainAccount.subAccounts;
   const investmentSubAccount = mainSubAccountsForHolding.find(
@@ -1213,6 +1231,7 @@ async function saveInvestmentHoldings(
             investmentSubAccount.currentName,
             mfDetails,
             todayStr,
+            failures,
           );
           await recalculateHoldingHistory(investmentSubAccount.id);
         }
@@ -1221,6 +1240,7 @@ async function saveInvestmentHoldings(
           { err: error, label: mainAccount.label },
           "⚠️ Failed to fetch account holdings page.",
         );
+        countSyncFailure(failures, "holdingsPage");
       }
     }
   }
@@ -1239,6 +1259,7 @@ async function saveSubAccountBalanceHistory(
   uniqueCandidateSubSummaries: MfSubAccountSummary[],
   minDate: Date,
   today: Date,
+  failures: SyncFailureCounts,
 ): Promise<number> {
   let saved = 0;
   try {
@@ -1330,6 +1351,7 @@ async function saveSubAccountBalanceHistory(
       },
       "⚠️ Failed to fetch history.",
     );
+    countSyncFailure(failures, "balanceHistory");
   }
   return saved;
 }
@@ -1343,6 +1365,7 @@ async function scrapeBalanceHistory(
   page: Page,
   providerId: string,
   options: MfScraperOptions,
+  failures: SyncFailureCounts,
 ) {
   logger.info("📊 Scraping balance history via service_detail API...");
 
@@ -1421,7 +1444,7 @@ async function scrapeBalanceHistory(
       continue;
     }
 
-    await saveInvestmentHoldings(page, mainAccount, summary, today);
+    await saveInvestmentHoldings(page, mainAccount, summary, today, failures);
 
     const subSummaryByDisplayName = new Map<string, MfSubAccountSummary[]>();
     const subSummaryByNormalizedDisplay = new Map<
@@ -1513,6 +1536,7 @@ async function scrapeBalanceHistory(
         uniqueCandidateSubSummaries,
         minDate,
         today,
+        failures,
       );
     }
   }
@@ -2393,6 +2417,7 @@ function resolveRegularTransactionSubAccount(
 async function saveTransactionsToDatabase(
   transactions: ScrapedTransaction[],
   providerId: string,
+  failures: SyncFailureCounts,
 ) {
   logger.info("💾 Saving transactions to database...");
 
@@ -2472,6 +2497,8 @@ async function saveTransactionsToDatabase(
         )
       ) {
         savedCount += 2;
+      } else {
+        countSyncFailure(failures, "transactionSave");
       }
       continue;
     }
@@ -2509,6 +2536,8 @@ async function saveTransactionsToDatabase(
       )
     ) {
       savedCount++;
+    } else {
+      countSyncFailure(failures, "transactionSave");
     }
   }
 
@@ -3067,6 +3096,8 @@ export async function runMfScraper(
       );
     }
 
+    const syncFailures: SyncFailureCounts = new Map();
+
     // Phase 1: 全金融機関の残高をスクレイプし、子口座をDBに登録
     logger.info("Phase 1: Scraping balances and registering sub-accounts...");
     const balances = await scrapeBalances(page, provider.id);
@@ -3088,24 +3119,44 @@ export async function runMfScraper(
       balances,
       allSubAccountNames,
       options,
+      syncFailures,
     );
 
     // Phase 4: 取引明細をDBに保存
     logger.info("📋 Phase 4: Saving transactions to database...");
-    await saveTransactionsToDatabase(transactions, provider.id);
+    await saveTransactionsToDatabase(transactions, provider.id, syncFailures);
 
     // Phase 5: 負債口座の BalanceHistory を逆算（最新残高 + 入出金明細）
-    logger.info("📋 Phase 5: Recalculating liability balance history...");
-    await recalculateLiabilityHistory(transactions, provider.id);
+    // Phase 5 は DB の明細から負債の履歴を作り直して全件置き換えるので，
+    // 明細の取得か保存に失敗していれば実行せず，前回までの正しい履歴を残す
+    if (
+      syncFailures.has("transactionFetch") ||
+      syncFailures.has("transactionSave")
+    ) {
+      logger.warn(
+        { failures: Object.fromEntries(syncFailures) },
+        "⚠️ Phase 5 skipped: some transactions failed to fetch or save.",
+      );
+    } else {
+      logger.info("📋 Phase 5: Recalculating liability balance history...");
+      await recalculateLiabilityHistory(transactions, provider.id);
+    }
 
     // Phase 5.5: クレジットカードの請求データをスクレイプ・保存
     logger.info("📋 Phase 5.5: Scraping credit card billing data...");
     const liabilities = await fetchLiabilities(page);
-    await saveCreditCardBillings(liabilities, provider.id);
+    await saveCreditCardBillings(liabilities, provider.id, syncFailures);
 
     // Phase 6: 残高履歴を過去から取得（非負債口座のみ）
     logger.info("📋 Phase 6: Scraping balance history...");
-    await scrapeBalanceHistory(page, provider.id, options);
+    await scrapeBalanceHistory(page, provider.id, options, syncFailures);
+
+    // 取得できた分は保存してあるが，欠けがあることを同期の結果として残す
+    if (syncFailures.size > 0) {
+      throw new Error(
+        `Sync finished with partial failures: ${JSON.stringify(Object.fromEntries(syncFailures))}`,
+      );
+    }
 
     logger.info("🎉 MF Scraping process completed successfully!");
   } catch (error) {
