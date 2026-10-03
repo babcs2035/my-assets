@@ -2811,6 +2811,55 @@ export interface MfScraperOptions {
   mode: "scheduled" | "manual";
 }
 
+const TOTP_PERIOD_MS = 30 * 1000;
+// 区切りの残りがこれより短いコードは，入力して送信するまでに期限が切れうる
+const TOTP_MIN_REMAINING_MS = 5 * 1000;
+
+/**
+ * 送信に使う OTP を取得する．TOTP は 30 秒の区切りごとに変わるので，区切りの残りが短いときと，
+ * 前に送ったコードと同じになるとき（同じ区切りの中で再試行したとき）は，次の区切りまで待ってから取り直す
+ */
+async function retrieveFreshOtp(
+  page: Page,
+  providerName: string,
+  previousOtp?: string,
+): Promise<string> {
+  const msUntilNextPeriod = () =>
+    TOTP_PERIOD_MS - (Date.now() % TOTP_PERIOD_MS);
+  if (msUntilNextPeriod() < TOTP_MIN_REMAINING_MS) {
+    await page.waitForTimeout(msUntilNextPeriod() + 1000);
+  }
+  let otp = getItemOtp(providerName);
+  if (otp === previousOtp) {
+    await page.waitForTimeout(msUntilNextPeriod() + 1000);
+    otp = getItemOtp(providerName);
+  }
+  return otp;
+}
+
+/**
+ * OTP を送信した後，ログイン後の画面か OTP のエラー文が出るまで待つ．
+ * MF の 2FA はページ遷移しないことも遷移することもあり，遷移すると実行コンテキストが壊れて
+ * waitForFunction が例外になるので，期限まで待ち直す．期限が来ても例外にはせず，後の verifyLoggedIn に任せる
+ */
+async function waitForOtpResult(page: Page, timeoutMs = 20000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    try {
+      await page.waitForFunction(
+        () =>
+          document.querySelector('a[href="/sign_out"]') !== null ||
+          (document.body?.innerText ?? "").includes("コードが間違っています"),
+        undefined,
+        { timeout: Math.max(deadline - Date.now(), 1) },
+      );
+      return;
+    } catch {
+      await page.waitForLoadState("domcontentloaded").catch(() => {});
+    }
+  }
+}
+
 /**
  * MoneyForward にメールアドレスとパスワードでログインし，OTP を求められたら 1Password から取って入力する．
  * OTP が期限切れで弾かれた場合は新しいコードで 2 回まで再試行する．ログインを確認できなければ例外を投げる．
@@ -2855,11 +2904,13 @@ async function loginToMoneyForward(
     })
     .catch(() => {});
   const otpInputFound = await page.locator('input[name="otp_attempt"]').count();
+  let lastSubmittedOtp: string | undefined;
   logger.info({ otpInputFound }, "🔑 Checking for OTP input field...");
 
   if (otpInputFound > 0) {
     logger.info("🔑 Entering OTP (fetching fresh token)...");
-    const currentOtp = getItemOtp(providerName);
+    const currentOtp = await retrieveFreshOtp(page, providerName);
+    lastSubmittedOtp = currentOtp;
     // OTP コードは認証情報のためログに含めない
     logger.info("🔑 OTP code generated.");
 
@@ -2871,10 +2922,7 @@ async function loginToMoneyForward(
     );
 
     await page.click("button#submitto");
-    // MoneyForwardの2FAはSPA的挙動でページ遷移しないため、
-    // 単に時間を待ってからログイン状態を再検証する
-    await page.waitForTimeout(8000);
-    await page.waitForLoadState("domcontentloaded").catch(() => {});
+    await waitForOtpResult(page);
   } else {
     logger.debug("ℹ️ No OTP input field found, skipping OTP step.");
   }
@@ -2934,7 +2982,12 @@ async function loginToMoneyForward(
         "⚠️ OTP code expired or incorrect. Retrying with fresh code...",
       );
       for (let attempt = 0; attempt < 2; attempt++) {
-        const freshOtp = getItemOtp(providerName);
+        const freshOtp = await retrieveFreshOtp(
+          page,
+          providerName,
+          lastSubmittedOtp,
+        );
+        lastSubmittedOtp = freshOtp;
         // OTP コードは認証情報のためログに含めない
         logger.info({ attempt }, "🔑 Fresh OTP code generated for retry.");
 
@@ -2942,7 +2995,7 @@ async function loginToMoneyForward(
         if ((await otpInput.count()) > 0) {
           await otpInput.fill(freshOtp);
           await page.click("button#submitto");
-          await page.waitForTimeout(10000);
+          await waitForOtpResult(page);
 
           isLoggedIn = await verifyLoggedIn();
           if (isLoggedIn) {
@@ -2980,28 +3033,60 @@ async function loginToMoneyForward(
 }
 
 /**
- * MF 側の一括更新が終わるまで，ページを再読み込みしながら読み込み中アイコンが消えるのを待つ．
- * 60 分で打ち切り，その場合も例外にはせず，その時点のデータで続ける．
+ * MF 側の一括更新が終わるまで，口座一覧を読み込み直しながら読み込み中アイコンが消えるのを待つ．
+ * 完了したら true，60 分で打ち切ったら false を返す．打ち切っても例外にはせず，その時点のデータで続ける．
+ * アイコンが 0 件でも，口座の表とログアウトのリンクがなければ完了とみなさず例外にする．
+ * ログアウトや画面の変更でアイコンが見つからないだけのときに，更新前のデータを取って成功と記録しないため
  */
-async function waitForMfSyncToFinish(page: Page): Promise<void> {
+async function waitForMfSyncToFinish(page: Page): Promise<boolean> {
   logger.info("⏳️ Waiting for sync to complete (max 60 min)...");
   const startTime = Date.now();
   const timeout = 60 * 60 * 1000;
 
   while (Date.now() - startTime < timeout) {
-    await page.reload({ waitUntil: "domcontentloaded" }).catch(() => {});
-    await page.waitForTimeout(5000);
+    // 更新ボタンの送信で別のページへ移っていることがあるので，reload ではなく口座一覧を開き直す
+    await page
+      .goto("https://moneyforward.com/accounts", {
+        waitUntil: "domcontentloaded",
+      })
+      .catch(error => {
+        logger.warn(
+          { err: error },
+          "⚠️ Failed to reload the accounts page. Checking the current page.",
+        );
+      });
+
+    const accountTableShown = await page
+      .waitForSelector("#account-table", { timeout: 30000 })
+      .then(() => true)
+      .catch(() => false);
+    const loggedIn = (await page.locator('a[href="/sign_out"]').count()) > 0;
+    if (!accountTableShown || !loggedIn) {
+      throw new Error(
+        `MF accounts page is not in the expected state while waiting for sync (url: ${page.url()}, accountTable: ${accountTableShown}, loggedIn: ${loggedIn})`,
+      );
+    }
+    // 読み込み中アイコンが描画し終わるまで待つ．通信が続くページでも 10 秒で打ち切る
+    await page
+      .waitForLoadState("networkidle", { timeout: 10000 })
+      .catch(() => {});
 
     const loadingIcons = page.locator('img[src*="loading"]:visible');
     const count = await loadingIcons.count();
 
     if (count === 0) {
       logger.info("✅ All syncs completed.");
-      break;
+      return true;
     }
     logger.info({ count }, "🔄 Still syncing... accounts updating.");
+    // 確認の間隔．MF への負荷を抑えるため，続けて読み込み直さない
     await page.waitForTimeout(10000);
   }
+
+  logger.warn(
+    "⚠️ MF sync did not finish within 60 min. Continuing with the current data.",
+  );
+  return false;
 }
 
 /**
@@ -3084,9 +3169,12 @@ export async function runMfScraper(
   // context や page の作成も try の中で行う．失敗したときに finally で
   // ブラウザを閉じ，activeBrowsers とリスナーを片付けるため
   try {
+    // headless の既定の UA は HeadlessChrome を含むので，通常の Chrome の UA に置き換える．
+    // バージョンを固定すると，Playwright を上げるたびに実際のエンジンと食い違って古くなるので，起動したブラウザから取る．
+    // Chrome の UA はメジャー版以外を 0 にする（User-Agent Reduction）
+    const chromeMajorVersion = browser.version().split(".")[0];
     const context = await browser.newContext({
-      userAgent:
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+      userAgent: `Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${chromeMajorVersion}.0.0.0 Safari/537.36`,
       locale: "ja-JP",
       timezoneId: "Asia/Tokyo",
     });
@@ -3100,17 +3188,20 @@ export async function runMfScraper(
 
     await loginToMoneyForward(page, providerName, email, password);
 
+    const syncFailures: SyncFailureCounts = new Map();
+
     if (options.mode === "scheduled") {
       await triggerSync(page, provider.id);
 
-      await waitForMfSyncToFinish(page);
+      // 打ち切った場合，一部の口座は更新前のデータになるので，同期の失敗として残す
+      if (!(await waitForMfSyncToFinish(page))) {
+        countSyncFailure(syncFailures, "mfSyncTimeout");
+      }
     } else {
       logger.info(
         "ℹ️ Manual mode: skipping MF update button flow, starting API fetch immediately.",
       );
     }
-
-    const syncFailures: SyncFailureCounts = new Map();
 
     // Phase 1: 全金融機関の残高をスクレイプし、子口座をDBに登録
     logger.info("Phase 1: Scraping balances and registering sub-accounts...");
