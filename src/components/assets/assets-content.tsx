@@ -22,7 +22,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { formatCurrency } from "@/lib/utils";
+import { formatYAxisCurrency } from "@/lib/chart-format";
+import { assetTypeLabel, formatCurrency } from "@/lib/utils";
 
 type Breakdown = Awaited<
   ReturnType<typeof import("@/actions/assets").getAssetBreakdown>
@@ -377,13 +378,7 @@ export function AssetsContent({ breakdown }: AssetsContentProps) {
                               className="h-1.5 w-1.5 rounded-full shrink-0"
                               style={{ backgroundColor: assetColors[a.type] }}
                             />
-                            {a.type === "CASH"
-                              ? "預金・現金"
-                              : a.type === "INVESTMENT"
-                                ? "投資信託・証券"
-                                : a.type === "CRYPTO"
-                                  ? "暗号資産"
-                                  : "ポイント"}
+                            {assetTypeLabel(a.type)}
                           </span>
                         </TableCell>
                         <TableCell className="whitespace-nowrap text-right font-mono font-medium text-zinc-100">
@@ -468,7 +463,7 @@ export function AssetsContent({ breakdown }: AssetsContentProps) {
                   stroke="#52525b"
                   tickLine={false}
                   axisLine={false}
-                  tickFormatter={value => formatCurrency(Number(value))}
+                  tickFormatter={value => formatYAxisCurrency(Number(value))}
                   width={70}
                   // 上限を totalAssets に固定すると棒が枠に接するうえ，
                   // 純資産が負のとき負債棒がクリップされるため auto を使う
@@ -515,13 +510,13 @@ export function AssetsContent({ breakdown }: AssetsContentProps) {
                   fill="var(--color-totalAssets)"
                   radius={[4, 4, 0, 0]}
                 />
-                {/* 右 bar: 純資産（下端） + 総負債（其上） */}
+                {/* 右 bar: 純資産（下段） + 総負債（その上）．角丸は積み上げの頂上にだけ付ける */}
                 {netWorth > 0 && (
                   <Bar
                     dataKey="netWorth"
                     stackId="assets"
                     fill="var(--color-netWorth)"
-                    radius={[4, 4, 0, 0]}
+                    radius={totalLiabilities < 0 ? [0, 0, 0, 0] : [4, 4, 0, 0]}
                   />
                 )}
                 {totalLiabilities < 0 && (
@@ -529,7 +524,7 @@ export function AssetsContent({ breakdown }: AssetsContentProps) {
                     dataKey="totalLiability"
                     stackId="assets"
                     fill="var(--color-totalLiability)"
-                    radius={[0, 0, 4, 4]}
+                    radius={[4, 4, 0, 0]}
                   />
                 )}
               </BarChart>
