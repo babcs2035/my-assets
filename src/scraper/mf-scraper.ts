@@ -2618,6 +2618,14 @@ export async function runMfScraper(
     await page.fill('input[name="mfid_user[password]"]', password);
     await page.click("button#submitto");
 
+    // count() は待たないため，送信直後に呼ぶと OTP 画面の表示前に 0 を返し，
+    // OTP を入力せずに進んでしまう．OTP 入力欄かログイン後の要素が出るまで待つ．
+    // どちらも出ない場合は後続の verifyLoggedIn が失敗として扱う
+    await page
+      .waitForSelector('input[name="otp_attempt"], a[href="/sign_out"]', {
+        timeout: 20000,
+      })
+      .catch(() => {});
     const otpInputFound = await page
       .locator('input[name="otp_attempt"]')
       .count();
