@@ -6,7 +6,11 @@ import {
   revalidateSettingsAndDashboardPages,
   revalidateSettingsPage,
 } from "@/lib/revalidate";
-import { acquireSyncLock, releaseSyncLock } from "@/lib/sync-lock";
+import {
+  acquireSyncLock,
+  releaseSyncLock,
+  syncLockStaleBefore,
+} from "@/lib/sync-lock";
 import {
   type ProviderCreateInput,
   providerCreateSchema,
@@ -124,10 +128,13 @@ export async function deleteProvider(id: string) {
 }
 
 /**
- * 指定されたプロバイダーの同期処理を実行する関数である．
- * 同期結果（成功/失敗，日時）を Provider レコードに記録する．
+ * 指定されたプロバイダーの同期を始め，そのロックの印（lockedAt）を返す関数である．
+ * 同期の終わりは待たない．runMfScraper は数分から数十分かかり，Server Action はクライアントで 1 件ずつ送られるので，
+ * ここで待つと中止（abortSyncProvider）や画面の読み込みが同期の終わりまで送られない．
+ * 画面は返した印を getManualSyncResult に渡して終わりを問い合わせる．
+ * 同期結果（成功/失敗，日時）は Provider レコードに記録する．
  */
-export async function syncProvider(id: string) {
+export async function syncProvider(id: string): Promise<Date> {
   logger.info(`🔄 Syncing provider: ${id}`);
 
   const provider = await prisma.provider.findUnique({
@@ -166,40 +173,84 @@ export async function syncProvider(id: string) {
   const abortController = new AbortController();
   activeSyncControllers.set(id, { controller: abortController, lockedAt });
 
+  // 誰も await しないので，ロックの解除などで投げられた例外はここで記録して握りつぶす
+  void runManualSync(id, provider.name, abortController, lockedAt).catch(
+    error => {
+      logger.error(
+        { err: error },
+        `❌ Failed to finish manual sync for provider: ${provider.name}`,
+      );
+    },
+  );
+
+  return lockedAt;
+}
+
+/**
+ * syncProvider が始めた同期を最後まで実行し，結果をロックの解除で記録する関数である．
+ * request の外で終わるので revalidatePath は呼べない．再検証は getManualSyncResult が行う
+ */
+async function runManualSync(
+  id: string,
+  providerName: string,
+  abortController: AbortController,
+  lockedAt: Date,
+) {
   try {
-    logger.info(`🚀 Executing scraper for provider: ${provider.name}`);
-    await runMfScraper(provider.name, abortController.signal, {
+    logger.info(`🚀 Executing scraper for provider: ${providerName}`);
+    await runMfScraper(providerName, abortController.signal, {
       mode: "manual",
     });
-    logger.info(`✅ Sync completed for provider: ${provider.name}`);
-
-    // 同期成功を記録する．
+    logger.info(`✅ Sync completed for provider: ${providerName}`);
     await releaseSyncLock(id, lockedAt, true);
   } catch (error) {
-    // 中止された場合は特別な処理
     if (abortController.signal.aborted) {
-      logger.info(`🛑 Sync aborted for provider: ${provider.name}`);
-      await releaseSyncLock(id, lockedAt, false);
-      throw new Error("Sync was aborted");
+      logger.info(`🛑 Sync aborted for provider: ${providerName}`);
+    } else {
+      logger.error(
+        { err: error },
+        `❌ Sync failed for provider: ${providerName}`,
+      );
     }
-
-    logger.error(
-      { err: error },
-      `❌ Sync failed for provider: ${provider.name}`,
-    );
-
-    // 同期失敗を記録する．
+    // 中止では abortSyncProvider が先にロックを外しているので，ここでは何も書かれない
     await releaseSyncLock(id, lockedAt, false);
-
-    throw error;
   } finally {
     // 後から始まった同期が登録した controller を消さないよう，自分のものだけを消す
     if (activeSyncControllers.get(id)?.controller === abortController) {
       activeSyncControllers.delete(id);
     }
   }
+}
+
+export type ManualSyncResult = "running" | "success" | "failed";
+
+/**
+ * syncProvider が始めた同期（印が lockedAt のもの）が終わったかを返す関数である．
+ * 終わっていれば設定画面とダッシュボードを再検証する．同期そのものは request の外で終わり再検証できないので，
+ * 終わりを知った画面からのこの呼び出しで代わりに行う．
+ * ロックが奪われた・中止で外された・プロバイダーが消されたときも，その同期は終わったとして "failed" を返す
+ */
+export async function getManualSyncResult(
+  id: string,
+  lockedAt: Date,
+): Promise<ManualSyncResult> {
+  logger.debug(`🕒 Checking manual sync result for provider: ${id}`);
+  const provider = await prisma.provider.findUnique({
+    where: { id },
+    select: { lastSyncAt: true, lastSyncSuccess: true },
+  });
+
+  // 同期の途中でプロセスが再起動すると，ロックは期限切れまで残る．期限切れなら終わったとみなし，問い合わせを止めさせる
+  const isRunning =
+    provider?.lastSyncSuccess === null &&
+    provider.lastSyncAt?.getTime() === lockedAt.getTime() &&
+    lockedAt >= syncLockStaleBefore();
+  if (isRunning) {
+    return "running";
+  }
 
   revalidateSettingsAndDashboardPages();
+  return provider?.lastSyncSuccess ? "success" : "failed";
 }
 
 /**

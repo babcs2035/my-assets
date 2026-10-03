@@ -10,13 +10,15 @@ import {
   Trash2,
   XCircle,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
   abortSyncProvider,
   createProvider,
   deleteProvider,
+  getManualSyncResult,
   type getProviders,
+  type ManualSyncResult,
   syncProvider,
 } from "@/actions/providers";
 import { DeleteConfirmDialog } from "@/components/settings/delete-confirm-dialog";
@@ -66,6 +68,9 @@ import { BACKFILL_START_DATE, formatJSTDateTime } from "@/lib/utils";
 
 type Provider = Awaited<ReturnType<typeof getProviders>>[number];
 
+// 手動同期が終わったかを問い合わせる間隔である．同期は数分以上かかるので，細かく問い合わせても早くは分からない
+const SYNC_RESULT_POLL_INTERVAL_MS = 5000;
+
 /**
  * プロバイダーの追加・手動同期・同期の中止・削除を行う設定画面のセクションである．
  * 一覧の取得は親の SettingsContent がまとめて行うため，変更後は onChanged で再取得を依頼する．
@@ -86,6 +91,27 @@ export function ProviderSection({
   const [syncDialogProviderId, setSyncDialogProviderId] = useState<
     string | null
   >(null);
+  // 同期を始める要求の返事を待っているプロバイダーである．
+  // この間に中止すると，返事のあとに始まる問い合わせを止められず失敗の通知が出るため，中止ボタンを押せなくする
+  const [startingProviderIds, setStartingProviderIds] = useState<Set<string>>(
+    new Set(),
+  );
+  // 同期の終わりを問い合わせているタイマーと，その同期のロックの印である．
+  // 問い合わせの途中で中止や次の同期が始まったら，返ってきた結果を印の食い違いで捨てる
+  const syncPollsRef = useRef(
+    new Map<string, { lockedAt: Date; timer: ReturnType<typeof setTimeout> }>(),
+  );
+
+  // 画面を離れたら問い合わせを止める（同期そのものはサーバーで続く）
+  useEffect(() => {
+    const polls = syncPollsRef.current;
+    return () => {
+      for (const poll of polls.values()) {
+        clearTimeout(poll.timer);
+      }
+      polls.clear();
+    };
+  }, []);
   // 同期中かどうかはこのセッションで開始した同期，または
   // 「同期開始済み（lastSyncAt あり）かつ未完了（lastSyncSuccess が null）」で判定する．
   // lastSyncSuccess === null のみでは「未同期」のプロバイダーが永遠に「同期中」になる
@@ -138,49 +164,103 @@ export function ProviderSection({
     }
   };
 
+  const removeSyncingProviderId = (id: string) => {
+    setSyncingProviderIds(prev => {
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
+  };
+
+  const stopPollingSyncResult = (id: string) => {
+    const poll = syncPollsRef.current.get(id);
+    if (poll) {
+      clearTimeout(poll.timer);
+      syncPollsRef.current.delete(id);
+    }
+  };
+
+  const notifySyncFinished = (id: string, result: "success" | "failed") => {
+    window.dispatchEvent(
+      new CustomEvent("provider-sync-status", {
+        detail: {
+          providerId: id,
+          status: result === "success" ? "success" : "error",
+        },
+      }),
+    );
+    if (result === "success") {
+      toast.success("同期が完了しました．");
+    } else {
+      toast.error("同期に失敗しました．");
+    }
+    removeSyncingProviderId(id);
+    onChanged();
+  };
+
+  // syncProvider は同期を始めるとすぐ返るので，終わりは印（lockedAt）を渡して問い合わせる．
+  // 問い合わせも Server Action だが一瞬で返るため，中止や画面の読み込みを長く待たせない
+  const pollManualSyncResult = (id: string, lockedAt: Date) => {
+    const timer = setTimeout(async () => {
+      let result: ManualSyncResult;
+      try {
+        result = await getManualSyncResult(id, lockedAt);
+      } catch {
+        // 通信の一時的な失敗では同期は止まっていないので，次の間隔で問い合わせ直す
+        result = "running";
+      }
+      // 返事を待つ間に中止や次の同期で問い合わせが止められていれば，結果を捨てる
+      if (syncPollsRef.current.get(id)?.lockedAt !== lockedAt) return;
+      if (result === "running") {
+        pollManualSyncResult(id, lockedAt);
+        return;
+      }
+      syncPollsRef.current.delete(id);
+      notifySyncFinished(id, result);
+    }, SYNC_RESULT_POLL_INTERVAL_MS);
+    syncPollsRef.current.set(id, { lockedAt, timer });
+  };
+
   const handleSyncProvider = async (id: string) => {
     setSyncDialogProviderId(null);
+    setSyncingProviderIds(prev => new Set(prev).add(id));
+    setStartingProviderIds(prev => new Set(prev).add(id));
+    let lockedAt: Date;
+    try {
+      lockedAt = await syncProvider(id);
+    } catch {
+      // 種類が違う・別の同期が実行中などで始められなかった．
+      // 本番ではサーバーの例外メッセージが伏せられるので，理由は出さない
+      window.dispatchEvent(
+        new CustomEvent("provider-sync-status", {
+          detail: { providerId: id, status: "error" },
+        }),
+      );
+      toast.error("同期を開始できませんでした．");
+      removeSyncingProviderId(id);
+      onChanged();
+      return;
+    } finally {
+      setStartingProviderIds(prev => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+    }
     toast.info("同期を開始しました．");
     window.dispatchEvent(
       new CustomEvent("provider-sync-status", {
         detail: { providerId: id, status: "syncing" },
       }),
     );
-    setSyncingProviderIds(prev => new Set(prev).add(id));
-    try {
-      await syncProvider(id);
-      window.dispatchEvent(
-        new CustomEvent("provider-sync-status", {
-          detail: { providerId: id, status: "success" },
-        }),
-      );
-      toast.success("同期が完了しました．");
-      onChanged();
-    } catch (err) {
-      // 中止の場合は handleAbortSyncProvider が既に通知・イベントを
-      // 送出しているため，ここで重複トーストを出さない
-      const isAbort =
-        err instanceof Error && err.message === "Sync was aborted";
-      if (!isAbort) {
-        window.dispatchEvent(
-          new CustomEvent("provider-sync-status", {
-            detail: { providerId: id, status: "error" },
-          }),
-        );
-        toast.error("同期に失敗しました．");
-      }
-      onChanged();
-    } finally {
-      setSyncingProviderIds(prev => {
-        const next = new Set(prev);
-        next.delete(id);
-        return next;
-      });
-    }
+    pollManualSyncResult(id, lockedAt);
   };
 
   const handleAbortSyncProvider = async (id: string) => {
     toast.info("同期を中止しています...");
+    // 中止でロックが外れると問い合わせが "failed" を返し，失敗の通知が重なって出るので先に止める
+    const poll = syncPollsRef.current.get(id);
+    stopPollingSyncResult(id);
     try {
       await abortSyncProvider(id);
       // 中止は失敗とは区別して通知する（SyncStatus が赤い失敗表示にならないよう）
@@ -190,15 +270,16 @@ export function ProviderSection({
         }),
       );
       toast.success("同期を中止しました．");
+      removeSyncingProviderId(id);
       onChanged();
     } catch {
       toast.error("同期の中止に失敗しました．");
-    } finally {
-      setSyncingProviderIds(prev => {
-        const next = new Set(prev);
-        next.delete(id);
-        return next;
-      });
+      // 同期はまだ動いているかもしれないので，終わりの問い合わせを続ける
+      if (poll) {
+        pollManualSyncResult(id, poll.lockedAt);
+      } else {
+        removeSyncingProviderId(id);
+      }
     }
   };
 
@@ -362,6 +443,7 @@ export function ProviderSection({
                           <Button
                             variant="ghost"
                             size="sm"
+                            disabled={startingProviderIds.has(provider.id)}
                             onClick={() => handleAbortSyncProvider(provider.id)}
                             className="h-8 text-red-400 hover:text-red-300"
                           >
@@ -515,6 +597,7 @@ export function ProviderSection({
                               <Button
                                 variant="ghost"
                                 size="icon"
+                                disabled={startingProviderIds.has(provider.id)}
                                 onClick={() =>
                                   handleAbortSyncProvider(provider.id)
                                 }
