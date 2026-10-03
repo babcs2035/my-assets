@@ -2307,9 +2307,9 @@ async function recalculateLiabilityHistory(
     },
     select: {
       id: true,
+      subAccountId: true,
       date: true,
       amount: true,
-      subAccount: { select: { currentName: true } },
     },
   });
 
@@ -2323,16 +2323,16 @@ async function recalculateLiabilityHistory(
       subAccountId: true,
       date: true,
       amount: true,
-      subAccount: { select: { currentName: true } },
     },
   });
 
-  // 負債口座名 → 日付ごとの返済額をグループ化
+  // 負債口座 ID → 日付ごとの返済額をグループ化
+  // 同じプロバイダーに同名の負債口座があると明細が混ざるため，名前ではなく ID で照合する
   // 振替（負債→銀行）の amount は正の値（返済額）
-  const incomingTransfers = new Map<string, number>(); // subName::date → 返済額
+  const incomingTransfers = new Map<string, number>(); // subAccountId::date → 返済額
   for (const tx of allTransfers) {
     const dateStr = formatJSTDate(tx.date);
-    const key = `${tx.subAccount.currentName}::${dateStr}`;
+    const key = `${tx.subAccountId}::${dateStr}`;
     const existing = incomingTransfers.get(key) ?? 0;
     incomingTransfers.set(key, existing + tx.amount);
   }
@@ -2343,7 +2343,7 @@ async function recalculateLiabilityHistory(
     // 1. 通常取引を日付→合計額の Map に集約
     const txMap = new Map<string, number>(); // date → 同日の合計 amount
     for (const tx of allTransactions) {
-      if (tx.subAccount.currentName !== sa.currentName) continue;
+      if (tx.subAccountId !== sa.id) continue;
       const dateStr = formatJSTDate(tx.date);
       if (dateStr > todayStr) continue;
       const existing = txMap.get(dateStr) ?? 0;
@@ -2354,8 +2354,8 @@ async function recalculateLiabilityHistory(
     //    同日のスクレイピング取引（購入など）と返済をネット化して合計する
     //    （同日に購入と返済の両方が存在する場合、別々に処理すると逆算時に重複計算になる）
     for (const [key, amount] of incomingTransfers) {
-      const [subName, dateStr] = key.split("::");
-      if (subName !== sa.currentName) continue;
+      const [subAccountId, dateStr] = key.split("::");
+      if (subAccountId !== sa.id) continue;
       const existing = txMap.get(dateStr) ?? 0;
       txMap.set(dateStr, existing + amount);
     }
