@@ -2806,6 +2806,8 @@ if (isEntry && process.env.OP_MF_ITEM_ID) {
     .filter(s => s.length > 0);
 
   (async () => {
+    // 1 件失敗しても残りのアイテムを処理し，最後に終了コードで失敗を知らせる
+    const failedItemIds: string[] = [];
     for (const itemId of itemIds) {
       try {
         // runMfScraper と同じく，プロバイダーがなければ作ってからロックを取る
@@ -2833,11 +2835,16 @@ if (isEntry && process.env.OP_MF_ITEM_ID) {
         }
       } catch (err) {
         logger.error({ err, itemId }, "❌ Failed to run MF scraper.");
-        process.exit(1);
+        failedItemIds.push(itemId);
       }
     }
-    logger.info("✅ All scrapers completed.");
     // 共有の Prisma クライアントは，すべてのアイテムを終えてから 1 回だけ切断する
     await prisma.$disconnect();
+    if (failedItemIds.length > 0) {
+      logger.error({ failedItemIds }, "❌ Some scrapers failed.");
+      process.exitCode = 1;
+      return;
+    }
+    logger.info("✅ All scrapers completed.");
   })();
 }

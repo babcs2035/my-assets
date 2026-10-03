@@ -3,12 +3,12 @@
  * Playwright を使用して Coincheck から取引履歴 CSV を取得し，資産情報を抽出する．
  */
 
-import { PrismaClient } from "@prisma/client";
-import { chromium } from "playwright";
+import "dotenv/config";
+import { type Browser, chromium } from "playwright";
 import logger from "../lib/logger";
 import { getItemField, getItemOtp } from "../lib/onepassword";
+import { prisma } from "../lib/prisma";
 
-const prisma = new PrismaClient();
 const ITEM_NAME = process.env.OP_CUSTOM_ITEM_ID || "Coincheck";
 
 /**
@@ -40,43 +40,86 @@ async function getCredentials() {
 
 /**
  * 通貨の現在レートを取得する関数である．
+ * 取得できなければ null を返す．0 を返すと評価額 0 として保存され，資産が消えたように見えるため
  */
-async function getRate(currency: string): Promise<number> {
+async function getRate(currency: string): Promise<number | null> {
   const c = currency.toUpperCase();
   if (c === "JPY" || c === "JP_YEN") return 1;
   try {
     const pair = `${c.toLowerCase()}_jpy`;
     const res = await fetch(`https://coincheck.com/api/rate/${pair}`);
-    if (!res.ok) return 0;
+    if (!res.ok) return null;
     const json = await res.json();
-    return Number.parseFloat(json.rate);
+    const rate = Number.parseFloat(json.rate);
+    return Number.isFinite(rate) && rate > 0 ? rate : null;
   } catch {
-    return 0;
+    return null;
   }
+}
+
+/**
+ * CSV の 1 行を列に分ける関数である．
+ * 引用符で囲んだ値の中のカンマ（桁区切りなど）と，`""` による引用符のエスケープを扱う．
+ * 値の中の改行は扱わない（行の分割を先に行っているため）
+ */
+function splitCsvLine(line: string): string[] {
+  const cols: string[] = [];
+  let current = "";
+  let inQuotes = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (inQuotes) {
+      if (ch !== '"') {
+        current += ch;
+      } else if (line[i + 1] === '"') {
+        current += '"';
+        i++;
+      } else {
+        inQuotes = false;
+      }
+    } else if (ch === '"') {
+      inQuotes = true;
+    } else if (ch === ",") {
+      cols.push(current.trim());
+      current = "";
+    } else {
+      current += ch;
+    }
+  }
+  cols.push(current.trim());
+  return cols;
+}
+
+/**
+ * 桁区切りのカンマを含む数値（`1,234.5`）を読む関数である
+ */
+function parseCsvNumber(value: string | undefined): number {
+  return Number.parseFloat((value ?? "").replace(/,/g, ""));
 }
 
 /**
  * スクレイパーのメイン処理である．
  */
 async function main() {
-  let providerId = process.env.PROVIDER_ID;
-  if (!providerId) {
-    const p = await prisma.provider.findFirst({ where: { type: "custom" } });
-    if (p) {
-      providerId = p.id;
-    } else {
-      logger.warn("⚠️ No custom provider found in database.");
-    }
-  }
-
-  const { email, password, totp } = await getCredentials();
-
-  logger.info("🚀 Starting Coincheck Scraper...");
-  const browser = await chromium.launch({ headless: true });
-  const context = await browser.newContext();
-  const page = await context.newPage();
-
+  let browser: Browser | undefined;
   try {
+    let providerId = process.env.PROVIDER_ID;
+    if (!providerId) {
+      const p = await prisma.provider.findFirst({ where: { type: "custom" } });
+      if (p) {
+        providerId = p.id;
+      } else {
+        logger.warn("⚠️ No custom provider found in database.");
+      }
+    }
+
+    const { email, password, totp } = await getCredentials();
+
+    logger.info("🚀 Starting Coincheck Scraper...");
+    browser = await chromium.launch({ headless: true });
+    const context = await browser.newContext();
+    const page = await context.newPage();
+
     logger.info("🔐 Logging in to Coincheck...");
     await page.goto("https://coincheck.com/ja/sessions/signin");
 
@@ -120,9 +163,7 @@ async function main() {
     logger.info(`✅ CSV downloaded (${csvContent.length} bytes).`);
 
     const lines = csvContent.split(/\r?\n/);
-    const headers = lines[0]
-      .split(",")
-      .map(h => h.trim().replace(/^"|"$/g, ""));
+    const headers = splitCsvLine(lines[0]);
     logger.info({ headers }, "📋 CSV headers.");
 
     const currencyIdx = headers.findIndex(h =>
@@ -140,11 +181,11 @@ async function main() {
         const line = lines[i];
         if (!line.trim()) continue;
 
-        const cols = line.split(",").map(c => c.trim().replace(/^"|"$/g, ""));
+        const cols = splitCsvLine(line);
         if (cols.length < headers.length) continue;
 
         const currency = cols[currencyIdx].toUpperCase();
-        const amount = Number.parseFloat(cols[amountIdx]);
+        const amount = parseCsvNumber(cols[amountIdx]);
 
         if (!Number.isNaN(amount) && currency) {
           const current = balances.get(currency) || 0;
@@ -188,9 +229,9 @@ async function main() {
 
       for (const line of lines) {
         if (line.includes("Date") || line.includes("日時")) continue;
-        const parts = line.split(",");
+        const parts = splitCsvLine(line);
         if (parts.length < 2) continue;
-        const cleanParts = parts.map(p => p.replace(/["\s]/g, ""));
+        const cleanParts = parts.map(p => p.replace(/\s/g, ""));
 
         let currency = "";
         let amount = 0;
@@ -198,8 +239,8 @@ async function main() {
           const part = cleanParts[i];
           if (knownCurrencies.includes(part.toUpperCase())) {
             currency = part.toUpperCase();
-            const prev = Number.parseFloat(cleanParts[i - 1]);
-            const next = Number.parseFloat(cleanParts[i + 1]);
+            const prev = parseCsvNumber(cleanParts[i - 1]);
+            const next = parseCsvNumber(cleanParts[i + 1]);
             if (!Number.isNaN(prev)) {
               amount = prev;
             } else if (!Number.isNaN(next)) {
@@ -248,6 +289,8 @@ async function main() {
       });
 
       let totalBalanceJPY = 0;
+      const heldSymbols: string[] = [];
+      const symbolsWithoutRate: string[] = [];
 
       for (const [currency, qty] of balances.entries()) {
         if (Math.abs(qty) < 0.000001) continue;
@@ -256,8 +299,14 @@ async function main() {
           totalBalanceJPY += qty;
           continue;
         }
+        heldSymbols.push(currency);
 
         const rate = await getRate(currency);
+        if (rate === null) {
+          // 前回の評価額を残し，最後に同期を失敗にする
+          symbolsWithoutRate.push(currency);
+          continue;
+        }
         const valuation = Math.floor(qty * rate);
 
         const existing = await prisma.cryptoAsset.findFirst({
@@ -282,19 +331,36 @@ async function main() {
           });
         }
       }
+      // 残高がなくなった通貨の行を消す．残すと最後の評価額のまま資産に計上され続ける．
+      // CSV から 1 件も読めなかったときは解析の失敗とみなし，消さない
+      if (balances.size > 0) {
+        await prisma.cryptoAsset.deleteMany({
+          where: {
+            subAccountId: subAccount.id,
+            symbol: { notIn: heldSymbols },
+          },
+        });
+      }
       await prisma.subAccount.update({
         where: { id: subAccount.id },
         data: { balance: Math.floor(totalBalanceJPY), assetType: "CRYPTO" },
       });
 
+      if (symbolsWithoutRate.length > 0) {
+        throw new Error(
+          `Failed to fetch rates. Kept previous valuations for: ${symbolsWithoutRate.join(", ")}`,
+        );
+      }
       logger.info("✅ Data successfully saved to database.");
     }
-  } catch (err) {
-    logger.error({ err }, "❌ An error occurred during scraping process.");
   } finally {
-    await browser.close();
+    await browser?.close();
     await prisma.$disconnect();
   }
 }
 
-main().catch(logger.error);
+main().catch(err => {
+  logger.error({ err }, "❌ An error occurred during scraping process.");
+  // sync.ts は終了コードで成否を判定する
+  process.exitCode = 1;
+});
