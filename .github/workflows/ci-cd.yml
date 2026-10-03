@@ -9,6 +9,16 @@ on:
       - main
   workflow_dispatch:
 
+# Jobs that need more (packages: write / read) ask for it themselves
+permissions:
+  contents: read
+
+# Process pushes to main one at a time so an older deploy cannot finish after a newer one.
+# On pull requests a new push cancels the previous run.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 env:
   REGISTRY: ghcr.io
 
@@ -19,10 +29,10 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@main
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup mise
-        uses: jdx/mise-action@main
+        uses: jdx/mise-action@7a4e45a543138629540c9a1616d08632b893e492 # v5.0.1
         with:
           install: true
 
@@ -44,6 +54,32 @@ jobs:
       - name: Run Unit Tests
         run: pnpm test
 
+      # Errors that only next build reports would otherwise surface after merging to main
+      - name: Build Next.js application
+        run: pnpm build
+
+  docker-build-check:
+    name: Docker Build Check
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    needs: ci-checks
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      # amd64 only and no push: this only checks that the Dockerfile still builds
+      - name: Build Docker image
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          push: false
+          platforms: linux/amd64
+          cache-from: type=gha
+
   build-and-push:
     name: Build & Push Docker Image
     runs-on: ubuntu-latest
@@ -55,25 +91,26 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@main
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@master
+        uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
         with:
           image: tonistiigi/binfmt:qemu-v8.1.4
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@master
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
 
       - name: Log in to the Container registry
-        uses: docker/login-action@master
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # The deploy job runs the commit SHA tag; latest is kept for manual use
       - name: Build and push Docker image
-        uses: docker/build-push-action@master
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
           push: true
@@ -86,20 +123,24 @@ jobs:
     name: Deploy to Server
     needs: build-and-push
     runs-on: ubuntu-latest
+    # GITHUB_TOKEN is sent to the deploy host only to pull the image
+    permissions:
+      contents: read
+      packages: read
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@main
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup Tailscale
-        uses: tailscale/github-action@main
+        uses: tailscale/github-action@d1b6cd204f8dceda5b3eaad7f1f767be390056cd # v4.2.0
         with:
           oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
           oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
           tags: tag:ci
 
       - name: Upload compose file
-        uses: appleboy/scp-action@master
+        uses: appleboy/scp-action@ff85246acaad7bdce478db94a363cd2bf7c90345 # v1.0.0
         with:
           host: ${{ secrets.DEPLOY_HOST }}
           username: ${{ secrets.DEPLOY_USER }}
@@ -109,7 +150,7 @@ jobs:
           source: "docker-compose.production.yml"
 
       - name: Deploy via SSH
-        uses: appleboy/ssh-action@master
+        uses: appleboy/ssh-action@0ff4204d59e8e51228ff73bce53f80d53301dee2 # v1.2.5
         with:
           host: ${{ secrets.DEPLOY_HOST }}
           username: ${{ secrets.DEPLOY_USER }}
@@ -128,19 +169,18 @@ jobs:
               exit 1
             fi
 
+            # DATABASE_URL is not checked: docker-compose.yml builds it from POSTGRES_*
             if ! grep -q '^POSTGRES_PASSWORD=' .env || [ -z "$(grep '^POSTGRES_PASSWORD=' .env | tail -n1 | cut -d= -f2-)" ]; then
               echo "POSTGRES_PASSWORD is required in deploy .env." >&2
-              exit 1
-            fi
-
-            if ! grep -q '^DATABASE_URL=' .env || [ -z "$(grep '^DATABASE_URL=' .env | tail -n1 | cut -d= -f2-)" ]; then
-              echo "DATABASE_URL is required in deploy .env." >&2
               exit 1
             fi
 
             set -a
             . ./.env
             set +a
+
+            # Run the image built from this commit; latest may already point at another push
+            export IMAGE_TAG="${{ github.sha }}"
 
             if [ -z "${OP_SERVICE_ACCOUNT_TOKEN:-}" ]; then
               echo "OP_SERVICE_ACCOUNT_TOKEN is required in deploy .env." >&2
@@ -152,15 +192,20 @@ jobs:
               exit 1
             fi
 
+            # op-secrets.json holds passwords and TOTP secrets. The file stays 0644 so uid 1001 in the
+            # container can read the bind mount, and the 0700 directory keeps other host users out.
             mkdir -p data/runtime
+            chmod 700 data/runtime
 
             export OP_VAULT="${OP_VAULT:-}"
 
+            # This Python runs inside single quotes in the shell: use only double quotes in it
             python3 -c '
-            import json, os, subprocess
+            import json, os, subprocess, sys, tempfile
 
             OP_VAULT_VALUE = os.environ.get("OP_VAULT", "")
             OP_MF_ITEM_ID_RAW = os.environ.get("OP_MF_ITEM_ID", "MF_Main")
+            SECRETS_PATH = "data/runtime/op-secrets.json"
 
             # Split comma-separated item IDs, trim whitespace, filter empty
             item_ids = [
@@ -188,8 +233,11 @@ jobs:
                 label = ""
 
                 # Debug: log all field labels and types (values hidden for security)
+                # Reusing the f-string quote inside {} needs Python 3.12+, and the host version is unknown
                 for field in item.get("fields", []):
-                    print(f"  Field: label={field.get('label')}, type={field.get('type')}", flush=True)
+                    field_label = field.get("label")
+                    field_type = field.get("type")
+                    print(f"  Field: label={field_label}, type={field_type}", flush=True)
 
                 for field in item.get("fields", []):
                     label = str(field.get("label", "")).strip().lower()
@@ -221,6 +269,7 @@ jobs:
                 return {k: v for k, v in fields_dict.items() if v is not None}
 
             items = {}
+            failed_item_ids = []
             for item_id in item_ids:
                 print(f"Fetching item {item_id} from 1Password...", flush=True)
                 mf = extract_item(item_id, OP_VAULT_VALUE)
@@ -228,36 +277,50 @@ jobs:
                     items[item_id] = mf
                     print(f"  Got: {list(mf.keys())}", flush=True)
                 else:
+                    failed_item_ids.append(item_id)
                     print(f"  WARNING: MF item {item_id} is empty!", flush=True)
 
-            payload = {"items": items}
-            with open("data/runtime/op-secrets.json", "w", encoding="utf-8") as f:
-                json.dump(payload, f, ensure_ascii=False)
+            # Stop the deploy and keep the previous file: otherwise the failure only shows at the next scheduled sync
+            if failed_item_ids:
+                print(f"ERROR: Could not get 1Password items: {failed_item_ids}", flush=True)
+                sys.exit(1)
 
-            os.chmod("data/runtime/op-secrets.json", 0o644)
+            # Write to a temporary file and rename it, so an interrupted write cannot leave a broken file.
+            # A running container keeps the old inode, but docker compose up --force-recreate below mounts the new one.
+            fd, tmp_path = tempfile.mkstemp(dir="data/runtime", prefix=".op-secrets.", suffix=".json")
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                json.dump({"items": items}, f, ensure_ascii=False)
+            os.chmod(tmp_path, 0o644)
+            os.replace(tmp_path, SECRETS_PATH)
             print(f"Saved op-secrets.json with items: {list(items.keys())}", flush=True)
             '
 
-            docker compose pull --quiet || true
+            docker compose pull --quiet
 
             # Apply database migrations explicitly before starting the app
             echo "Applying database migrations..."
-            set -a
-            . ./.env
-            set +a
-            docker compose run --rm app prisma migrate deploy
-            MIGRATE_EXIT=$?
-            if [ $MIGRATE_EXIT -ne 0 ]; then
-              echo "ERROR: Database migration failed with exit code $MIGRATE_EXIT" >&2
-              echo "Aborting deploy." >&2
-              exit $MIGRATE_EXIT
+            if ! docker compose run --rm app prisma migrate deploy; then
+              echo "ERROR: Database migration failed. Aborting deploy." >&2
+              exit 1
             fi
             echo "Database migrations applied successfully."
 
             docker compose up -d --force-recreate --remove-orphans
 
-            if ! docker compose ps --status running | grep -q "my-assets-app"; then
-              echo "Container is not running: my-assets-app"
+            # "running" is also true for a container in a restart loop, so wait for the healthcheck
+            # (start_period 120s, interval 30s). App logs are not printed: they contain transaction data.
+            echo "Waiting for my-assets-app to become healthy..."
+            health=""
+            for _ in $(seq 1 48); do
+              health=$(docker inspect --format '{{.State.Health.Status}}' my-assets-app 2>/dev/null || echo "missing")
+              if [ "$health" = "healthy" ] || [ "$health" = "unhealthy" ]; then
+                break
+              fi
+              sleep 5
+            done
+            if [ "$health" != "healthy" ]; then
+              echo "my-assets-app is not healthy (status: $health). Check docker compose logs app on the host." >&2
               docker compose ps
               exit 1
             fi
+            echo "my-assets-app is healthy: ghcr.io/babcs2035/my-assets:${IMAGE_TAG}"
