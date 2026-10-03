@@ -455,8 +455,6 @@ async function saveHoldingsFromAccountPage(
   assetDetails: MfAssetDetail[],
   date: string,
 ) {
-  if (!assetDetails || assetDetails.length === 0) return;
-
   logger.info(
     { holdingsCount: assetDetails.length, subAccount: subAccountName },
     "💼 Saving investment trust holdings...",
@@ -470,9 +468,10 @@ async function saveHoldingsFromAccountPage(
     if (!holdingName) continue;
 
     const qty = holding.qty ?? 0;
-    const unitPrice = holding.current_price ?? 0;
-    const valuation = holding.value ?? 0;
-    const profit = holding.profit ?? 0;
+    // unitPrice，valuation，gainLoss は Int 列である．小数のまま渡すと Prisma が例外を出し，銘柄が保存されない
+    const unitPrice = Math.round(holding.current_price ?? 0);
+    const valuation = Math.round(holding.value ?? 0);
+    const profit = Math.round(holding.profit ?? 0);
     // Derive total cost from valuation and profit for gainLossRate calculation.
     // valuation = profit + totalCost => totalCost = valuation - profit
     const derivedTotalCost = valuation - profit;
@@ -549,8 +548,17 @@ async function saveHoldingsFromAccountPage(
     }
   }
 
+  // 今回のページにない銘柄（売却済み）を消す．残すと最後の評価額のまま資産に計上され続ける．
+  // 履歴（HoldingHistory）は過去の推移として残す
+  const currentNames = assetDetails
+    .map(holding => holding.name?.trim())
+    .filter((name): name is string => Boolean(name));
+  const { count: removedCount } = await prisma.holding.deleteMany({
+    where: { subAccountId, name: { notIn: currentNames } },
+  });
+
   logger.info(
-    { count: savedCount, subAccount: subAccountName },
+    { count: savedCount, removed: removedCount, subAccount: subAccountName },
     "✅ Holdings saved from account detail page.",
   );
 }
@@ -558,9 +566,11 @@ async function saveHoldingsFromAccountPage(
 /**
  * 投資信託の保有銘柄履歴（HoldingHistory）について、各日の valuation と gainLoss から
  * totalCost = valuation - gainLoss を逆算し、gainLossRate と avgCostBasis を再計算する。
+ * 対象は指定した子口座だけにし，値が変わる行だけを更新する（証券口座ごとに呼ばれるので，全件を毎回書き直さない）
  */
-async function recalculateHoldingHistory() {
+async function recalculateHoldingHistory(subAccountId: string) {
   const allHistories = await prisma.holdingHistory.findMany({
+    where: { subAccountId },
     select: {
       id: true,
       subAccountId: true,
@@ -568,6 +578,8 @@ async function recalculateHoldingHistory() {
       quantity: true,
       valuation: true,
       gainLoss: true,
+      avgCostBasis: true,
+      gainLossRate: true,
     },
   });
 
@@ -582,6 +594,12 @@ async function recalculateHoldingHistory() {
     );
     const newAvgCostBasis =
       h.quantity > 0 ? Math.round(derivedTotalCost / h.quantity) : 0;
+    if (
+      h.avgCostBasis === newAvgCostBasis &&
+      h.gainLossRate === newGainLossRate
+    ) {
+      continue;
+    }
 
     await prisma.holdingHistory.update({
       where: { id: h.id },
@@ -1207,16 +1225,15 @@ async function scrapeBalanceHistory(
               { label: mainAccount.label, mfCount: mfDetails.length },
               "📊 Found asset_details from account page.",
             );
-            if (mfDetails.length > 0) {
-              const todayStr = formatJSTDate(today);
-              await saveHoldingsFromAccountPage(
-                investmentSubAccount.id,
-                investmentSubAccount.currentName,
-                mfDetails,
-                todayStr,
-              );
-              await recalculateHoldingHistory();
-            }
+            // ページを読めていれば，投資信託が 0 件でも呼ぶ（全部売却したときに Holding を消すため）
+            const todayStr = formatJSTDate(today);
+            await saveHoldingsFromAccountPage(
+              investmentSubAccount.id,
+              investmentSubAccount.currentName,
+              mfDetails,
+              todayStr,
+            );
+            await recalculateHoldingHistory(investmentSubAccount.id);
           }
         } catch (error) {
           logger.warn(
@@ -1421,6 +1438,10 @@ async function saveBalancesToDatabase(
     where: { providerId },
   });
 
+  // 当日分の残高履歴は，今回 MF が返した子口座にだけ記録する．
+  // DB の全子口座に書くと，解約した口座や今回返らなかった口座も前回の残高で毎日記録される
+  const savedSubAccountIds: string[] = [];
+
   // 口座情報の保存
   for (const account of balances) {
     if (!Number.isFinite(account.balance)) {
@@ -1468,7 +1489,7 @@ async function saveBalancesToDatabase(
       }
     }
 
-    await prisma.subAccount.upsert({
+    const savedSubAccount = await prisma.subAccount.upsert({
       where: {
         mainAccountId_currentName: {
           mainAccountId: mainAccount.id,
@@ -1484,18 +1505,16 @@ async function saveBalancesToDatabase(
         balance: Math.trunc(account.balance),
       },
     });
+    savedSubAccountIds.push(savedSubAccount.id);
   }
 
-  // 残高履歴は scrapeBalanceHistory で処理するため、ここでは本日分のみ保存
-  const today = todayJST();
-  today.setHours(8, 0, 0, 0);
+  // 残高履歴は scrapeBalanceHistory で処理するため、ここでは本日分のみ保存．
+  // 日時は scrapeBalanceHistory と同じ JST 08:00 にする．setHours はサーバーのローカル TZ で
+  // 動くので，TZ が JST でないと別の行ができ，日付もずれる
+  const today = new Date(`${formatJSTDate(todayJST())}T08:00:00+09:00`);
   const allSubAccounts = await prisma.subAccount.findMany({
-    where: {
-      mainAccount: {
-        providerId,
-      },
-    },
-    select: { id: true, assetType: true, balance: true },
+    where: { id: { in: savedSubAccountIds } },
+    select: { id: true, balance: true },
   });
 
   for (const sa of allSubAccounts) {
