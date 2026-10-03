@@ -2690,9 +2690,12 @@ export async function runMfScraper(
           type: el.getAttribute("type"),
         })),
       );
-      logger.error(
-        { currentUrl, title, bodyText, buttons },
-        "❌ Login verification failed.",
+      // 本文とボタンの一覧は，セレクタだけが変わった場合に氏名や資産額を含みうる．
+      // 本番（logger は info 以上）に残さないよう debug で出す
+      logger.error({ currentUrl, title }, "❌ Login verification failed.");
+      logger.debug(
+        { bodyText, buttons },
+        "Login verification failed: page details.",
       );
 
       // two_factor_auth ページでエラーメッセージが表示されている場合、
@@ -2730,8 +2733,12 @@ export async function runMfScraper(
             () => document.body?.innerText?.slice(0, 500) ?? "",
           );
           logger.error(
-            { currentUrl: retryUrl, title: retryTitle, bodyText: retryBody },
+            { currentUrl: retryUrl, title: retryTitle },
             "❌ Login verification failed after all retries.",
+          );
+          logger.debug(
+            { bodyText: retryBody },
+            "Login verification failed after retries: page details.",
           );
         }
       }
