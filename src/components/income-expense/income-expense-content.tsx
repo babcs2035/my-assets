@@ -4,9 +4,9 @@ import { Loader2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Bar,
-  BarChart,
   CartesianGrid,
   Cell,
+  ComposedChart,
   Legend,
   Line,
   Pie,
@@ -580,7 +580,7 @@ export function IncomeExpenseContent({
                   }}
                   className="h-full w-full"
                 >
-                  <BarChart
+                  <ComposedChart
                     data={monthlyTrend}
                     margin={{ top: 10, right: 10, left: 10, bottom: 0 }}
                   >
@@ -676,7 +676,7 @@ export function IncomeExpenseContent({
                       dot={false}
                       activeDot={{ r: 4 }}
                     />
-                  </BarChart>
+                  </ComposedChart>
                 </ChartContainer>
               </div>
             </CardContent>
@@ -725,7 +725,7 @@ export function IncomeExpenseContent({
                 }}
                 className="h-full w-full"
               >
-                <BarChart
+                <ComposedChart
                   data={annualTrendData}
                   margin={{ top: 10, right: 10, left: 10, bottom: 0 }}
                 >
@@ -815,7 +815,7 @@ export function IncomeExpenseContent({
                     dot={false}
                     activeDot={{ r: 4 }}
                   />
-                </BarChart>
+                </ComposedChart>
               </ChartContainer>
             </div>
           </CardContent>
