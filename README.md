@@ -175,6 +175,13 @@ basePath が `/my-assets` のため，ブラウザで `http://localhost:3000/my-
 - `OP_VAULT`: 1Password のボルト名
 - `OP_MF_ITEM_ID`: MF 用の 1Password アイテム名（既定: `MF_Main`）
 
+### 本番の前段（Cloudflare と Basic 認証）
+
+本番は Cloudflare を経由して公開し，アプリより手前で Basic 認証をかけている．
+
+- **認証**: アプリ自体には認証がない．前段の Basic 認証を外すと，誰でもページを見られ，Server Actions から同期の実行や設定の変更ができる．
+- **CSP**: Cloudflare の Rocket Loader は，nonce の付かない自身のスクリプトを HTML に差し込む．そのため `src/proxy.ts` の `script-src` は nonce を使わず，`'self' 'unsafe-inline' ajax.cloudflare.com` にしている．Cloudflare で Rocket Loader を止めた場合は，nonce 方式（`4f8f4c8`）に戻せる．
+
 ## ライセンス
 
 MIT License
