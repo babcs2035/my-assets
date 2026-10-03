@@ -176,7 +176,7 @@ export function HoldingTable({
                 className={`whitespace-nowrap text-right font-mono ${h.dayBeforeRatio != null && h.dayBeforeRatio >= 0 ? "text-emerald-400" : "text-zinc-500"}`}
               >
                 {h.dayBeforeRatio != null
-                  ? `${h.dayBeforeRatio >= 0 ? "+" : ""}${h.dayBeforeRatio.toLocaleString()}%`
+                  ? `${h.dayBeforeRatio >= 0 ? "+" : ""}${h.dayBeforeRatio.toLocaleString("ja-JP")}%`
                   : "—"}
               </TableCell>
             )}

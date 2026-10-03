@@ -54,7 +54,7 @@ function formatCompactAmount(amount: number): string {
   if (amount >= 10000) {
     return `${Number((amount / 10000).toFixed(1))}万`;
   }
-  return amount.toLocaleString();
+  return amount.toLocaleString("ja-JP");
 }
 
 /**
@@ -169,7 +169,7 @@ export function CalendarGrid({
                   cell.isCurrentMonth
                     ? `${year}年${month}月${cell.day}日${
                         data
-                          ? ` 支出 ${data.expense.toLocaleString()} 円 収入 ${data.income.toLocaleString()} 円`
+                          ? ` 支出 ${data.expense.toLocaleString("ja-JP")} 円 収入 ${data.income.toLocaleString("ja-JP")} 円`
                           : ""
                       }`
                     : undefined
@@ -211,14 +211,14 @@ export function CalendarGrid({
                   <div className="flex w-full flex-col items-end gap-0.5 min-w-0 mt-0.5">
                     <span
                       className="font-mono text-[10px] sm:text-sm font-bold truncate w-full text-right text-red-400"
-                      title={`支出: ¥${data.expense.toLocaleString()}`}
+                      title={`支出: ¥${data.expense.toLocaleString("ja-JP")}`}
                     >
                       -{formatCompactAmount(data.expense)}
                     </span>
                     {data.income > 0 && (
                       <span
                         className="text-emerald-400 text-[10px] sm:text-sm font-mono font-semibold truncate w-full text-right"
-                        title={`収入: ¥${data.income.toLocaleString()}`}
+                        title={`収入: ¥${data.income.toLocaleString("ja-JP")}`}
                       >
                         +{formatCompactAmount(data.income)}
                       </span>

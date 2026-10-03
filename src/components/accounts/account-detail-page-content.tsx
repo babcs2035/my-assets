@@ -329,7 +329,7 @@ function AccountDetailContent({
                       }`}
                     >
                       {c.dayBeforeRatio != null
-                        ? `${c.dayBeforeRatio >= 0 ? "+" : ""}${c.dayBeforeRatio.toLocaleString()}%`
+                        ? `${c.dayBeforeRatio >= 0 ? "+" : ""}${c.dayBeforeRatio.toLocaleString("ja-JP")}%`
                         : "N/A"}
                     </Badge>
                   </div>
@@ -386,7 +386,7 @@ function AccountDetailContent({
                       <div className="flex justify-between text-sm">
                         <span className="text-zinc-500">ポイント数</span>
                         <span className="font-mono text-zinc-100 font-medium">
-                          {sa.pointDetail?.points.toLocaleString()}
+                          {sa.pointDetail?.points.toLocaleString("ja-JP")}
                         </span>
                       </div>
                       <div className="flex justify-between text-sm">

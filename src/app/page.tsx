@@ -99,7 +99,7 @@ export default async function DashboardPage() {
           }
         >
           {diff > 0 && "+"}
-          {diff.toLocaleString()} 円
+          {diff.toLocaleString("ja-JP")} 円
         </span>
         <span className="text-zinc-400">前月比</span>
       </>
@@ -151,7 +151,7 @@ export default async function DashboardPage() {
                     }
                   >
                     {kpi.dailyChange > 0 && "+"}
-                    {kpi.dailyChange.toLocaleString()} 円
+                    {kpi.dailyChange.toLocaleString("ja-JP")} 円
                   </span>
                   <span className="text-zinc-400">前日比</span>
                 </>
@@ -312,7 +312,7 @@ export default async function DashboardPage() {
                         }
                       >
                         {d.num >= 0 && "+"}
-                        {d.num.toLocaleString()}
+                        {d.num.toLocaleString("ja-JP")}
                       </span>
                       <span className="whitespace-nowrap text-zinc-400 ml-0.5">
                         ({d.num >= 0 && "+"}
@@ -401,7 +401,7 @@ export default async function DashboardPage() {
                   </div>
                   <div className="flex items-center justify-between sm:block sm:text-right w-full sm:w-auto">
                     <div className="text-amber-400 font-mono text-base font-bold">
-                      {p.points.toLocaleString()} pt
+                      {p.points.toLocaleString("ja-JP")} pt
                     </div>
                     <div className="text-xs text-amber-600">
                       {(() => {
