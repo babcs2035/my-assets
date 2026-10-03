@@ -2149,7 +2149,6 @@ async function saveTransactionsToDatabase(
   providerId: string,
 ) {
   logger.info("💾 Saving transactions to database...");
-  const normalize = normalizeLoose;
 
   // 全 mainAccount を事前取得し、正規化名でマッチングするためのヘルパー
   const allMainAccountsFromDb = await prisma.mainAccount.findMany({
@@ -2216,16 +2215,6 @@ async function saveTransactionsToDatabase(
       mainAccount: { select: { id: true, label: true, providerId: true } },
     },
   });
-
-  // 金融機関名から子口座リストへのマップを構築
-  const subAccountsByInstitution = new Map<string, typeof allSubAccountsInDb>();
-  for (const sa of allSubAccountsInDb) {
-    const key = normalizeInstitutionName(sa.mainAccount.label);
-    if (!subAccountsByInstitution.has(key)) {
-      subAccountsByInstitution.set(key, []);
-    }
-    subAccountsByInstitution.get(key)?.push(sa);
-  }
 
   // 取引明細の保存
   let savedCount = 0;
@@ -2338,7 +2327,9 @@ async function saveTransactionsToDatabase(
             sa => sa.currentName === tx.subAccountName,
           ) ??
           matchedMainAccount.subAccounts.find(
-            sa => normalize(sa.currentName) === normalize(tx.subAccountName),
+            sa =>
+              normalizeLoose(sa.currentName) ===
+              normalizeLoose(tx.subAccountName),
           ))
         : null);
 
