@@ -297,6 +297,25 @@ jobs:
 
             docker compose pull --quiet
 
+            # Dump the database before migrating: the postgres_data volume is the only copy of the data, and
+            # migrate deploy cannot roll back a failed migration. --wait starts db on the first deploy and waits for its healthcheck.
+            # The dump holds transaction data, so the directory is 0700 and umask 077 makes the file 0600.
+            echo "Backing up the database..."
+            docker compose up -d --wait db
+            mkdir -p data/backups
+            chmod 700 data/backups
+            backup_path="data/backups/my-assets-deploy-$(date +%Y%m%d-%H%M%S)-$(printf '%s' "$IMAGE_TAG" | cut -c1-7).dump"
+            # -Fc compresses without a pipe, so the exit status is pg_dump's own
+            if ! (umask 077 && docker compose exec -T db sh -c 'pg_dump -Fc -U "$POSTGRES_USER" -d "$POSTGRES_DB"' > "$backup_path.tmp"); then
+              rm -f "$backup_path.tmp"
+              echo "ERROR: Database backup failed. Aborting deploy." >&2
+              exit 1
+            fi
+            mv "$backup_path.tmp" "$backup_path"
+            # Keep the 10 newest deploy dumps. Dumps with other names (for example from cron) are left alone
+            ls -1t data/backups/my-assets-deploy-*.dump | tail -n +11 | xargs -r rm --
+            echo "Database backed up to $backup_path."
+
             # Apply database migrations explicitly before starting the app
             echo "Applying database migrations..."
             if ! docker compose run --rm app prisma migrate deploy; then

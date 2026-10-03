@@ -159,8 +159,9 @@ basePath が `/my-assets` のため，ブラウザで `http://localhost:3000/my-
 1. **Build**: Docker イメージをビルドし，GitHub Container Registry (GHCR) へ push する．
 2. **Deploy**: Tailscale 経由でデプロイ先ホストへ接続し，compose ファイルを転送する．
 3. **Secrets Extraction**: ホスト側の `op` CLI を使用し，`OP_SERVICE_ACCOUNT_TOKEN` を用いて認証情報を抽出．`data/runtime/op-secrets.json` を生成する．
-4. **Migrate**: `docker compose run --rm app prisma migrate deploy` でマイグレーションを適用する．
-5. **Update**: `docker compose up -d --force-recreate --remove-orphans` を実行して反映する．
+4. **Backup**: マイグレーションの前に `pg_dump` で DB をダンプし，デプロイ先の `data/backups/` に保存する（デプロイで取ったものは新しい 10 件を残す）．
+5. **Migrate**: `docker compose run --rm app prisma migrate deploy` でマイグレーションを適用する．
+6. **Update**: `docker compose up -d --force-recreate --remove-orphans` を実行して反映する．
 
 ### 必要な環境変数・Secrets
 
@@ -173,6 +174,26 @@ basePath が `/my-assets` のため，ブラウザで `http://localhost:3000/my-
 - `OP_SERVICE_ACCOUNT_TOKEN`: 1Password サービスアカウントトークン
 - `OP_VAULT`: 1Password のボルト名
 - `OP_MF_ITEM_ID`: MF 用の 1Password アイテム名（既定: `MF_Main`）
+
+### DB のバックアップと復元
+
+データはデプロイ先の named volume `postgres_data` にしかない．デプロイのたびに，マイグレーションの前のダンプを `data/backups/my-assets-deploy-<日時>-<commit>.dump`（`pg_dump -Fc` の形式）に保存する．ダンプには取引の摘要と金額が入るので，ディレクトリは 0700，ファイルは 0600 にしている．
+
+デプロイの間が空くとダンプも古くなるので，デプロイ先の crontab に次の行を足して毎日も取る．曜日ごとのファイルを上書きするので，7 件まで残る．`<DEPLOY_TARGET>` はデプロイ先のディレクトリに置き換える．
+
+```sh
+15 4 * * * cd <DEPLOY_TARGET> && umask 077 && docker compose exec -T db sh -c 'pg_dump -Fc -U "$POSTGRES_USER" -d "$POSTGRES_DB"' > data/backups/my-assets-daily.dump.tmp && mv data/backups/my-assets-daily.dump.tmp "data/backups/my-assets-daily-$(date +\%a).dump"
+```
+
+復元するときは，app を止めてから `pg_restore --clean --if-exists --create` でダンプを戻す．`--clean` だけではダンプにあるオブジェクトしか消さないので，ダンプの後のマイグレーションが足したテーブルが残る．`--create` を付けて DB ごと作り直す．作り直す DB には接続できないので，`-d` には `postgres` を指定する．
+
+```sh
+docker compose stop app
+docker compose exec -T db sh -c 'pg_restore --clean --if-exists --create -U "$POSTGRES_USER" -d postgres' < data/backups/<ファイル名>.dump
+docker compose start app
+```
+
+app の起動時には，`Dockerfile` の `CMD` が `prisma migrate deploy` を実行する．失敗したマイグレーションを戻すために復元したときは，同じイメージで起動すると同じマイグレーションがもう一度適用される．`docker compose start app` の代わりに，前の commit のイメージ（`IMAGE_TAG=<前の commit SHA> docker compose up -d app`）で起動する．
 
 ### 本番の前段（Cloudflare と Basic 認証）
 
