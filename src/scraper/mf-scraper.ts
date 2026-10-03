@@ -2231,28 +2231,27 @@ async function saveTransferPair(
   }
 }
 
-/**
- * 取引明細をDBに保存する関数
- */
-async function saveTransactionsToDatabase(
-  transactions: ScrapedTransaction[],
-  providerId: string,
-) {
-  logger.info("💾 Saving transactions to database...");
-
-  // 全 mainAccount を事前取得し、正規化名でマッチングするためのヘルパー
-  const allMainAccountsFromDb = await prisma.mainAccount.findMany({
-    where: { providerId },
-    include: { subAccounts: true },
-  });
-  const findMainAccountByNormalizedName = (instName: string) =>
-    allMainAccountsFromDb.find(
+// 明細の金融機関名と DB のメイン口座名を normalizeInstitutionName で揃えて照合する
+function findMainAccountByNormalizedName<T extends { label: string }>(
+  mainAccounts: T[],
+  instName: string,
+): T | null {
+  return (
+    mainAccounts.find(
       ma =>
         normalizeInstitutionName(ma.label) ===
         normalizeInstitutionName(instName),
-    ) || null;
+    ) || null
+  );
+}
 
-  // 初回/追加時に備えて、取引明細から子口座候補を先に作成・更新する
+/**
+ * 初回や口座追加時に備えて，明細に出てくる子口座名を，その明細の金融機関のメイン口座の子口座として先に作っておく．
+ */
+async function upsertSubAccountsFromTransactions(
+  transactions: ScrapedTransaction[],
+  mainAccounts: Array<{ id: string; label: string }>,
+): Promise<void> {
   const candidateSubAccountsByInstitution = new Map<string, Set<string>>();
   for (const tx of transactions) {
     if (!candidateSubAccountsByInstitution.has(tx.institutionName)) {
@@ -2272,7 +2271,10 @@ async function saveTransactionsToDatabase(
   }
 
   for (const [institutionName, subNames] of candidateSubAccountsByInstitution) {
-    const mainAccount = findMainAccountByNormalizedName(institutionName);
+    const mainAccount = findMainAccountByNormalizedName(
+      mainAccounts,
+      institutionName,
+    );
     if (!mainAccount) continue;
 
     for (const subName of subNames) {
@@ -2294,6 +2296,113 @@ async function saveTransactionsToDatabase(
       });
     }
   }
+}
+
+/**
+ * 明細 1 件を upsert する．保存できたら true，失敗したらログを出して false を返す．
+ */
+async function saveSingleTransaction(
+  subAccountId: string,
+  date: string,
+  amount: number,
+  desc: string,
+  isTransfer = false,
+): Promise<boolean> {
+  const txId = await generateTransactionId(subAccountId, date, amount, desc);
+  try {
+    await prisma.transaction.upsert({
+      where: { id: txId },
+      create: {
+        id: txId,
+        subAccountId,
+        date: toUtcDateOnly(date),
+        amount,
+        desc,
+        isTransfer,
+      },
+      update: {
+        // ID は subAccountId，date，amount，desc のハッシュなので，更新されうるのは isTransfer だけである．
+        // 日付や金額が変わった取引は別 ID の新しい行になり，古い行は残る（DATA-1）
+        subAccountId,
+        date: toUtcDateOnly(date),
+        amount,
+        desc,
+        isTransfer,
+      },
+    });
+    return true;
+  } catch (error) {
+    logger.error({ err: error, txId }, "❌ Failed to save transaction.");
+    return false;
+  }
+}
+
+/**
+ * 振替でない明細の保存先の子口座を探す．API のハッシュ，メイン口座の子口座名の完全一致，
+ * normalizeLoose での一致，findFallbackSubAccount の推定の順に試す．見つからなければ null か undefined を返す．
+ */
+function resolveRegularTransactionSubAccount(
+  tx: ScrapedTransaction,
+  mainAccounts: Array<{ label: string; subAccounts: SubAccount[] }>,
+  subAccountByHashHint: Map<string, SubAccountWithLabel>,
+): SubAccount | null | undefined {
+  const matchedMainAccount = findMainAccountByNormalizedName(
+    mainAccounts,
+    tx.institutionName,
+  );
+  let subAccount =
+    resolveSubAccountByHash(
+      subAccountByHashHint,
+      (tx as { subAccountIdHash?: string }).subAccountIdHash,
+    ) ??
+    (matchedMainAccount
+      ? (matchedMainAccount.subAccounts.find(
+          sa => sa.currentName === tx.subAccountName,
+        ) ??
+        matchedMainAccount.subAccounts.find(
+          sa =>
+            normalizeLoose(sa.currentName) ===
+            normalizeLoose(tx.subAccountName),
+        ))
+      : null);
+
+  if (!subAccount) {
+    logger.warn(
+      {
+        institution: tx.institutionName,
+        subAccount: tx.subAccountName,
+        msgId: tx.msgUrlId,
+      },
+      "⚠️ Unmatched transaction not found in DB.",
+    );
+    if (matchedMainAccount) {
+      subAccount = findFallbackSubAccount(tx, matchedMainAccount);
+    } else {
+      logger.warn(
+        { institution: tx.institutionName },
+        "   MainAccount not found either.",
+      );
+    }
+  }
+  return subAccount;
+}
+
+/**
+ * 取引明細をDBに保存する関数
+ */
+async function saveTransactionsToDatabase(
+  transactions: ScrapedTransaction[],
+  providerId: string,
+) {
+  logger.info("💾 Saving transactions to database...");
+
+  // 全 mainAccount を事前取得し、正規化名でマッチングする
+  const allMainAccountsFromDb = await prisma.mainAccount.findMany({
+    where: { providerId },
+    include: { subAccounts: true },
+  });
+
+  await upsertSubAccountsFromTransactions(transactions, allMainAccountsFromDb);
 
   // 同期中のプロバイダーの全子口座を取得（振替の相手先解決用）．
   // 全プロバイダーから探すと，「普通預金」のような同名の口座が別アカウントにある場合に
@@ -2309,41 +2418,6 @@ async function saveTransactionsToDatabase(
   // 取引明細の保存
   let savedCount = 0;
   const processedTransferIds = new Set<string>();
-
-  const saveSingleTransaction = async (
-    subAccountId: string,
-    date: string,
-    amount: number,
-    desc: string,
-    isTransfer = false,
-  ) => {
-    const txId = await generateTransactionId(subAccountId, date, amount, desc);
-    try {
-      await prisma.transaction.upsert({
-        where: { id: txId },
-        create: {
-          id: txId,
-          subAccountId,
-          date: toUtcDateOnly(date),
-          amount,
-          desc,
-          isTransfer,
-        },
-        update: {
-          // ID は subAccountId，date，amount，desc のハッシュなので，更新されうるのは isTransfer だけである．
-          // 日付や金額が変わった取引は別 ID の新しい行になり，古い行は残る（DATA-1）
-          subAccountId,
-          date: toUtcDateOnly(date),
-          amount,
-          desc,
-          isTransfer,
-        },
-      });
-      savedCount++;
-    } catch (error) {
-      logger.error({ err: error, txId }, "❌ Failed to save transaction.");
-    }
-  };
 
   const subAccountByHashHint = buildSubAccountByHashHint(
     transactions,
@@ -2403,44 +2477,11 @@ async function saveTransactionsToDatabase(
     }
 
     // 通常の取引（振替でない、または振替情報が不完全な場合）
-    // 正規化名で mainAccount をマッチし、その子口座から subAccount を検索
-    const matchedMainAccount = findMainAccountByNormalizedName(
-      tx.institutionName,
+    const subAccount = resolveRegularTransactionSubAccount(
+      tx,
+      allMainAccountsFromDb,
+      subAccountByHashHint,
     );
-    let subAccount =
-      resolveSubAccountByHash(
-        subAccountByHashHint,
-        (tx as { subAccountIdHash?: string }).subAccountIdHash,
-      ) ??
-      (matchedMainAccount
-        ? (matchedMainAccount.subAccounts.find(
-            sa => sa.currentName === tx.subAccountName,
-          ) ??
-          matchedMainAccount.subAccounts.find(
-            sa =>
-              normalizeLoose(sa.currentName) ===
-              normalizeLoose(tx.subAccountName),
-          ))
-        : null);
-
-    if (!subAccount) {
-      logger.warn(
-        {
-          institution: tx.institutionName,
-          subAccount: tx.subAccountName,
-          msgId: tx.msgUrlId,
-        },
-        "⚠️ Unmatched transaction not found in DB.",
-      );
-      if (matchedMainAccount) {
-        subAccount = findFallbackSubAccount(tx, matchedMainAccount);
-      } else {
-        logger.warn(
-          { institution: tx.institutionName },
-          "   MainAccount not found either.",
-        );
-      }
-    }
 
     if (!subAccount) {
       // スキップされたトランザクションを詳細にログ出力
@@ -2458,13 +2499,17 @@ async function saveTransactionsToDatabase(
       continue;
     }
 
-    await saveSingleTransaction(
-      subAccount.id,
-      tx.date,
-      tx.amount,
-      tx.desc,
-      false,
-    );
+    if (
+      await saveSingleTransaction(
+        subAccount.id,
+        tx.date,
+        tx.amount,
+        tx.desc,
+        false,
+      )
+    ) {
+      savedCount++;
+    }
   }
 
   // 3.5 新規口座追加時にも既存明細の振替関係を再構築する
