@@ -1466,7 +1466,7 @@ export function SettingsContent() {
                     {providers.length === 0 && (
                       <TableRow>
                         <TableCell
-                          colSpan={6}
+                          colSpan={5}
                           className="h-24 text-center text-zinc-500"
                         >
                           プロバイダーがありません
