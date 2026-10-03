@@ -1,6 +1,8 @@
 [tools]
 node = "24.21.0"
-"npm:pnpm" = "11.20.0"
+# pnpm 12 の npm パッケージは postinstall で bin をネイティブバイナリに置き換える．
+# mise の npm バックエンド（aube）は lifecycle scripts を実行せず壊れた bin が残るので，ビルド済みバイナリを取る aqua を使う
+"aqua:pnpm/pnpm" = "12.8.1"
 
 [tasks.install]
 description = "Install dependencies"
