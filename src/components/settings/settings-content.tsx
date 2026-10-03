@@ -11,11 +11,8 @@ import {
   Minus,
   Plus,
   RefreshCw,
-  Search,
   Square,
   Trash2,
-  TrendingDown,
-  TrendingUp,
   Upload,
   XCircle,
 } from "lucide-react";
@@ -28,10 +25,8 @@ import {
   updateMainAccount,
 } from "@/actions/accounts";
 import {
-  createCategoryRule,
   createMainCategory,
   createSubCategory,
-  deleteCategoryRule,
   deleteMainCategory,
   deleteSubCategory,
   exportCategories,
@@ -51,6 +46,8 @@ import {
   syncProvider,
 } from "@/actions/providers";
 import { getTransferRules } from "@/actions/transactions";
+import { CategoryRuleSection } from "@/components/settings/category-rule-section";
+import { CategoryTypeIcon } from "@/components/settings/category-type-icon";
 import { TransferRuleSection } from "@/components/settings/transfer-rule-section";
 import {
   AlertDialog,
@@ -121,20 +118,6 @@ function getProviderTypeLabel(type: string): string {
   return type;
 }
 
-/**
- * カテゴリーの収支タイプに応じたアイコンを返すヘルパーである．
- */
-function CategoryTypeIcon({
-  type,
-  className,
-}: {
-  type: string;
-  className?: string;
-}) {
-  if (type === "INCOME") return <TrendingUp className={className} />;
-  return <TrendingDown className={className} />;
-}
-
 export function SettingsContent() {
   const [providers, setProviders] = useState<Provider[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
@@ -191,10 +174,6 @@ export function SettingsContent() {
   // 常に最新の state 値を参照するための ref である．
   const expenseCategoryItemsRef = useRef<Category[]>([]);
   const incomeCategoryItemsRef = useRef<Category[]>([]);
-
-  // Rule Form State
-  const [ruleKeywords, setRuleKeywords] = useState("");
-  const [ruleSubCategoryId, setRuleSubCategoryId] = useState<string>("");
 
   // Transfer Rule State
   const [transferRules, setTransferRules] = useState<TransferRule[]>([]);
@@ -665,36 +644,6 @@ export function SettingsContent() {
         fetchData();
       }
     });
-  };
-
-  const handleAddRule = async () => {
-    // trim しないと空白のみが検証を通過し，Prisma の contains 検索で
-    // ほぼ全明細にマッチして大量の誤分類が発生する
-    const keyword = ruleKeywords.trim();
-    if (!keyword || !ruleSubCategoryId) return;
-    try {
-      await createCategoryRule({
-        keyword,
-        subCategoryId: ruleSubCategoryId,
-        priority: 0,
-      });
-      toast.success("ルールを追加しました．");
-      setRuleKeywords("");
-      setRuleSubCategoryId("");
-      fetchData();
-    } catch {
-      toast.error("ルールの追加に失敗しました．");
-    }
-  };
-
-  const handleDeleteRule = async (id: string) => {
-    try {
-      await deleteCategoryRule(id);
-      toast.success("ルールを削除しました．");
-      fetchData();
-    } catch {
-      toast.error("ルールの削除に失敗しました．");
-    }
   };
 
   // --- カテゴリーを収入・支出に分類する ---
@@ -1989,200 +1938,11 @@ export function SettingsContent() {
           </CardContent>
         </Card>
 
-        {/* 自動仕訳ルール管理セクション */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              ルール管理
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex flex-col gap-4 md:flex-row md:items-end">
-              <div className="space-y-2 flex-1 w-full">
-                <Label>キーワード</Label>
-                <div className="relative">
-                  <Search className="absolute left-2 top-2.5 h-4 w-4 text-zinc-500" />
-                  <Input
-                    placeholder="明細の摘要に含まれる文字"
-                    className="pl-8 text-sm"
-                    value={ruleKeywords}
-                    onChange={e => setRuleKeywords(e.target.value)}
-                  />
-                </div>
-              </div>
-              <div className="space-y-2 w-full sm:w-auto sm:flex-1 md:w-[250px] shrink-0">
-                <Label>適用カテゴリー</Label>
-                <Select
-                  value={ruleSubCategoryId}
-                  onValueChange={setRuleSubCategoryId}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="カテゴリーを選択" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {categories.map(mc =>
-                      mc.subCategories.map(sc => (
-                        <SelectItem key={sc.id} value={sc.id}>
-                          <span className="flex items-center gap-1">
-                            <CategoryTypeIcon
-                              type={mc.type}
-                              className="h-3 w-3"
-                            />
-                            {mc.name} / {sc.name}
-                          </span>
-                        </SelectItem>
-                      )),
-                    )}
-                  </SelectContent>
-                </Select>
-              </div>
-              <Button
-                onClick={handleAddRule}
-                disabled={!ruleKeywords.trim() || !ruleSubCategoryId}
-                className="w-full md:w-auto"
-              >
-                ルール追加
-              </Button>
-            </div>
-
-            <div className="rounded-md border border-zinc-800 overflow-hidden">
-              {/* Mobile View */}
-              <div className="md:hidden divide-y divide-zinc-800">
-                {rules.map(rule => (
-                  <div key={rule.id} className="p-3 bg-card min-w-0">
-                    <div className="flex justify-between items-start gap-3 min-w-0">
-                      <div className="space-y-1.5 min-w-0 overflow-hidden flex-1">
-                        <div className="font-mono text-zinc-200 text-sm truncate">
-                          {rule.keyword}
-                        </div>
-                        <Badge
-                          variant="secondary"
-                          className="text-xs truncate max-w-full"
-                        >
-                          {rule.subCategory.mainCategory.name} /{" "}
-                          {rule.subCategory.name}
-                        </Badge>
-                      </div>
-                      <AlertDialog>
-                        <AlertDialogTrigger asChild>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="text-zinc-500 hover:text-red-400 shrink-0"
-                            aria-label="ルール削除"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent>
-                          <AlertDialogHeader>
-                            <AlertDialogTitle>削除確認</AlertDialogTitle>
-                            <AlertDialogDescription>
-                              キーワード「{rule.keyword}
-                              」の自動分類ルールを削除しますか？
-                            </AlertDialogDescription>
-                          </AlertDialogHeader>
-                          <AlertDialogFooter>
-                            <AlertDialogCancel>キャンセル</AlertDialogCancel>
-                            <AlertDialogAction
-                              onClick={() => handleDeleteRule(rule.id)}
-                              className="bg-red-600"
-                            >
-                              削除
-                            </AlertDialogAction>
-                          </AlertDialogFooter>
-                        </AlertDialogContent>
-                      </AlertDialog>
-                    </div>
-                  </div>
-                ))}
-                {rules.length === 0 && (
-                  <div className="p-8 text-center text-sm text-zinc-500">
-                    ルールがありません
-                  </div>
-                )}
-              </div>
-
-              {/* Desktop View */}
-              <div className="hidden md:block overflow-x-auto">
-                <Table className="min-w-[600px]">
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="whitespace-nowrap">
-                        キーワード
-                      </TableHead>
-                      <TableHead className="whitespace-nowrap">
-                        適用カテゴリー
-                      </TableHead>
-                      <TableHead className="whitespace-nowrap text-right">
-                        操作
-                      </TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {rules.map(rule => (
-                      <TableRow key={rule.id}>
-                        <TableCell className="font-mono text-zinc-300 truncate max-w-[200px]">
-                          {rule.keyword}
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant="secondary">
-                            {rule.subCategory.mainCategory.name} /{" "}
-                            {rule.subCategory.name}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <AlertDialog>
-                            <AlertDialogTrigger asChild>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="text-zinc-500 hover:text-red-400"
-                                aria-label="ルール削除"
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            </AlertDialogTrigger>
-                            <AlertDialogContent>
-                              <AlertDialogHeader>
-                                <AlertDialogTitle>削除確認</AlertDialogTitle>
-                                <AlertDialogDescription>
-                                  キーワード「{rule.keyword}
-                                  」の自動分類ルールを削除しますか？
-                                </AlertDialogDescription>
-                              </AlertDialogHeader>
-                              <AlertDialogFooter>
-                                <AlertDialogCancel>
-                                  キャンセル
-                                </AlertDialogCancel>
-                                <AlertDialogAction
-                                  onClick={() => handleDeleteRule(rule.id)}
-                                  className="bg-red-600"
-                                >
-                                  削除
-                                </AlertDialogAction>
-                              </AlertDialogFooter>
-                            </AlertDialogContent>
-                          </AlertDialog>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                    {rules.length === 0 && (
-                      <TableRow>
-                        <TableCell
-                          colSpan={3}
-                          className="h-24 text-center text-zinc-500"
-                        >
-                          ルールがありません
-                        </TableCell>
-                      </TableRow>
-                    )}
-                  </TableBody>
-                </Table>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+        <CategoryRuleSection
+          categories={categories}
+          rules={rules}
+          onChanged={fetchData}
+        />
 
         <TransferRuleSection
           accounts={accounts}
