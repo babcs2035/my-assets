@@ -1,6 +1,6 @@
 # リポジトリ再レビュー（2026-10-02）
 
-`b41534f` 時点のリポジトリ全体をあらためて調べた結果をまとめる．
+`93b8c05` 時点のリポジトリ全体をあらためて調べた結果をまとめる．
 調査は 2026-10-02 に打ち切った．未調査の領域と，未対応の項目は「調査の範囲と状況」と「未解決の事項」に記す．
 重大度は High，Medium，Low の 3 段階で付ける．
 
@@ -143,8 +143,8 @@
 | S2 | Prisma の client，adapter，CLI を `~7.9.1` にそろえた | `2af1621` |
 | P1-b | `ignoredBuiltDependencies` から `sharp` を外した | `5de8a38` |
 | S1 | `getExpiringPoints` が `expirationDate` を ISO 文字列で返すようにした | `91d4806` |
-| D1 | Dockerfile の `tsx` を lockfile と同じ `4.23.15` にした | `a5cfec8` |
-| P4 | Vitest を導入し，sidebar の判定ロジックに回帰テストを付けた | `b41534f` |
+| D1 | Dockerfile の `tsx` を lockfile と同じ `4.23.15` にした | `662f15c` |
+| P4 | Vitest を導入し，sidebar の判定ロジックに回帰テストを付けた | `93b8c05` |
 | C2 | CSP の `script-src` をリクエストごとの nonce と `'strict-dynamic'` にし，root layout で全ページを動的レンダリングにした | `4f8f4c8` |
 
 ## 未解決の事項
