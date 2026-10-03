@@ -226,10 +226,15 @@ export function SettingsContent() {
   const [newAccountProviderId, setNewAccountProviderId] = useState("");
   const [isCreatingAccount, setIsCreatingAccount] = useState(false);
 
+  // 書き込みのたびに fetchData で取り直すため，連続した操作で古い応答が
+  // 新しい応答を上書きしないよう，リクエストの順序を管理する
+  const requestIdRef = useRef(0);
+
   /**
    * 必要な初期データをサーバーアクションからまとめて取得する関数である．
    */
   const fetchData = useCallback(() => {
+    const requestId = ++requestIdRef.current;
     setIsLoading(true);
     startTransition(async () => {
       try {
@@ -240,6 +245,7 @@ export function SettingsContent() {
           getCategoryRules(),
           getTransferRules(),
         ]);
+        if (requestId !== requestIdRef.current) return;
         setProviders(p);
         setAccounts(a);
         setCategories(c);
@@ -256,9 +262,10 @@ export function SettingsContent() {
         setRules(r);
         setTransferRules(t);
       } catch {
+        if (requestId !== requestIdRef.current) return;
         toast.error("設定データのフェッチに失敗しました．");
       } finally {
-        setIsLoading(false);
+        if (requestId === requestIdRef.current) setIsLoading(false);
       }
     });
   }, []);
