@@ -1156,6 +1156,7 @@ const toJstMidnight = (dateStr: string) =>
 const formatYmd = (d: Date) => formatJSTDate(d);
 
 // service_detail API の disp_sum_history にある資産種別ごとの系列を，日ごとに足して 1 本にする．
+// 呼び出し側は末尾を to_date として日付を割り当てるので，長さの違う系列は末尾（to_date 側）でそろえて足す．
 // to_date がないか，系列が空なら null を返す
 const parseMergedHistory = (
   detail?: MfServiceDetailResponse["account_detail"],
@@ -1174,7 +1175,12 @@ const parseMergedHistory = (
   if (seriesLen <= 0) return null;
 
   const mergedSeries = Array.from({ length: seriesLen }, (_, index) =>
-    Math.trunc(seriesByType.reduce((sum, arr) => sum + (arr[index] ?? 0), 0)),
+    Math.trunc(
+      seriesByType.reduce(
+        (sum, arr) => sum + (arr[index - (seriesLen - arr.length)] ?? 0),
+        0,
+      ),
+    ),
   );
   return { toDateStr, fromDateStr, mergedSeries };
 };
