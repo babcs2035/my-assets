@@ -139,15 +139,17 @@ export async function runAssetAnalysis() {
     // 直近 30 日の資産合計の推移を計算
     const dailyTotals: Record<string, number> = {};
     for (const h of balanceHistories) {
-      const dateKey = h.date.toISOString().slice(0, 10);
+      // 残高履歴は JST 08:00（前日 23:00Z）で保存されるため，UTC の日付をキーにすると
+      // 1 日前にずれ，yesterdayKey（JST）と比べた前日比が 0 になる
+      const dateKey = formatJSTDate(h.date);
       dailyTotals[dateKey] = (dailyTotals[dateKey] ?? 0) + h.balance;
     }
 
     // ── 2. データの集計とフォーマット ──────────────────────
 
-    // 資産合計（負債除外）
+    // 資産合計（負債除外）．ダッシュボードと資産ページに合わせ，マイナス残高の口座も含める
     const totalAssets = subAccounts
-      .filter(sa => sa.assetType !== "LIABILITY" && sa.balance > 0)
+      .filter(sa => sa.assetType !== "LIABILITY")
       .reduce((sum, sa) => sum + sa.balance, 0);
 
     // 資産タイプ別内訳
