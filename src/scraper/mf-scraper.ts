@@ -1607,8 +1607,12 @@ async function saveTransactionsToDatabase(
     }
   }
 
-  // 全金融機関の全子口座を取得（振替の相手先解決用）
+  // 同期中のプロバイダーの全子口座を取得（振替の相手先解決用）．
+  // 全プロバイダーから探すと，「普通預金」のような同名の口座が別アカウントにある場合に
+  // ロックを取っていない他プロバイダーの子口座へ振替を書き込んでしまう．
+  // 1 つの MF アカウントの振替は，そのアカウント内の口座同士でしか起きない．
   const allSubAccountsInDb = await prisma.subAccount.findMany({
+    where: { mainAccount: { providerId } },
     include: {
       mainAccount: { select: { id: true, label: true, providerId: true } },
     },
@@ -1710,7 +1714,7 @@ async function saveTransactionsToDatabase(
     }
   };
 
-  // 全金融機関の子口座から振替元・振替先を検索するヘルパー関数
+  // 同期中のプロバイダーの全金融機関の子口座から振替元・振替先を検索するヘルパー関数
   const findSubAccountByName = (name: string, rawInfo: string) => {
     if (!name) return undefined;
 
@@ -1878,7 +1882,7 @@ async function saveTransactionsToDatabase(
         const fromPart = transferMatch[1];
         const toPart = transferMatch[2];
 
-        // 全金融機関の子口座から振替元・振替先を検索
+        // 同期中のプロバイダーの全金融機関の子口座から振替元・振替先を検索
         fromSubAccount = findSubAccountByName(
           tx.transferFromSubAccount ?? "",
           fromPart,
