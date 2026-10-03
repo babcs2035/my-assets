@@ -1655,7 +1655,8 @@ async function saveTransactionsToDatabase(
           isTransfer,
         },
         update: {
-          // 既存データのズレ（日付等）を同期時に補正する
+          // ID は subAccountId，date，amount，desc のハッシュなので，更新されうるのは isTransfer だけである．
+          // 日付や金額が変わった取引は別 ID の新しい行になり，古い行は残る（DATA-1）
           subAccountId,
           date: toUtcDateOnly(date),
           amount,
