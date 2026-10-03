@@ -113,11 +113,40 @@ export async function getAccountList() {
     orderBy: { sortOrder: "asc" },
   });
 
-  // 各口座の請求概要を取得
-  const accountsWithBilling = accounts.map(async account => {
-    const liabilitySubAccounts = account.subAccounts.filter(
-      sa => sa.assetType === "LIABILITY",
-    );
+  // 全口座の負債サブ口座の請求を 1 回のクエリで取得し，メイン口座ごとに振り分ける
+  const liabilitySubAccountIds = accounts.flatMap(account =>
+    account.subAccounts
+      .filter(sa => sa.assetType === "LIABILITY")
+      .map(sa => sa.id),
+  );
+  const billings =
+    liabilitySubAccountIds.length > 0
+      ? await prisma.creditCardBilling.findMany({
+          where: {
+            subAccountId: { in: liabilitySubAccountIds },
+            billingDate: { gte: todayJstAsUtcMidnight() },
+          },
+          select: {
+            amount: true,
+            billingDate: true,
+            subAccount: { select: { currentName: true, mainAccountId: true } },
+          },
+          orderBy: { billingDate: "desc" },
+        })
+      : [];
+
+  // billingDate の降順を保ったまま分けるので，口座ごとの並びは口座単位で取得した場合と同じになる
+  const billingsByMainAccount = new Map<string, typeof billings>();
+  for (const b of billings) {
+    const list = billingsByMainAccount.get(b.subAccount.mainAccountId);
+    if (list) {
+      list.push(b);
+    } else {
+      billingsByMainAccount.set(b.subAccount.mainAccountId, [b]);
+    }
+  }
+
+  return accounts.map(account => {
     let billingSummary: {
       totalBilling: number;
       recentBillings: Array<{
@@ -127,46 +156,27 @@ export async function getAccountList() {
       }>;
     } | null = null;
 
-    if (liabilitySubAccounts.length > 0) {
-      const today = todayJstAsUtcMidnight();
-
-      const billings = await prisma.creditCardBilling.findMany({
-        where: {
-          subAccountId: { in: liabilitySubAccounts.map(sa => sa.id) },
-          billingDate: { gte: today },
-        },
-        select: {
-          amount: true,
-          billingDate: true,
-          subAccount: { select: { currentName: true } },
-        },
-        orderBy: { billingDate: "desc" },
-      });
-
-      if (billings.length > 0) {
-        const latestBySubAccount = new Map<
-          string,
-          { amount: number; billingDate: Date }
-        >();
-        for (const b of billings) {
-          const key = b.subAccount.currentName;
-          if (!latestBySubAccount.has(key)) {
-            latestBySubAccount.set(key, {
-              amount: b.amount,
-              billingDate: b.billingDate,
-            });
-          }
+    const accountBillings = billingsByMainAccount.get(account.id);
+    if (accountBillings) {
+      const latestBySubAccount = new Map<
+        string,
+        { amount: number; billingDate: Date }
+      >();
+      for (const b of accountBillings) {
+        const key = b.subAccount.currentName;
+        if (!latestBySubAccount.has(key)) {
+          latestBySubAccount.set(key, {
+            amount: b.amount,
+            billingDate: b.billingDate,
+          });
         }
-
-        const recentBillings = Array.from(latestBySubAccount.entries()).map(
-          ([subAccountName, data]) => ({ subAccountName, ...data }),
-        );
-        const totalBilling = recentBillings.reduce(
-          (sum, b) => sum + b.amount,
-          0,
-        );
-        billingSummary = { totalBilling, recentBillings };
       }
+
+      const recentBillings = Array.from(latestBySubAccount.entries()).map(
+        ([subAccountName, data]) => ({ subAccountName, ...data }),
+      );
+      const totalBilling = recentBillings.reduce((sum, b) => sum + b.amount, 0);
+      billingSummary = { totalBilling, recentBillings };
     }
 
     return {
@@ -174,8 +184,6 @@ export async function getAccountList() {
       billingSummary,
     };
   });
-
-  return Promise.all(accountsWithBilling);
 }
 
 /**
