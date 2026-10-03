@@ -51,8 +51,9 @@ ENV TZ=Asia/Tokyo
 ENV PLAYWRIGHT_BROWSERS_PATH=/home/nextjs/.cache/ms-playwright
 
 # Install system dependencies
+# Pin playwright to the pnpm-lock.yaml version; pnpm dlx ignores the lockfile and would fetch the latest release
 RUN apt-get update && apt-get install -y tzdata openssl \
-    && pnpm dlx playwright install-deps chromium \
+    && pnpm dlx playwright@1.63.0 install-deps chromium \
     && ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
@@ -61,7 +62,9 @@ RUN groupadd --system --gid 1001 nodejs && \
 
 # Install global tools (needed for CMD: prisma migrate deploy, seed)
 # Keep these versions in sync with pnpm-lock.yaml; global installs ignore workspace overrides
-RUN pnpm add -g prisma@7.9.1 tsx@4.23.15
+# chown in the same layer: a separate chown -R would store every file under /pnpm a second time
+RUN pnpm add -g prisma@7.9.1 tsx@4.23.15 \
+    && chown -R nextjs:nodejs /pnpm
 
 # Copy standalone build
 COPY --from=build-cache --chown=nextjs:nodejs /app/.next/standalone ./
@@ -75,7 +78,10 @@ COPY --from=build-cache --chown=nextjs:nodejs /app/node_modules ./node_modules
 COPY --from=build-cache --chown=nextjs:nodejs /root/.cache/ms-playwright /home/nextjs/.cache/ms-playwright
 
 # Setup permissions
-RUN mkdir -p .cache /pnpm && chown -R nextjs:nodejs /app /home/nextjs/.cache /pnpm
+# The COPY --chown above already gave the files to nextjs. Only fix directories created as root
+# (WORKDIR, .cache, and the parents COPY made for the Playwright cache); chown -R would duplicate ~2 GB of layers
+RUN mkdir -p .cache \
+    && chown nextjs:nodejs /app /app/.cache /home/nextjs /home/nextjs/.cache
 
 # Switch to non-root user
 USER nextjs
