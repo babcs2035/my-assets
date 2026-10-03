@@ -1050,11 +1050,15 @@ async function scrapeTransactions(
 }
 
 /**
- * 残高履歴ページから過去の残高を取得する（全金融機関対象）
+ * 残高履歴ページから過去の残高を取得する（同期中のプロバイダーの全金融機関対象）
  * URL: https://moneyforward.com/bs/history/list/{YYYY-MM-DD}
  * 履歴ページには全金融機関のデータが含まれるため、一度のループで全口座を処理する。
  */
-async function scrapeBalanceHistory(page: Page, options: MfScraperOptions) {
+async function scrapeBalanceHistory(
+  page: Page,
+  providerId: string,
+  options: MfScraperOptions,
+) {
   logger.info("📊 Scraping balance history via service_detail API...");
 
   const toJstMidnight = (dateStr: string) =>
@@ -1082,13 +1086,10 @@ async function scrapeBalanceHistory(page: Page, options: MfScraperOptions) {
     return { toDateStr, fromDateStr, mergedSeries };
   };
 
-  const providers = await prisma.provider.findMany({
-    where: { type: "mf", isActive: true },
-    select: { id: true },
-  });
-  const providerIds = providers.map(p => p.id);
+  // 同期中のプロバイダーに絞る．他の MF アカウントの口座を含めると，金融機関名の照合で
+  // このセッションの履歴が別アカウントの子口座に書き込まれ，そのアカウントのロックも取っていない
   const mainAccounts = await prisma.mainAccount.findMany({
-    where: { providerId: { in: providerIds } },
+    where: { providerId },
     include: { subAccounts: true },
   });
 
@@ -1176,7 +1177,10 @@ async function scrapeBalanceHistory(page: Page, options: MfScraperOptions) {
       if (securitiesSubSummary) {
         try {
           const showAccountId = extractShowAccountId(summary.show_path);
-          if (!showAccountId) continue;
+          // continue だと，この金融機関の残高履歴（下のループ）まで飛ばしてしまう
+          if (!showAccountId) {
+            throw new Error("show_path has no account id");
+          }
           const pageData = await fetchAccountHoldingsPage(page, showAccountId);
           logger.debug(
             {
@@ -1265,21 +1269,17 @@ async function scrapeBalanceHistory(page: Page, options: MfScraperOptions) {
       }
       // 種別（sub_type）でマッチする（証券口座など name マッチが失敗する場合）
       if (!candidateSubSummaries || candidateSubSummaries.length === 0) {
-        // mainAccount の subAccounts を取得して assetType で判別
-        const mainSubAccounts = await prisma.subAccount.findMany({
-          where: { mainAccountId: mainAccount.id },
-          select: { id: true, currentName: true, assetType: true },
-        });
-        for (const sa of summary.sub_accounts ?? []) {
-          if (sa.sub_type === "証券") {
-            // 証券口座は INVESTMENT を優先
-            const matched = mainSubAccounts.find(
-              msa => msa.assetType === "INVESTMENT" || msa.assetType === "CASH",
-            );
-            if (matched && sa.sub_account_id_hash) {
-              candidateSubSummaries = [sa];
-              break;
-            }
+        // 証券サブ口座は INVESTMENT を優先し，なければ CASH の 1 口座にだけ割り当てる．
+        // 処理中の子口座がその口座でなければ割り当てない（POINT や別の CASH 口座に書き込まないため）
+        const securitiesTarget =
+          mainAccount.subAccounts.find(msa => msa.assetType === "INVESTMENT") ??
+          mainAccount.subAccounts.find(msa => msa.assetType === "CASH");
+        if (securitiesTarget?.id === subAccount.id) {
+          const securitiesSubSummary = (summary.sub_accounts ?? []).find(
+            sa => sa.sub_type === "証券" && Boolean(sa.sub_account_id_hash),
+          );
+          if (securitiesSubSummary) {
+            candidateSubSummaries = [securitiesSubSummary];
           }
         }
       }
@@ -2785,7 +2785,7 @@ export async function runMfScraper(
 
     // Phase 6: 残高履歴を過去から取得（非負債口座のみ）
     logger.info("📋 Phase 6: Scraping balance history...");
-    await scrapeBalanceHistory(page, options);
+    await scrapeBalanceHistory(page, provider.id, options);
 
     logger.info("🎉 MF Scraping process completed successfully!");
   } catch (error) {
