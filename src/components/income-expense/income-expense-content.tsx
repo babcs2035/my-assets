@@ -172,7 +172,9 @@ export function IncomeExpenseContent({
   // カテゴリ名を "メイン/サブ" 形式に分解するヘルパー
   const parseCategoryName = useCallback((name: string) => {
     const slashIdx = name.indexOf("/");
-    if (slashIdx < 0) return { mainCategory: name, subCategory: name };
+    // サーバーは未分類の取引を "未分類" という / のない名前でまとめるため，
+    // サブを null にして「未分類 / 未分類」と重ねて表示しないようにする
+    if (slashIdx < 0) return { mainCategory: name, subCategory: null };
     return {
       mainCategory: name.slice(0, slashIdx),
       subCategory: name.slice(slashIdx + 1),
@@ -377,9 +379,11 @@ export function IncomeExpenseContent({
                                     <span className="text-sm font-bold text-zinc-200">
                                       {mainCategory}
                                     </span>
-                                    <span className="text-sm text-zinc-400">
-                                      {subCategory}
-                                    </span>
+                                    {subCategory && (
+                                      <span className="text-sm text-zinc-400">
+                                        {subCategory}
+                                      </span>
+                                    )}
                                   </div>
                                   <div className="font-mono text-base font-bold text-zinc-100">
                                     {formatCurrency(Number(item.value ?? 0))}
@@ -411,10 +415,14 @@ export function IncomeExpenseContent({
                               <span className="font-medium text-zinc-200">
                                 {item.mainCategory}
                               </span>
-                              <span className="text-zinc-500"> / </span>
-                              <span className="text-zinc-300">
-                                {item.subCategory}
-                              </span>
+                              {item.subCategory && (
+                                <>
+                                  <span className="text-zinc-500"> / </span>
+                                  <span className="text-zinc-300">
+                                    {item.subCategory}
+                                  </span>
+                                </>
+                              )}
                             </span>
                             <span className="font-mono text-sm text-zinc-100 font-medium shrink-0">
                               {formatCurrency(item.value)}
@@ -481,9 +489,11 @@ export function IncomeExpenseContent({
                                     <span className="text-sm font-bold text-zinc-200">
                                       {mainCategory}
                                     </span>
-                                    <span className="text-sm text-zinc-400">
-                                      {subCategory}
-                                    </span>
+                                    {subCategory && (
+                                      <span className="text-sm text-zinc-400">
+                                        {subCategory}
+                                      </span>
+                                    )}
                                   </div>
                                   <div className="font-mono text-base font-bold text-zinc-100">
                                     {formatCurrency(Number(item.value ?? 0))}
@@ -517,10 +527,14 @@ export function IncomeExpenseContent({
                               <span className="font-medium text-zinc-200">
                                 {item.mainCategory}
                               </span>
-                              <span className="text-zinc-500"> / </span>
-                              <span className="text-zinc-300">
-                                {item.subCategory}
-                              </span>
+                              {item.subCategory && (
+                                <>
+                                  <span className="text-zinc-500"> / </span>
+                                  <span className="text-zinc-300">
+                                    {item.subCategory}
+                                  </span>
+                                </>
+                              )}
                             </span>
                             <span className="font-mono text-sm text-zinc-100 font-medium shrink-0">
                               {formatCurrency(item.value)}
