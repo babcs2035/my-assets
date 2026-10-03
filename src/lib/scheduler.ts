@@ -8,6 +8,7 @@
 // prisma, mf-scraper は runAllProvidersSync 内で動的インポートする．
 
 import type { Logger } from "pino";
+import { todayJST } from "./utils";
 
 let logger: Logger | null = null;
 
@@ -19,13 +20,16 @@ async function getLazyLogger(): Promise<Logger> {
   return logger;
 }
 
+const SYNC_HOUR_JST = 8;
+const ONE_HOUR_MS = 60 * 60 * 1000;
+const ONE_DAY_MS = 24 * ONE_HOUR_MS;
+
 /**
- * JST での現在時刻を取得する関数である．
+ * 今日の 08:00 JST の瞬間を返す関数である．
+ * todayJST() は TZ に依存せず JST 00:00 の瞬間を返し，JST には夏時間がないので 8 時間足せばよい
  */
-function getNowJST(): Date {
-  const now = new Date();
-  const utc = now.getTime() + now.getTimezoneOffset() * 60 * 1000;
-  return new Date(utc + 9 * 60 * 60 * 1000);
+function retrieveTodaySyncTimeJST(): Date {
+  return new Date(todayJST().getTime() + SYNC_HOUR_JST * ONE_HOUR_MS);
 }
 
 /**
@@ -33,24 +37,26 @@ function getNowJST(): Date {
  * 既に 08:00 を過ぎている場合は翌日の 08:00 を返す．
  */
 function msUntilNext0800JST(): number {
-  const nowJST = getNowJST();
-  const target = new Date(nowJST);
-  target.setHours(8, 0, 0, 0);
-
-  if (nowJST >= target) {
-    target.setDate(target.getDate() + 1);
+  const now = Date.now();
+  let target = retrieveTodaySyncTimeJST().getTime();
+  if (now >= target) {
+    target += ONE_DAY_MS;
   }
-
-  return target.getTime() - nowJST.getTime();
+  return target - now;
 }
 
 /**
  * 全てのアクティブなプロバイダーの同期を実行する関数である．
  * 同期完了後に資産分析も自動的に実行する．
+ * `skipSyncedSince` を渡すと，その時刻以降に同期を始めたプロバイダーを飛ばす（再起動時のキャッチアップで使う）．
  */
-async function runAllProvidersSync() {
+async function runAllProvidersSync(options: { skipSyncedSince?: Date } = {}) {
   const logger = await getLazyLogger();
-  logger.info("⏰ [Scheduler] Starting scheduled sync at 08:00 JST.");
+  logger.info(
+    options.skipSyncedSince
+      ? "⏰ [Scheduler] Starting catch-up sync for today's 08:00 JST run."
+      : "⏰ [Scheduler] Starting scheduled sync at 08:00 JST.",
+  );
 
   try {
     const { prisma } = await import("@/lib/prisma");
@@ -72,11 +78,26 @@ async function runAllProvidersSync() {
       `⏰ [Scheduler] Found ${providers.length} active provider(s). Starting sync...`,
     );
 
+    let attemptedCount = 0;
     for (const provider of providers) {
       // ロックを取る前に判定する．取ってから飛ばすと「同期中」のまま残る
       if (provider.type !== "mf") {
         logger.warn(
           `⏰ [Scheduler] Provider type ${provider.type} is not synced by the scheduler. Skipping.`,
+        );
+        continue;
+      }
+
+      // lastSyncAt はロックの取得と解放で更新されるので，失敗した同期や手動同期も「同期を始めた」に含まれる．
+      // 失敗した同期を再起動のたびにやり直すと，そのたびに MF へのログインと OTP の送信が起きる
+      if (
+        options.skipSyncedSince &&
+        provider.lastSyncAt &&
+        provider.lastSyncAt >= options.skipSyncedSince
+      ) {
+        logger.info(
+          { name: provider.name, lastSyncAt: provider.lastSyncAt },
+          "⏰ [Scheduler] Provider already synced since today's 08:00 JST. Skipping.",
         );
         continue;
       }
@@ -96,6 +117,7 @@ async function runAllProvidersSync() {
           continue;
         }
 
+        attemptedCount++;
         await runMfScraper(provider.name, undefined, { mode: "scheduled" });
         await releaseSyncLock(provider.id, lockedAt, true);
 
@@ -122,6 +144,12 @@ async function runAllProvidersSync() {
       }
     }
 
+    // キャッチアップで同期したプロバイダーがなければ，資産分析もその日の分が済んでいる
+    if (options.skipSyncedSince && attemptedCount === 0) {
+      logger.info("⏰ [Scheduler] Nothing to catch up.");
+      return;
+    }
+
     logger.info("⏰ [Scheduler] ✅ All scheduled syncs completed.");
 
     // ── 同期完了後に資産分析を実行 ────────────────────────
@@ -146,13 +174,38 @@ async function runAllProvidersSync() {
   }
 }
 
+/**
+ * 次の 08:00 JST に同期を実行するタイマーを張る関数である．
+ * setInterval の 24 時間ごとでは同期にかかった時間やタイマーの遅れが積み重なるので，
+ * 実行が終わるたびに次の 08:00 JST を計算し直す
+ */
+function scheduleNextSync() {
+  const msUntilNext = msUntilNext0800JST();
+  const hoursUntilNext = (msUntilNext / ONE_HOUR_MS).toFixed(2);
+
+  setTimeout(async () => {
+    try {
+      await runAllProvidersSync();
+    } finally {
+      scheduleNextSync();
+    }
+  }, msUntilNext);
+
+  getLazyLogger().then(l =>
+    l.info(
+      `⏰ [Scheduler] Next sync scheduled in ${hoursUntilNext} hours (08:00 JST).`,
+    ),
+  );
+}
+
 // register() が dev のホットリロード等で複数回呼ばれた場合に備え，
 // タイマーの重複生成を防ぐためのフラグである．
 let schedulerStarted = false;
 
 /**
  * 08:00 JST に同期を実行するスケジューラを開始する関数である．
- * 最初の実行は次回の 08:00 JST に，その後は 24 時間ごとに繰り返す．
+ * 本番では，今日の 08:00 JST を過ぎてから起動した場合に，その日の同期を始めていないプロバイダーをすぐ同期する．
+ * 開発中は `pnpm dev` を再起動するたびに MF へログインしないよう，キャッチアップしない．
  * 冪等であり，2 回目以降の呼び出しは何もしない．
  */
 export function startScheduler() {
@@ -161,21 +214,13 @@ export function startScheduler() {
   }
   schedulerStarted = true;
 
-  const msUntilNext = msUntilNext0800JST();
-  const hoursUntilNext = (msUntilNext / (1000 * 60 * 60)).toFixed(2);
+  const todaySyncTime = retrieveTodaySyncTimeJST();
+  if (
+    process.env.NODE_ENV === "production" &&
+    Date.now() >= todaySyncTime.getTime()
+  ) {
+    void runAllProvidersSync({ skipSyncedSince: todaySyncTime });
+  }
 
-  setTimeout(async () => {
-    void runAllProvidersSync();
-
-    const TWENTY_FOUR_HOURS = 24 * 60 * 60 * 1000;
-    setInterval(() => {
-      void runAllProvidersSync();
-    }, TWENTY_FOUR_HOURS);
-  }, msUntilNext);
-
-  getLazyLogger().then(l =>
-    l.info(
-      `⏰ [Scheduler] Next sync scheduled in ${hoursUntilNext} hours (08:00 JST).`,
-    ),
-  );
+  scheduleNextSync();
 }
