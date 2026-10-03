@@ -88,9 +88,12 @@ export function IncomeExpenseContent({
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [annualError, setAnnualError] = useState<string | null>(null);
+  // 月の切り替えで fetchMonthly が error を消しても年間推移の失敗が残るよう，分けて持つ
+  const [trendError, setTrendError] = useState<string | null>(null);
   // 月を素早く切り替えた際に古い応答が新しい応答を上書きしないよう，
   // リクエストの順序を管理する
   const requestIdRef = useRef(0);
+  const trendRequestIdRef = useRef(0);
 
   // 年別データは月に依存しないため，マウント時と再試行時のみ取得する
   const fetchAnnual = useCallback(async () => {
@@ -109,13 +112,9 @@ export function IncomeExpenseContent({
     setIsLoading(true);
     setError(null);
     try {
-      const [data, trend] = await Promise.all([
-        getMonthlyIncomeExpense(year, month),
-        getIncomeExpenseTrend(year),
-      ]);
+      const data = await getMonthlyIncomeExpense(year, month);
       if (requestId !== requestIdRef.current) return;
       setMonthlyData(data);
-      setTrendData(trend);
     } catch {
       if (requestId !== requestIdRef.current) return;
       setMonthlyData(null);
@@ -125,9 +124,30 @@ export function IncomeExpenseContent({
     }
   }, [year, month]);
 
+  // 月別推移は年単位のデータなので，同じ年の中で月を切り替えても取り直さない
+  const fetchTrend = useCallback(async () => {
+    const requestId = ++trendRequestIdRef.current;
+    setTrendError(null);
+    try {
+      const trend = await getIncomeExpenseTrend(year);
+      if (requestId !== trendRequestIdRef.current) return;
+      setTrendData(trend);
+    } catch {
+      if (requestId !== trendRequestIdRef.current) return;
+      setTrendData([]);
+      setTrendError("収支データの取得に失敗しました．");
+    }
+  }, [year]);
+
   useEffect(() => {
     void fetchMonthly();
   }, [fetchMonthly]);
+
+  useEffect(() => {
+    void fetchTrend();
+  }, [fetchTrend]);
+
+  const fetchError = error ?? trendError;
 
   useEffect(() => {
     void fetchAnnual();
@@ -220,14 +240,15 @@ export function IncomeExpenseContent({
           }}
         />
 
-        {error ? (
+        {fetchError ? (
           <div className="flex flex-col items-center gap-3 py-8 border border-red-900/40 bg-red-950/20 rounded-lg">
-            <p className="text-sm text-red-400">{error}</p>
+            <p className="text-sm text-red-400">{fetchError}</p>
             <Button
               variant="outline"
               size="sm"
               onClick={() => {
                 void fetchMonthly();
+                void fetchTrend();
                 void fetchAnnual();
               }}
             >
