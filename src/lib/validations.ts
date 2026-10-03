@@ -21,16 +21,6 @@ export const mainAccountCreateSchema = z.object({
 export type MainAccountCreateInput = z.infer<typeof mainAccountCreateSchema>;
 
 /**
- * サブ口座 (SubAccount) 更新時のバリデーションスキーマである．
- */
-export const subAccountUpdateSchema = z.object({
-  id: z.string(),
-  assetType: z.enum(["CASH", "INVESTMENT", "CRYPTO", "POINT", "LIABILITY"]),
-  mainAccountId: z.string().optional(),
-});
-export type SubAccountUpdateInput = z.infer<typeof subAccountUpdateSchema>;
-
-/**
  * メインカテゴリー (MainCategory) 作成時のバリデーションスキーマである．
  */
 export const mainCategoryCreateSchema = z.object({

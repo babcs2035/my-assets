@@ -31,7 +31,6 @@ const adapter = new PrismaPg(pool);
  * 既存のインスタンスがある場合はそれを再利用し，ない場合は新規作成する．
  */
 export const prisma = globalForPrisma.prisma ?? new PrismaClient({ adapter });
-export { pool };
 
 logger.info("🐘 Prisma client initialized with PostgreSQL adapter.");
 
