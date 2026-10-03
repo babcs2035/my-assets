@@ -1,5 +1,5 @@
 /**
- * 1Password runtime secrets から credentials と OTP をを取得するためのヘルパーモジュール．
+ * 1Password runtime secrets から credentials と OTP を取得するためのヘルパーモジュール．
  *
  * デプロイホストで事前抽出された JSON ファイル (`/app/op-secrets.json`)
  * から credentials 情報を読み込む．
@@ -92,7 +92,7 @@ function loadRuntimeSecrets(): Record<string, unknown> | null {
  */
 function base32Decode(encoded: string): Buffer {
   const alphabet = new Array(256);
-  // RFC 4648 Base32 alphabet (uppercase only; input is uppercased on line 79)
+  // RFC 4648 Base32 alphabet (uppercase only; input is uppercased below)
   for (let i = 0; i < 26; i++) {
     alphabet["ABCDEFGHIJKLMNOPQRSTUVWXYZ".charCodeAt(i)] = i;
   }

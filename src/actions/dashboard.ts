@@ -95,8 +95,8 @@ async function getDashboardKPIInternal() {
 async function getAssetHistoryInternal(days?: number) {
   logger.info("Fetching asset history from balanceHistory...");
 
-  // 保存された日付は JST 日付の UTC 0 時であるため，
-  // 日付の計算はすべて UTC getter/setter で行う（TZ 非依存）
+  // 残高履歴は JST 08:00（前日 23:00Z）で保存される．期間の起点は todayJST()（JST 00:00）から
+  // UTC getter/setter で日単位にずらし，日ごとの集計は formatJSTDate で JST の日付に寄せる（TZ 非依存）
   const today = todayJST();
   let since = new Date(today);
   if (days) {

@@ -512,8 +512,9 @@ export async function importCategories(data: unknown) {
   // 全カテゴリー・ルールが失われるため，原子性を保つ．
   await prisma.$transaction(async tx => {
     // 既存データを全削除（Transaction は保持）
-    // Transaction.subCategory には cascade が無いため (Restrict)，
-    // 参照を先に null 化する（deleteMainCategory / deleteSubCategory と同じパターン）
+    // Transaction.subCategory の外部キーは ON DELETE SET NULL だが，
+    // deleteMainCategory / deleteSubCategory と同じく参照を先に明示的に null 化する．
+    // CategoryRule.subCategory は ON DELETE RESTRICT なので，ルールは先に削除する必要がある
     await tx.transaction.updateMany({
       where: { subCategoryId: { not: null } },
       data: { subCategoryId: null },
