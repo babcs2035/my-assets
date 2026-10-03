@@ -1794,6 +1794,234 @@ function findFallbackSubAccount(
   return subAccount;
 }
 
+type SubAccountWithLabel = SubAccount & { mainAccount: { label: string } };
+
+/**
+ * 振替元・振替先の子口座を，スクレイピング時の名前と rawInfo から探す．
+ * 名前の完全一致を優先し，なければ rawInfo に含まれる子口座名で長い順に部分一致させる．
+ * 同名の子口座が複数あるときは，金融機関名が rawInfo に含まれる方を選ぶ．
+ */
+function findTransferSubAccountByName(
+  subAccounts: SubAccountWithLabel[],
+  name: string,
+  rawInfo: string,
+): SubAccountWithLabel | undefined {
+  if (!name) return undefined;
+
+  const normalizedRawInfo = normalizeLoose(rawInfo);
+
+  // 1. 完全一致する子口座候補を抽出
+  const exactMatches = subAccounts.filter(sa => sa.currentName === name);
+  if (exactMatches.length > 0) {
+    // 候補の中で、金融機関名(label)がrawInfoに含まれているものを優先的に探す
+    const refined = exactMatches.find(sa =>
+      normalizedRawInfo.includes(normalizeLoose(sa.mainAccount.label)),
+    );
+    return refined || exactMatches[0];
+  }
+
+  // 2. 部分一致 (文字数の長い順)
+  const sortedAll = [...subAccounts].sort(
+    (a, b) => b.currentName.length - a.currentName.length,
+  );
+  const normalizedName = normalizeLoose(name);
+
+  for (const sa of sortedAll) {
+    const normalizedSaName = normalizeLoose(sa.currentName);
+    if (normalizedRawInfo.includes(normalizedSaName)) {
+      if (
+        normalizedName.includes(normalizedSaName) ||
+        name.includes(sa.currentName)
+      ) {
+        // 同名の子口座が複数ある場合に備え、該当する名前を持つ口座群から再絞り込み
+        const sameNameMatches = sortedAll.filter(
+          x => normalizeLoose(x.currentName) === normalizedSaName,
+        );
+        const refined = sameNameMatches.find(x =>
+          normalizedRawInfo.includes(normalizeLoose(x.mainAccount.label)),
+        );
+        return refined || sa;
+      }
+    }
+  }
+
+  return undefined;
+}
+
+function findSubAccountByInstitutionAndName(
+  subAccounts: SubAccountWithLabel[],
+  institutionName: string,
+  subAccountName: string,
+): SubAccountWithLabel | undefined {
+  if (!institutionName || !subAccountName) return undefined;
+  return subAccounts.find(
+    sa =>
+      normalizeInstitutionName(sa.mainAccount.label) ===
+        normalizeInstitutionName(institutionName) &&
+      sa.currentName === subAccountName,
+  );
+}
+
+/**
+ * API 由来の sub_account_id_hash と DB の SubAccount を事前に対応付ける．
+ * 明細自身の子口座と振替相手の子口座の両方を登録し，同じハッシュは最初に見つかった対応を使う．
+ */
+function buildSubAccountByHashHint(
+  transactions: ScrapedTransaction[],
+  subAccounts: SubAccountWithLabel[],
+): Map<string, SubAccountWithLabel> {
+  const subAccountByHashHint = new Map<string, SubAccountWithLabel>();
+  for (const tx of transactions) {
+    const hash = (tx as { subAccountIdHash?: string }).subAccountIdHash;
+    if (hash && !subAccountByHashHint.has(hash)) {
+      const matched = subAccounts.find(
+        sa =>
+          sa.currentName === tx.subAccountName &&
+          normalizeInstitutionName(sa.mainAccount.label) ===
+            normalizeInstitutionName(tx.institutionName),
+      );
+      if (matched) {
+        subAccountByHashHint.set(hash, matched);
+      }
+    }
+    const partnerHash = (tx as { partnerSubAccountIdHash?: string })
+      .partnerSubAccountIdHash;
+    const partnerInstitutionName = (tx as { partnerInstitutionName?: string })
+      .partnerInstitutionName;
+    const partnerSubAccountName = (tx as { partnerSubAccountName?: string })
+      .partnerSubAccountName;
+    if (
+      partnerHash &&
+      !subAccountByHashHint.has(partnerHash) &&
+      partnerInstitutionName &&
+      partnerSubAccountName
+    ) {
+      const matchedPartner = findSubAccountByInstitutionAndName(
+        subAccounts,
+        partnerInstitutionName,
+        partnerSubAccountName,
+      );
+      if (matchedPartner) {
+        subAccountByHashHint.set(partnerHash, matchedPartner);
+      }
+    }
+  }
+  return subAccountByHashHint;
+}
+
+function resolveSubAccountByHash(
+  subAccountByHashHint: Map<string, SubAccountWithLabel>,
+  hash?: string,
+) {
+  return hash ? subAccountByHashHint.get(hash) : undefined;
+}
+
+/**
+ * 振替明細の振替元・振替先の子口座を解決する．
+ * API のハッシュ，金融機関名と子口座名，rawInfo の「A から B への振替」，スクレイピング時の名前の順に試す．
+ * 見えている側の子口座 (hintedCurrent / hashedCurrent) も返し，呼び出し元が通常明細として保存済みの行を消すのに使う．
+ */
+function resolveTransferSubAccounts(
+  tx: ScrapedTransaction,
+  subAccounts: SubAccountWithLabel[],
+  subAccountByHashHint: Map<string, SubAccountWithLabel>,
+) {
+  const rawInfo = (tx as { rawInfo?: string }).rawInfo ?? "";
+  const transferMatch = rawInfo.match(/(.+?)から(.+?)への振替/);
+
+  let fromSubAccount: SubAccountWithLabel | undefined;
+  let toSubAccount: SubAccountWithLabel | undefined;
+
+  // まずは API のハッシュ情報で解決する
+  const hashedCurrent = resolveSubAccountByHash(
+    subAccountByHashHint,
+    (tx as { subAccountIdHash?: string }).subAccountIdHash,
+  );
+  const hashedPartner = resolveSubAccountByHash(
+    subAccountByHashHint,
+    (tx as { partnerSubAccountIdHash?: string }).partnerSubAccountIdHash,
+  );
+  const hintedCurrent = findSubAccountByInstitutionAndName(
+    subAccounts,
+    tx.institutionName,
+    tx.subAccountName,
+  );
+  const hintedPartner = findSubAccountByInstitutionAndName(
+    subAccounts,
+    (tx as { partnerInstitutionName?: string }).partnerInstitutionName ?? "",
+    (tx as { partnerSubAccountName?: string }).partnerSubAccountName ?? "",
+  );
+
+  if (hashedCurrent && hashedPartner) {
+    if (tx.amount < 0) {
+      fromSubAccount = hashedCurrent;
+      toSubAccount = hashedPartner;
+    } else {
+      fromSubAccount = hashedPartner;
+      toSubAccount = hashedCurrent;
+    }
+  } else if (hashedCurrent && hintedPartner) {
+    if (tx.amount < 0) {
+      fromSubAccount = hashedCurrent;
+      toSubAccount = hintedPartner;
+    } else {
+      fromSubAccount = hintedPartner;
+      toSubAccount = hashedCurrent;
+    }
+  } else if (hintedCurrent && hintedPartner) {
+    if (tx.amount < 0) {
+      fromSubAccount = hintedCurrent;
+      toSubAccount = hintedPartner;
+    } else {
+      fromSubAccount = hintedPartner;
+      toSubAccount = hintedCurrent;
+    }
+  }
+
+  if ((!fromSubAccount || !toSubAccount) && transferMatch) {
+    const fromPart = transferMatch[1];
+    const toPart = transferMatch[2];
+
+    // 同期中のプロバイダーの全金融機関の子口座から振替元・振替先を検索
+    fromSubAccount = findTransferSubAccountByName(
+      subAccounts,
+      tx.transferFromSubAccount ?? "",
+      fromPart,
+    );
+    toSubAccount = findTransferSubAccountByName(
+      subAccounts,
+      tx.transferToSubAccount ?? "",
+      toPart,
+    );
+
+    // スクレイピング時に特定された名前でも再検索
+    if (!fromSubAccount && tx.transferFromSubAccount) {
+      fromSubAccount = subAccounts.find(
+        sa => sa.currentName === tx.transferFromSubAccount,
+      );
+    }
+    if (!toSubAccount && tx.transferToSubAccount) {
+      toSubAccount = subAccounts.find(
+        sa => sa.currentName === tx.transferToSubAccount,
+      );
+    }
+  } else if (!fromSubAccount || !toSubAccount) {
+    // rawInfo がない場合は、スクレイピング時の情報を使用
+    if (tx.transferFromSubAccount) {
+      fromSubAccount = subAccounts.find(
+        sa => sa.currentName === tx.transferFromSubAccount,
+      );
+    }
+    if (tx.transferToSubAccount) {
+      toSubAccount = subAccounts.find(
+        sa => sa.currentName === tx.transferToSubAccount,
+      );
+    }
+  }
+
+  return { fromSubAccount, toSubAccount, hashedCurrent, hintedCurrent };
+}
+
 /**
  * 解決できた振替を，振替元の出金と振替先の入金の 2 件として 1 つのトランザクションで保存する．
  * 同じ明細を通常の明細として保存した行が見えている側の子口座に残っていれば，同じトランザクションで消す．
@@ -1801,8 +2029,8 @@ function findFallbackSubAccount(
  */
 async function saveTransferPair(
   tx: ScrapedTransaction,
-  fromSubAccount: SubAccount & { mainAccount: { label: string } },
-  toSubAccount: SubAccount & { mainAccount: { label: string } },
+  fromSubAccount: SubAccountWithLabel,
+  toSubAccount: SubAccountWithLabel,
   currentVisibleSideAccount: { id: string } | undefined,
 ): Promise<boolean> {
   const absAmount = Math.abs(tx.amount);
@@ -2038,107 +2266,10 @@ async function saveTransactionsToDatabase(
     }
   };
 
-  // 同期中のプロバイダーの全金融機関の子口座から振替元・振替先を検索するヘルパー関数
-  const findSubAccountByName = (name: string, rawInfo: string) => {
-    if (!name) return undefined;
-
-    const normalizedRawInfo = normalize(rawInfo);
-
-    // 1. 完全一致する子口座候補を抽出
-    const exactMatches = allSubAccountsInDb.filter(
-      sa => sa.currentName === name,
-    );
-    if (exactMatches.length > 0) {
-      // 候補の中で、金融機関名(label)がrawInfoに含まれているものを優先的に探す
-      const refined = exactMatches.find(sa =>
-        normalizedRawInfo.includes(normalize(sa.mainAccount.label)),
-      );
-      return refined || exactMatches[0];
-    }
-
-    // 2. 部分一致 (文字数の長い順)
-    const sortedAll = [...allSubAccountsInDb].sort(
-      (a, b) => b.currentName.length - a.currentName.length,
-    );
-    const normalizedName = normalize(name);
-
-    for (const sa of sortedAll) {
-      const normalizedSaName = normalize(sa.currentName);
-      if (normalizedRawInfo.includes(normalizedSaName)) {
-        if (
-          normalizedName.includes(normalizedSaName) ||
-          name.includes(sa.currentName)
-        ) {
-          // 同名の子口座が複数ある場合に備え、該当する名前を持つ口座群から再絞り込み
-          const sameNameMatches = sortedAll.filter(
-            x => normalize(x.currentName) === normalizedSaName,
-          );
-          const refined = sameNameMatches.find(x =>
-            normalizedRawInfo.includes(normalize(x.mainAccount.label)),
-          );
-          return refined || sa;
-        }
-      }
-    }
-
-    return undefined;
-  };
-
-  // API 由来の sub_account_id_hash と DB の SubAccount を事前に対応付ける
-  const subAccountByHashHint = new Map<
-    string,
-    (typeof allSubAccountsInDb)[number]
-  >();
-  const findSubAccountByInstitutionAndName = (
-    institutionName: string,
-    subAccountName: string,
-  ) => {
-    if (!institutionName || !subAccountName) return undefined;
-    return allSubAccountsInDb.find(
-      sa =>
-        normalizeInstitutionName(sa.mainAccount.label) ===
-          normalizeInstitutionName(institutionName) &&
-        sa.currentName === subAccountName,
-    );
-  };
-
-  for (const tx of transactions) {
-    const hash = (tx as { subAccountIdHash?: string }).subAccountIdHash;
-    if (hash && !subAccountByHashHint.has(hash)) {
-      const matched = allSubAccountsInDb.find(
-        sa =>
-          sa.currentName === tx.subAccountName &&
-          normalizeInstitutionName(sa.mainAccount.label) ===
-            normalizeInstitutionName(tx.institutionName),
-      );
-      if (matched) {
-        subAccountByHashHint.set(hash, matched);
-      }
-    }
-    const partnerHash = (tx as { partnerSubAccountIdHash?: string })
-      .partnerSubAccountIdHash;
-    const partnerInstitutionName = (tx as { partnerInstitutionName?: string })
-      .partnerInstitutionName;
-    const partnerSubAccountName = (tx as { partnerSubAccountName?: string })
-      .partnerSubAccountName;
-    if (
-      partnerHash &&
-      !subAccountByHashHint.has(partnerHash) &&
-      partnerInstitutionName &&
-      partnerSubAccountName
-    ) {
-      const matchedPartner = findSubAccountByInstitutionAndName(
-        partnerInstitutionName,
-        partnerSubAccountName,
-      );
-      if (matchedPartner) {
-        subAccountByHashHint.set(partnerHash, matchedPartner);
-      }
-    }
-  }
-
-  const resolveSubAccountByHash = (hash?: string) =>
-    hash ? subAccountByHashHint.get(hash) : undefined;
+  const subAccountByHashHint = buildSubAccountByHashHint(
+    transactions,
+    allSubAccountsInDb,
+  );
 
   for (const tx of transactions) {
     // 振替取引の場合、両方の子口座に記録
@@ -2153,93 +2284,12 @@ async function saveTransactionsToDatabase(
       }
       processedTransferIds.add(robustTransferKey);
 
-      const rawInfo = (tx as { rawInfo?: string }).rawInfo ?? "";
-      const transferMatch = rawInfo.match(/(.+?)から(.+?)への振替/);
-
-      let fromSubAccount: (typeof allSubAccountsInDb)[number] | undefined;
-      let toSubAccount: (typeof allSubAccountsInDb)[number] | undefined;
-
-      // まずは API のハッシュ情報で解決する
-      const hashedCurrent = resolveSubAccountByHash(
-        (tx as { subAccountIdHash?: string }).subAccountIdHash,
-      );
-      const hashedPartner = resolveSubAccountByHash(
-        (tx as { partnerSubAccountIdHash?: string }).partnerSubAccountIdHash,
-      );
-      const hintedCurrent = findSubAccountByInstitutionAndName(
-        tx.institutionName,
-        tx.subAccountName,
-      );
-      const hintedPartner = findSubAccountByInstitutionAndName(
-        (tx as { partnerInstitutionName?: string }).partnerInstitutionName ??
-          "",
-        (tx as { partnerSubAccountName?: string }).partnerSubAccountName ?? "",
-      );
-
-      if (hashedCurrent && hashedPartner) {
-        if (tx.amount < 0) {
-          fromSubAccount = hashedCurrent;
-          toSubAccount = hashedPartner;
-        } else {
-          fromSubAccount = hashedPartner;
-          toSubAccount = hashedCurrent;
-        }
-      } else if (hashedCurrent && hintedPartner) {
-        if (tx.amount < 0) {
-          fromSubAccount = hashedCurrent;
-          toSubAccount = hintedPartner;
-        } else {
-          fromSubAccount = hintedPartner;
-          toSubAccount = hashedCurrent;
-        }
-      } else if (hintedCurrent && hintedPartner) {
-        if (tx.amount < 0) {
-          fromSubAccount = hintedCurrent;
-          toSubAccount = hintedPartner;
-        } else {
-          fromSubAccount = hintedPartner;
-          toSubAccount = hintedCurrent;
-        }
-      }
-
-      if ((!fromSubAccount || !toSubAccount) && transferMatch) {
-        const fromPart = transferMatch[1];
-        const toPart = transferMatch[2];
-
-        // 同期中のプロバイダーの全金融機関の子口座から振替元・振替先を検索
-        fromSubAccount = findSubAccountByName(
-          tx.transferFromSubAccount ?? "",
-          fromPart,
+      const { fromSubAccount, toSubAccount, hashedCurrent, hintedCurrent } =
+        resolveTransferSubAccounts(
+          tx,
+          allSubAccountsInDb,
+          subAccountByHashHint,
         );
-        toSubAccount = findSubAccountByName(
-          tx.transferToSubAccount ?? "",
-          toPart,
-        );
-
-        // スクレイピング時に特定された名前でも再検索
-        if (!fromSubAccount && tx.transferFromSubAccount) {
-          fromSubAccount = allSubAccountsInDb.find(
-            sa => sa.currentName === tx.transferFromSubAccount,
-          );
-        }
-        if (!toSubAccount && tx.transferToSubAccount) {
-          toSubAccount = allSubAccountsInDb.find(
-            sa => sa.currentName === tx.transferToSubAccount,
-          );
-        }
-      } else if (!fromSubAccount || !toSubAccount) {
-        // rawInfo がない場合は、スクレイピング時の情報を使用
-        if (tx.transferFromSubAccount) {
-          fromSubAccount = allSubAccountsInDb.find(
-            sa => sa.currentName === tx.transferFromSubAccount,
-          );
-        }
-        if (tx.transferToSubAccount) {
-          toSubAccount = allSubAccountsInDb.find(
-            sa => sa.currentName === tx.transferToSubAccount,
-          );
-        }
-      }
 
       // 振替先/元が解決できない場合は保存しない（不正確な単独明細を残さない）
       if (!fromSubAccount || !toSubAccount) {
@@ -2280,6 +2330,7 @@ async function saveTransactionsToDatabase(
     );
     let subAccount =
       resolveSubAccountByHash(
+        subAccountByHashHint,
         (tx as { subAccountIdHash?: string }).subAccountIdHash,
       ) ??
       (matchedMainAccount
