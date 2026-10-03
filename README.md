@@ -152,7 +152,7 @@ basePath が `/my-assets` のため，ブラウザで `http://localhost:3000/my-
 
 ## デプロイ (GitHub Actions)
 
-`main` への push により，`.github/workflows/ci-cd.yml` が自動実行される（PR には `ci-checks`（biome / tsc / vitest）が実行される）．
+`main` への push により，`.github/workflows/ci-cd.yml` が自動実行される（PR には `ci-checks`（biome / tsc / vitest / `next build`）と，push しない amd64 の Docker ビルド確認 `docker-build-check` が実行される）．
 
 ### デプロイフロー
 
@@ -169,8 +169,7 @@ basePath が `/my-assets` のため，ブラウザで `http://localhost:3000/my-
 - `TS_OAUTH_CLIENT_ID`, `TS_OAUTH_SECRET`: Tailscale 経由のホスト接続用
 
 #### デプロイ先 `.env`
-- `DATABASE_URL`: DB 接続文字列（欠如するとデプロイが失敗する）
-- `POSTGRES_PASSWORD`: DB パスワード
+- `POSTGRES_PASSWORD`: DB パスワード（必須）．app の `DATABASE_URL` は compose が `POSTGRES_*` から組み立てるので，`.env` に `DATABASE_URL` は要らない
 - `OP_SERVICE_ACCOUNT_TOKEN`: 1Password サービスアカウントトークン
 - `OP_VAULT`: 1Password のボルト名
 - `OP_MF_ITEM_ID`: MF 用の 1Password アイテム名（既定: `MF_Main`）
