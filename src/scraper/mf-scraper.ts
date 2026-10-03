@@ -39,6 +39,19 @@ const toJstDateString = (value: string) => {
   return value.slice(0, 10);
 };
 
+// 請求の content は「YYYY/MM/DD お支払い分」の形で，先頭が支払日である．
+// updated_at も 2026-10 時点では支払日と同じ値だが，名前からは更新日時に読め，変わると一意キー
+// (subAccountId, billingDate) がずれて同じ請求が別の行になるので，content の日付を優先する
+const BILLING_CONTENT_DATE = /^(\d{4})\/(\d{2})\/(\d{2})/;
+const retrieveBillingDateString = (act: {
+  content: string;
+  updated_at: string;
+}) => {
+  const match = act.content?.trim().match(BILLING_CONTENT_DATE);
+  if (match) return `${match[1]}-${match[2]}-${match[3]}`;
+  return toJstDateString(act.updated_at);
+};
+
 const normalizeLoose = (value: string) =>
   value
     .normalize("NFKC")
@@ -242,18 +255,19 @@ async function saveCreditCardBillings(
       // 各請求データを upsert
       for (const act of acts) {
         const amount = Math.trunc(act.amount);
+        const billingDate = toUtcDateOnly(retrieveBillingDateString(act));
 
         try {
           await prisma.creditCardBilling.upsert({
             where: {
               subAccountId_billingDate: {
                 subAccountId: dbSubAccount.id,
-                billingDate: toUtcDateOnly(toJstDateString(act.updated_at)),
+                billingDate,
               },
             },
             create: {
               subAccountId: dbSubAccount.id,
-              billingDate: toUtcDateOnly(toJstDateString(act.updated_at)),
+              billingDate,
               amount,
               content: act.content?.trim() || null,
             },
@@ -268,7 +282,8 @@ async function saveCreditCardBillings(
             {
               err: error,
               subAccount: subAccountName,
-              billingDate: act.updated_at,
+              billingDate,
+              updatedAt: act.updated_at,
               amount,
             },
             "⚠️ Failed to save credit card billing record.",
