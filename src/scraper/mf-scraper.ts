@@ -1795,6 +1795,125 @@ function findFallbackSubAccount(
 }
 
 /**
+ * 解決できた振替を，振替元の出金と振替先の入金の 2 件として 1 つのトランザクションで保存する．
+ * 同じ明細を通常の明細として保存した行が見えている側の子口座に残っていれば，同じトランザクションで消す．
+ * 保存できたら true を返す．失敗はログに残して false を返し，同期は続ける．
+ */
+async function saveTransferPair(
+  tx: ScrapedTransaction,
+  fromSubAccount: SubAccount & { mainAccount: { label: string } },
+  toSubAccount: SubAccount & { mainAccount: { label: string } },
+  currentVisibleSideAccount: { id: string } | undefined,
+): Promise<boolean> {
+  const absAmount = Math.abs(tx.amount);
+  const fromName = fromSubAccount.currentName;
+  const toName = toSubAccount.currentName;
+  const transferDesc = `振替: ${fromName} → ${toName}`;
+
+  // 振替の両方の記録をアトミックに処理
+  try {
+    const obsoleteVisibleTxId = currentVisibleSideAccount
+      ? await generateTransactionId(
+          currentVisibleSideAccount.id,
+          tx.date,
+          tx.amount,
+          tx.desc,
+        )
+      : null;
+
+    const fromTxId = await generateTransactionId(
+      fromSubAccount.id,
+      tx.date,
+      -absAmount,
+      transferDesc,
+    );
+    const toTxId = await generateTransactionId(
+      toSubAccount.id,
+      tx.date,
+      absAmount,
+      transferDesc,
+    );
+
+    await prisma.$transaction(async txPrisma => {
+      if (obsoleteVisibleTxId) {
+        await txPrisma.transaction.deleteMany({
+          where: {
+            id: obsoleteVisibleTxId,
+            isTransfer: false,
+          },
+        });
+      }
+
+      // 振替元に出金を記録
+      await txPrisma.transaction.upsert({
+        where: { id: fromTxId },
+        create: {
+          id: fromTxId,
+          subAccountId: fromSubAccount.id,
+          date: toUtcDateOnly(tx.date),
+          amount: -absAmount,
+          desc: transferDesc,
+          isTransfer: true,
+          linkedTransId: toTxId,
+        },
+        update: {
+          subAccountId: fromSubAccount.id,
+          date: toUtcDateOnly(tx.date),
+          amount: -absAmount,
+          desc: transferDesc,
+          isTransfer: true,
+          linkedTransId: toTxId,
+        },
+      });
+
+      // 振替先に入金を記録
+      await txPrisma.transaction.upsert({
+        where: { id: toTxId },
+        create: {
+          id: toTxId,
+          subAccountId: toSubAccount.id,
+          date: toUtcDateOnly(tx.date),
+          amount: absAmount,
+          desc: transferDesc,
+          isTransfer: true,
+          linkedTransId: fromTxId,
+        },
+        update: {
+          subAccountId: toSubAccount.id,
+          date: toUtcDateOnly(tx.date),
+          amount: absAmount,
+          desc: transferDesc,
+          isTransfer: true,
+          linkedTransId: fromTxId,
+        },
+      });
+    });
+
+    // 金融機関が異なる場合は明示
+    const fromInst = fromSubAccount.mainAccount.label;
+    const toInst = toSubAccount.mainAccount.label;
+    const crossInstitution =
+      fromInst !== toInst ? ` (${fromInst} → ${toInst})` : "";
+    logger.info(
+      {
+        from: fromName,
+        to: toName,
+        crossInstitution,
+        amount: absAmount.toLocaleString(),
+      },
+      "✅ Transfer recorded.",
+    );
+    return true;
+  } catch (error) {
+    logger.error(
+      { err: error, date: tx.date, from: fromName, to: toName },
+      "❌ Failed to save transfer.",
+    );
+    return false;
+  }
+}
+
+/**
  * 取引明細をDBに保存する関数
  */
 async function saveTransactionsToDatabase(
@@ -2141,112 +2260,15 @@ async function saveTransactionsToDatabase(
         continue;
       }
 
-      const absAmount = Math.abs(tx.amount);
-      const fromName = fromSubAccount.currentName;
-      const toName = toSubAccount.currentName;
-      const transferDesc = `振替: ${fromName} → ${toName}`;
-
-      // 振替の両方の記録をアトミックに処理
-      try {
-        const currentVisibleSideAccount = hintedCurrent ?? hashedCurrent;
-        const obsoleteVisibleTxId = currentVisibleSideAccount
-          ? await generateTransactionId(
-              currentVisibleSideAccount.id,
-              tx.date,
-              tx.amount,
-              tx.desc,
-            )
-          : null;
-
-        const fromTxId = await generateTransactionId(
-          fromSubAccount.id,
-          tx.date,
-          -absAmount,
-          transferDesc,
-        );
-        const toTxId = await generateTransactionId(
-          toSubAccount.id,
-          tx.date,
-          absAmount,
-          transferDesc,
-        );
-
-        await prisma.$transaction(async txPrisma => {
-          if (obsoleteVisibleTxId) {
-            await txPrisma.transaction.deleteMany({
-              where: {
-                id: obsoleteVisibleTxId,
-                isTransfer: false,
-              },
-            });
-          }
-
-          // 振替元に出金を記録
-          await txPrisma.transaction.upsert({
-            where: { id: fromTxId },
-            create: {
-              id: fromTxId,
-              subAccountId: fromSubAccount.id,
-              date: toUtcDateOnly(tx.date),
-              amount: -absAmount,
-              desc: transferDesc,
-              isTransfer: true,
-              linkedTransId: toTxId,
-            },
-            update: {
-              subAccountId: fromSubAccount.id,
-              date: toUtcDateOnly(tx.date),
-              amount: -absAmount,
-              desc: transferDesc,
-              isTransfer: true,
-              linkedTransId: toTxId,
-            },
-          });
-
-          // 振替先に入金を記録
-          await txPrisma.transaction.upsert({
-            where: { id: toTxId },
-            create: {
-              id: toTxId,
-              subAccountId: toSubAccount.id,
-              date: toUtcDateOnly(tx.date),
-              amount: absAmount,
-              desc: transferDesc,
-              isTransfer: true,
-              linkedTransId: fromTxId,
-            },
-            update: {
-              subAccountId: toSubAccount.id,
-              date: toUtcDateOnly(tx.date),
-              amount: absAmount,
-              desc: transferDesc,
-              isTransfer: true,
-              linkedTransId: fromTxId,
-            },
-          });
-        });
-
+      if (
+        await saveTransferPair(
+          tx,
+          fromSubAccount,
+          toSubAccount,
+          hintedCurrent ?? hashedCurrent,
+        )
+      ) {
         savedCount += 2;
-
-        // 金融機関が異なる場合は明示
-        const fromInst = fromSubAccount.mainAccount.label;
-        const toInst = toSubAccount.mainAccount.label;
-        const crossInstitution =
-          fromInst !== toInst ? ` (${fromInst} → ${toInst})` : "";
-        logger.info(
-          {
-            from: fromName,
-            to: toName,
-            crossInstitution,
-            amount: absAmount.toLocaleString(),
-          },
-          "✅ Transfer recorded.",
-        );
-      } catch (error) {
-        logger.error(
-          { err: error, date: tx.date, from: fromName, to: toName },
-          "❌ Failed to save transfer.",
-        );
       }
       continue;
     }
