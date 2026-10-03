@@ -802,42 +802,44 @@ type MfUserAssetAct = NonNullable<
 /**
  * 明細 API を呼ぶ期間を月初〜月末の組で並べる．scheduled は今月と先月の 2 か月，
  * それ以外は BACKFILL_START_DATE の月まで 12 か月ずつ遡る．
- * ローカル TZ が JST である前提は scrapeTransactions の日付計算と同じ．
+ * 月は「年 × 12 + 月 − 1」の通し番号で受け取る．Date のローカル TZ のメソッドで月を数えると，
+ * TZ が JST でないホストで JST の月初 0 時が前月に入り，期間が 1 か月ずれるため
  */
 function buildTransactionFetchWindows(
   isIncrementalSync: boolean,
-  currentMonthStart: Date,
-  minBackfillMonthStart: Date,
+  currentMonthIndex: number,
+  minBackfillMonthIndex: number,
 ): Array<{ from: string; to: string }> {
+  const formatMonthWindow = (startIndex: number, endIndex: number) => {
+    const pad = (n: number) => String(n).padStart(2, "0");
+    const startYear = Math.floor(startIndex / 12);
+    const endYear = Math.floor(endIndex / 12);
+    const endMonth = (endIndex % 12) + 1;
+    // Date.UTC の日に 0 を渡すと前月の末日になる．UTC で計算するので TZ に依存しない
+    const lastDay = new Date(Date.UTC(endYear, endMonth, 0)).getUTCDate();
+    return {
+      from: `${startYear}-${pad((startIndex % 12) + 1)}-01`,
+      to: `${endYear}-${pad(endMonth)}-${pad(lastDay)}`,
+    };
+  };
+
   const windows: Array<{ from: string; to: string }> = [];
   if (isIncrementalSync) {
-    const cursor = new Date(currentMonthStart);
-    for (let i = 0; i < 2; i++) {
-      const y = cursor.getFullYear();
-      const m = String(cursor.getMonth() + 1).padStart(2, "0");
-      const from = `${y}-${m}-01`;
-      const monthEnd = new Date(y, cursor.getMonth() + 1, 0);
-      const to = `${y}-${m}-${String(monthEnd.getDate()).padStart(2, "0")}`;
-      windows.push({ from, to });
-      cursor.setMonth(cursor.getMonth() - 1);
-    }
+    windows.push(formatMonthWindow(currentMonthIndex, currentMonthIndex));
+    windows.push(
+      formatMonthWindow(currentMonthIndex - 1, currentMonthIndex - 1),
+    );
   } else {
     // API の取得上限を 1 年に制限し、バックフィル時は 1 年単位で区切って遡及する
     const chunkMonths = 12;
-    let chunkEnd = new Date(currentMonthStart);
-    while (chunkEnd.getTime() >= minBackfillMonthStart.getTime()) {
-      const chunkStart = new Date(chunkEnd);
-      chunkStart.setMonth(chunkStart.getMonth() - (chunkMonths - 1));
-      if (chunkStart.getTime() < minBackfillMonthStart.getTime()) {
-        chunkStart.setTime(minBackfillMonthStart.getTime());
-      }
-
-      const from = `${chunkStart.getFullYear()}-${String(chunkStart.getMonth() + 1).padStart(2, "0")}-01`;
-      const to = `${chunkEnd.getFullYear()}-${String(chunkEnd.getMonth() + 1).padStart(2, "0")}-${String(new Date(chunkEnd.getFullYear(), chunkEnd.getMonth() + 1, 0).getDate()).padStart(2, "0")}`;
-      windows.push({ from, to });
-
-      chunkEnd = new Date(chunkStart);
-      chunkEnd.setMonth(chunkEnd.getMonth() - 1);
+    let chunkEnd = currentMonthIndex;
+    while (chunkEnd >= minBackfillMonthIndex) {
+      const chunkStart = Math.max(
+        chunkEnd - (chunkMonths - 1),
+        minBackfillMonthIndex,
+      );
+      windows.push(formatMonthWindow(chunkStart, chunkEnd));
+      chunkEnd = chunkStart - 1;
     }
   }
   return windows;
@@ -1043,19 +1045,14 @@ async function scrapeTransactions(
   const allTransactions: ScrapedTransaction[] = [];
   const seenActIds = new Set<number>();
 
-  // 日付ウィンドウの計算はサーバーのローカル TZ が JST (TZ=Asia/Tokyo) であることを
-  // 前提としている（Dockerfile / docker-compose / .env.example で設定済み）．
-  // そのためローカル TZ の Date メソッド（new Date()/setDate/getMonth 等）が
-  // JST 暦日に沿って正しく動作する．TZ を JST 以外に変更するとこれらの計算が
-  // ずれるため，変更時は本ファイルを JST 非依存（formatJSTDate 等）に書き換えること．
-  const currentMonthStart = new Date();
-  currentMonthStart.setDate(1);
-  currentMonthStart.setHours(0, 0, 0, 0);
-  const minBackfillMonthStart = new Date(
-    `${BACKFILL_START_DATE}T00:00:00+09:00`,
-  );
-  minBackfillMonthStart.setDate(1);
-  minBackfillMonthStart.setHours(0, 0, 0, 0);
+  // 月の通し番号（年 × 12 + 月 − 1）．JST の暦で数え，サーバーのローカル TZ に依存しない
+  const [currentYear, currentMonth] = formatJSTDate(new Date())
+    .split("-")
+    .map(Number);
+  const currentMonthIndex = currentYear * 12 + currentMonth - 1;
+  const [backfillYear, backfillMonth] =
+    BACKFILL_START_DATE.split("-").map(Number);
+  const minBackfillMonthIndex = backfillYear * 12 + backfillMonth - 1;
 
   for (const account of targetAccounts) {
     const isIncrementalSync = options.mode === "scheduled";
@@ -1090,8 +1087,8 @@ async function scrapeTransactions(
 
     const windows = buildTransactionFetchWindows(
       isIncrementalSync,
-      currentMonthStart,
-      minBackfillMonthStart,
+      currentMonthIndex,
+      minBackfillMonthIndex,
     );
 
     for (const { from, to } of windows) {
@@ -1285,9 +1282,10 @@ async function saveSubAccountBalanceHistory(
       if (!parsed) continue;
 
       const toDate = toJstMidnight(parsed.toDateStr);
+      // 日は UTC のメソッドで戻す．ローカル TZ のメソッドは，夏時間のある TZ で時刻がずれる
       const inferredFromDate = new Date(toDate);
-      inferredFromDate.setDate(
-        toDate.getDate() - (parsed.mergedSeries.length - 1),
+      inferredFromDate.setUTCDate(
+        toDate.getUTCDate() - (parsed.mergedSeries.length - 1),
       );
 
       logger.debug(
@@ -2704,6 +2702,7 @@ async function recalculateLiabilityHistory(
     let currentBalance: number | null = null;
 
     const todayDate = new Date(`${todayStr}T00:00:00+09:00`);
+    // cursor は UTC のメソッドで 1 日ずつ進める．ローカル TZ のメソッドは，夏時間のある TZ で時刻がずれる
     const cursor = new Date(`${sortedAsc[0].date}T00:00:00+09:00`);
 
     for (const tx of sortedAsc) {
@@ -2715,7 +2714,7 @@ async function recalculateLiabilityHistory(
         if (currentBalance !== null) {
           entries.set(d, currentBalance);
         }
-        cursor.setDate(cursor.getDate() + 1);
+        cursor.setUTCDate(cursor.getUTCDate() + 1);
       }
 
       // 取引日の残高を記録
@@ -2723,7 +2722,7 @@ async function recalculateLiabilityHistory(
       if (dayBalance === undefined) continue;
       entries.set(tx.date, dayBalance);
       currentBalance = dayBalance;
-      cursor.setDate(cursor.getDate() + 1);
+      cursor.setUTCDate(cursor.getUTCDate() + 1);
     }
 
     // 今日までを埋める
@@ -2732,7 +2731,7 @@ async function recalculateLiabilityHistory(
       if (!entries.has(d) && currentBalance !== null) {
         entries.set(d, currentBalance);
       }
-      cursor.setDate(cursor.getDate() + 1);
+      cursor.setUTCDate(cursor.getUTCDate() + 1);
     }
 
     // 口座ごとに削除と再作成を 1 つのトランザクションで行う．
