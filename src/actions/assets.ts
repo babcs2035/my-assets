@@ -39,6 +39,7 @@ async function getAssetBreakdownInternal() {
   });
 
   const assets: Array<{
+    id: string;
     name: string;
     account: string;
     mainAccount: string;
@@ -58,6 +59,7 @@ async function getAssetBreakdownInternal() {
     }>;
   }> = [];
   const liabilities: Array<{
+    id: string;
     name: string;
     account: string;
     mainAccount: string;
@@ -70,6 +72,7 @@ async function getAssetBreakdownInternal() {
   for (const sa of subAccounts) {
     if (sa.assetType === "LIABILITY") {
       liabilities.push({
+        id: sa.id,
         name: sa.currentName,
         account: sa.mainAccount.label,
         mainAccount: sa.mainAccount.label,
@@ -78,6 +81,7 @@ async function getAssetBreakdownInternal() {
       totalLiabilities += sa.balance;
     } else {
       assets.push({
+        id: sa.id,
         name: sa.currentName,
         account: sa.mainAccount.label,
         mainAccount: sa.mainAccount.label,

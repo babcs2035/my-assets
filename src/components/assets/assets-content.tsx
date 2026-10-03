@@ -89,6 +89,7 @@ export function AssetsContent({ breakdown }: AssetsContentProps) {
   const liabilityPieData = useMemo(() => {
     return liabilities
       .map(l => ({
+        id: l.id,
         name: l.name,
         value: Math.abs(l.amount),
         fill: assetColors.LIABILITY,
@@ -258,7 +259,7 @@ export function AssetsContent({ breakdown }: AssetsContentProps) {
                         stroke="oklch(0.19 0.01 285)"
                       >
                         {liabilityPieData.map(entry => (
-                          <Cell key={entry.name} fill={entry.fill} />
+                          <Cell key={entry.id} fill={entry.fill} />
                         ))}
                       </Pie>
                       <ChartTooltip
@@ -289,7 +290,7 @@ export function AssetsContent({ breakdown }: AssetsContentProps) {
                         : "0";
                     return (
                       <div
-                        key={item.name}
+                        key={item.id}
                         className="flex items-center gap-2 rounded-md border border-zinc-800 bg-zinc-900/40 px-2.5 py-1.5"
                       >
                         <span
@@ -354,7 +355,7 @@ export function AssetsContent({ breakdown }: AssetsContentProps) {
                         ? ((a.amount / totalAssets) * 100).toFixed(1)
                         : "0";
                     return (
-                      <TableRow key={a.name}>
+                      <TableRow key={a.id}>
                         <TableCell className="whitespace-nowrap font-medium text-zinc-200 truncate max-w-[140px]">
                           {a.name}
                           {a.holdings && a.holdings.length > 0 && (
