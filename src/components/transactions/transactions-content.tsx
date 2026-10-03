@@ -149,6 +149,8 @@ export function TransactionsContent() {
             day: selectedDay ?? undefined,
             page,
             pageSize: 50,
+            sortKey,
+            sortDir,
           }),
           getMonthlyCalendarData(year, month, {
             mainAccountId: activeMainAccountId,
@@ -157,18 +159,8 @@ export function TransactionsContent() {
         ]);
         // 古いフェッチの結果は破棄する
         if (requestId !== requestIdRef.current) return;
-        const txs = [...txResult.transactions];
-        // ソート適用
-        txs.sort((a, b) => {
-          let cmp = 0;
-          if (sortKey === "date") {
-            cmp = new Date(a.date).getTime() - new Date(b.date).getTime();
-          } else if (sortKey === "amount") {
-            cmp = a.amount - b.amount;
-          }
-          return sortDir === "asc" ? cmp : -cmp;
-        });
-        setTransactions(txs);
+        // ソートはサーバー側で全件に対して行い済み
+        setTransactions(txResult.transactions);
         setTotalPages(txResult.totalPages);
         setCalendarData(calResult);
       } catch {
@@ -256,6 +248,8 @@ export function TransactionsContent() {
    * ソートキー・ソート方向を切り替えるハンドラである．
    */
   const handleSort = (key: SortKey) => {
+    // 並び順が変わるとページの中身も変わるため，先頭ページに戻す
+    setPage(1);
     if (sortKey === key) {
       setSortDir(prev => (prev === "asc" ? "desc" : "asc"));
     } else {

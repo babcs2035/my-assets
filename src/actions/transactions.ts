@@ -36,6 +36,8 @@ export async function getTransactions(params: {
   page?: number;
   pageSize?: number;
   includeTransfers?: boolean;
+  sortKey?: "date" | "amount";
+  sortDir?: "asc" | "desc";
 }) {
   const {
     mainAccountId,
@@ -47,6 +49,9 @@ export async function getTransactions(params: {
     pageSize = 50,
     includeTransfers = true,
   } = params;
+  // Server Action の引数はクライアントから任意の値を送れるため，許可した値だけを orderBy に使う
+  const sortField = params.sortKey === "amount" ? "amount" : "date";
+  const sortDirection = params.sortDir === "asc" ? "asc" : "desc";
 
   logger.info(`📂 Fetching transactions for page ${page}...`);
   if (day) {
@@ -112,7 +117,9 @@ export async function getTransactions(params: {
           },
         },
       },
-      orderBy: { date: "desc" },
+      // ソートはページを切り出す前に DB で行う．クライアントで並べ替えると表示中の 50 件の中でしか効かない．
+      // 同じ日付・金額の行がページの境目で重複・欠落しないよう，id を第 2 キーにする
+      orderBy: [{ [sortField]: sortDirection }, { id: sortDirection }],
       skip: (page - 1) * pageSize,
       take: pageSize,
     }),
