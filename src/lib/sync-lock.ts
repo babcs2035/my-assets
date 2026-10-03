@@ -73,14 +73,3 @@ export async function releaseSyncLock(
   }
   return count === 1;
 }
-
-/**
- * 持ち主に関係なくロックを外し，同期を失敗として記録する関数である．画面からの中止で使う．
- * 別のプロセス（`mise sync`）で動いている同期はこれでは止まらないが，印が変わるので，その同期はあとから結果を書かない
- */
-export async function forceReleaseSyncLock(providerId: string): Promise<void> {
-  await prisma.provider.update({
-    where: { id: providerId },
-    data: { lastSyncAt: new Date(), lastSyncSuccess: false },
-  });
-}

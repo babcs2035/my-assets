@@ -6,20 +6,19 @@ import {
   revalidateSettingsAndDashboardPages,
   revalidateSettingsPage,
 } from "@/lib/revalidate";
-import {
-  acquireSyncLock,
-  forceReleaseSyncLock,
-  releaseSyncLock,
-} from "@/lib/sync-lock";
+import { acquireSyncLock, releaseSyncLock } from "@/lib/sync-lock";
 import {
   type ProviderCreateInput,
   providerCreateSchema,
 } from "@/lib/validations";
 import { abortMfScraper, runMfScraper } from "@/scraper/mf-scraper";
 
-// アクティブな同期プロセスを管理するマップ
-// key: providerId, value: AbortController
-const activeSyncControllers = new Map<string, AbortController>();
+// このプロセスで動いている手動同期を管理するマップ
+// key: providerId, value: 中止用の AbortController と，その同期が取ったロックの印
+const activeSyncControllers = new Map<
+  string,
+  { controller: AbortController; lockedAt: Date }
+>();
 
 /**
  * すべてのプロバイダー情報を取得する関数である．
@@ -139,13 +138,21 @@ export async function syncProvider(id: string) {
     logger.error(`❌ Provider not found: ${id}`);
     throw new Error(`Provider not found: ${id}`);
   }
+  // runMfScraper はプロバイダー名を 1Password のアイテム名として MF にログインする．
+  // custom 型は `mise sync`（src/scripts/sync.ts）がスクリプトを実行して同期する
+  if (provider.type !== "mf") {
+    logger.warn(`⚠️ Provider type ${provider.type} cannot be synced here.`);
+    throw new Error(
+      "この種類のプロバイダーは画面から同期できません．`mise sync` を使ってください．",
+    );
+  }
 
   // このプロセスで前の手動同期が動いていれば中止し，そのロックを奪う．
   // 中止された側も自分の印でロックを解除しようとするが，印が変わっているので何も書かない
   const previous = activeSyncControllers.get(id);
   if (previous) {
     logger.info(`⚠️ Previous sync for ${id} is still running. Aborting it.`);
-    previous.abort();
+    previous.controller.abort();
     activeSyncControllers.delete(id);
   }
 
@@ -157,7 +164,7 @@ export async function syncProvider(id: string) {
   }
 
   const abortController = new AbortController();
-  activeSyncControllers.set(id, abortController);
+  activeSyncControllers.set(id, { controller: abortController, lockedAt });
 
   try {
     logger.info(`🚀 Executing scraper for provider: ${provider.name}`);
@@ -187,7 +194,7 @@ export async function syncProvider(id: string) {
     throw error;
   } finally {
     // 後から始まった同期が登録した controller を消さないよう，自分のものだけを消す
-    if (activeSyncControllers.get(id) === abortController) {
+    if (activeSyncControllers.get(id)?.controller === abortController) {
       activeSyncControllers.delete(id);
     }
   }
@@ -201,17 +208,21 @@ export async function syncProvider(id: string) {
 export async function abortSyncProvider(id: string) {
   logger.info(`🛑 Aborting sync for provider: ${id}`);
 
-  const controller = activeSyncControllers.get(id);
-  if (controller) {
-    controller.abort();
+  const active = activeSyncControllers.get(id);
+  if (active) {
+    active.controller.abort();
     activeSyncControllers.delete(id);
   }
 
-  // スクレイパー側でも中止処理を呼ぶ
+  // このプロセスで動いている同期（手動と自動）のブラウザを閉じる．
+  // 自動同期は例外を受けて，自分の印でロックを外し失敗を記録する
   await abortMfScraper(id);
 
-  // ステータスを失敗に更新し，ロックを外す
-  await forceReleaseSyncLock(id);
+  // 外すのは，このプロセスの手動同期が取ったロックだけにする．
+  // `mise sync` の同期は別のプロセスなので止められず，ロックだけを外すと次の同期と同時に書き込んでしまう
+  if (active) {
+    await releaseSyncLock(id, active.lockedAt, false);
+  }
 
   revalidateSettingsAndDashboardPages();
 
