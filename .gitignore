@@ -42,6 +42,9 @@ op-secrets.json
 # Playwright MCP debug output (console logs and page snapshots)
 /.playwright-mcp/
 
+# scraper debug output (unresolved transfers with raw MF data)
+/debug/
+
 # vercel
 .vercel
 

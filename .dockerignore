@@ -31,6 +31,9 @@ yarn-error.log*
 # env files
 .env
 
+# scraper debug output (unresolved transfers with raw MF data)
+/debug/
+
 # 1Password runtime secrets
 op-secrets.json
 

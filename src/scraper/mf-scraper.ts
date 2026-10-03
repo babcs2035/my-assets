@@ -1923,71 +1923,75 @@ async function saveTransactionsToDatabase(
 
       // 振替先/元が解決できない場合は保存しない（不正確な単独明細を残さない）
       if (!fromSubAccount || !toSubAccount) {
-        // デバッグ用: 解決失敗した振替の生データをJSONに出力
-        const debugDir = join(process.cwd(), "debug");
-        const debugFile = join(debugDir, "unresolved_transfers.json");
-        try {
-          mkdirSync(debugDir, { recursive: true });
-          let records: Array<{
-            date: string;
-            amount: number;
-            desc: string;
-            subAccountName: string;
-            isTransfer: boolean;
-            transferFromSubAccount?: string;
-            transferToSubAccount?: string;
-            subAccountIdHash?: string;
-            partnerSubAccountIdHash?: string;
-            partnerInstitutionName?: string;
-            partnerSubAccountName?: string;
-            rawApiData?: Record<string, unknown>;
-            availableSubAccounts: Array<{
-              id: string;
-              currentName: string;
-              mainAccountLabel: string;
-              assetType: string;
-            }>;
-          }> = [];
+        // デバッグ用: 解決失敗した振替の生データをJSONに出力．
+        // 生の摘要・金額と子口座一覧を含み，削除もローテーションもされないため開発時だけに限る．
+        // 本番コンテナ (Dockerfile で NODE_ENV=production) では書き込み可能レイヤーに溜まり続ける．
+        if (process.env.NODE_ENV !== "production") {
+          const debugDir = join(process.cwd(), "debug");
+          const debugFile = join(debugDir, "unresolved_transfers.json");
           try {
-            const existing = readFileSync(debugFile, "utf-8");
-            records = JSON.parse(existing);
-          } catch {
-            // file does not exist or invalid JSON
+            mkdirSync(debugDir, { recursive: true });
+            let records: Array<{
+              date: string;
+              amount: number;
+              desc: string;
+              subAccountName: string;
+              isTransfer: boolean;
+              transferFromSubAccount?: string;
+              transferToSubAccount?: string;
+              subAccountIdHash?: string;
+              partnerSubAccountIdHash?: string;
+              partnerInstitutionName?: string;
+              partnerSubAccountName?: string;
+              rawApiData?: Record<string, unknown>;
+              availableSubAccounts: Array<{
+                id: string;
+                currentName: string;
+                mainAccountLabel: string;
+                assetType: string;
+              }>;
+            }> = [];
+            try {
+              const existing = readFileSync(debugFile, "utf-8");
+              records = JSON.parse(existing);
+            } catch {
+              // file does not exist or invalid JSON
+            }
+            records.push({
+              date: tx.date,
+              amount: tx.amount,
+              desc: tx.desc,
+              subAccountName: tx.subAccountName,
+              isTransfer: tx.isTransfer,
+              transferFromSubAccount: tx.transferFromSubAccount,
+              transferToSubAccount: tx.transferToSubAccount,
+              subAccountIdHash: tx.subAccountIdHash,
+              partnerSubAccountIdHash: tx.partnerSubAccountIdHash,
+              partnerInstitutionName: tx.partnerInstitutionName,
+              partnerSubAccountName: tx.partnerSubAccountName,
+              rawApiData: (tx as { rawApiData?: Record<string, unknown> })
+                .rawApiData,
+              availableSubAccounts: allSubAccountsInDb.map(sa => ({
+                id: sa.id,
+                currentName: sa.currentName,
+                mainAccountLabel: sa.mainAccount.label,
+                assetType: sa.assetType,
+              })),
+            });
+            writeFileSync(debugFile, JSON.stringify(records, null, 2), "utf-8");
+            logger.info(
+              {
+                file: debugFile,
+                totalRecords: records.length,
+              },
+              "Debug: saved unresolved transfer data.",
+            );
+          } catch (error) {
+            logger.warn(
+              { err: error },
+              "⚠️ Failed to write debug JSON for unresolved transfer.",
+            );
           }
-          records.push({
-            date: tx.date,
-            amount: tx.amount,
-            desc: tx.desc,
-            subAccountName: tx.subAccountName,
-            isTransfer: tx.isTransfer,
-            transferFromSubAccount: tx.transferFromSubAccount,
-            transferToSubAccount: tx.transferToSubAccount,
-            subAccountIdHash: tx.subAccountIdHash,
-            partnerSubAccountIdHash: tx.partnerSubAccountIdHash,
-            partnerInstitutionName: tx.partnerInstitutionName,
-            partnerSubAccountName: tx.partnerSubAccountName,
-            rawApiData: (tx as { rawApiData?: Record<string, unknown> })
-              .rawApiData,
-            availableSubAccounts: allSubAccountsInDb.map(sa => ({
-              id: sa.id,
-              currentName: sa.currentName,
-              mainAccountLabel: sa.mainAccount.label,
-              assetType: sa.assetType,
-            })),
-          });
-          writeFileSync(debugFile, JSON.stringify(records, null, 2), "utf-8");
-          logger.info(
-            {
-              file: debugFile,
-              totalRecords: records.length,
-            },
-            "Debug: saved unresolved transfer data.",
-          );
-        } catch (error) {
-          logger.warn(
-            { err: error },
-            "⚠️ Failed to write debug JSON for unresolved transfer.",
-          );
         }
 
         logger.warn(
