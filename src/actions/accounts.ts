@@ -9,7 +9,7 @@ import {
   revalidateAccountsPage,
   revalidateTransactionsPage,
 } from "@/lib/revalidate";
-import { formatJSTDate } from "@/lib/utils";
+import { formatJSTDate, toUtcDateOnly } from "@/lib/utils";
 import {
   type MainAccountCreateInput,
   type MainAccountUpdateInput,
@@ -23,7 +23,7 @@ import {
  */
 function todayJstAsUtcMidnight(): Date {
   const [year, month, day] = formatJSTDate(new Date()).split("-").map(Number);
-  return new Date(Date.UTC(year, month - 1, day));
+  return toUtcDateOnly(year, month, day);
 }
 
 /**

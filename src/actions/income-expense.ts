@@ -2,9 +2,7 @@
 
 import logger from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
-
-const toUtcDateOnly = (year: number, month: number, day: number) =>
-  new Date(Date.UTC(year, month - 1, day, 0, 0, 0, 0));
+import { toUtcDateOnly } from "@/lib/utils";
 
 /**
  * 入出金集計（推移・年別）の対象とする明細の開始日である．
@@ -13,17 +11,16 @@ const toUtcDateOnly = (year: number, month: number, day: number) =>
  */
 const INCOME_EXPENSE_AGGREGATION_START_DATE = "2024-01-01";
 
-// ── Internal (uncached) implementations ──
-
 /**
  * 指定された年月の収入・支出・収支をカテゴリ別を取得する。
  */
-async function getMonthlyIncomeExpenseInternal(
+export async function getMonthlyIncomeExpense(
   year: number,
   month: number,
   mainAccountId?: string,
   subAccountId?: string,
 ) {
+  logger.info(`Fetching monthly income/expense for ${year}-${month}...`);
   const start = toUtcDateOnly(year, month, 1);
   const nextYear = month === 12 ? year + 1 : year;
   const nextMonth = month === 12 ? 1 : month + 1;
@@ -97,11 +94,12 @@ async function getMonthlyIncomeExpenseInternal(
 /**
  * 累計収入・支出・収支を年月ごとに取得する。
  */
-async function getIncomeExpenseTrendInternal(
+export async function getIncomeExpenseTrend(
   year?: number,
   mainAccountId?: string,
   subAccountId?: string,
 ) {
+  logger.info("Fetching income/expense trend...");
   const subAccountWhere: Record<string, unknown> = { isHidden: false };
   if (mainAccountId) subAccountWhere.mainAccountId = mainAccountId;
   if (subAccountId) subAccountWhere.id = subAccountId;
@@ -183,10 +181,11 @@ async function getIncomeExpenseTrendInternal(
 /**
  * 年ごとの累計収入・支出・収支を取得する。
  */
-async function getAnnualIncomeExpenseInternal(
+export async function getAnnualIncomeExpense(
   mainAccountId?: string,
   subAccountId?: string,
 ) {
+  logger.info("Fetching annual income/expense...");
   const subAccountWhere: Record<string, unknown> = { isHidden: false };
   if (mainAccountId) subAccountWhere.mainAccountId = mainAccountId;
   if (subAccountId) subAccountWhere.id = subAccountId;
@@ -222,44 +221,3 @@ async function getAnnualIncomeExpenseInternal(
       balance: values.income - values.expense,
     }));
 }
-
-/**
- * 指定年月の収支データを取得する。
- */
-export const getMonthlyIncomeExpense = async (
-  year: number,
-  month: number,
-  mainAccountId?: string,
-  subAccountId?: string,
-) => {
-  logger.info(`Fetching monthly income/expense for ${year}-${month}...`);
-  return getMonthlyIncomeExpenseInternal(
-    year,
-    month,
-    mainAccountId,
-    subAccountId,
-  );
-};
-
-/**
- * 収支推移データを取得する。
- */
-export const getIncomeExpenseTrend = async (
-  year?: number,
-  mainAccountId?: string,
-  subAccountId?: string,
-) => {
-  logger.info("Fetching income/expense trend...");
-  return getIncomeExpenseTrendInternal(year, mainAccountId, subAccountId);
-};
-
-/**
- * 年別収支データを取得する。
- */
-export const getAnnualIncomeExpense = async (
-  mainAccountId?: string,
-  subAccountId?: string,
-) => {
-  logger.info("Fetching annual income/expense...");
-  return getAnnualIncomeExpenseInternal(mainAccountId, subAccountId);
-};

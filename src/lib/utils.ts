@@ -25,6 +25,15 @@ function jstToUTCDate(
 }
 
 /**
+ * 年月日を，その日付の UTC 00:00 を表す Date に変換する関数である．
+ * 取引日や請求日などの日付のみの値は「JST 日付の UTC 00:00」として保存しているため，
+ * DB のクエリ境界はこの関数で組み立てる．
+ */
+export function toUtcDateOnly(year: number, month: number, day: number): Date {
+  return new Date(Date.UTC(year, month - 1, day));
+}
+
+/**
  * JST の日付要素 (y,M,d,0,0,0) を，その瞬間の UTC 値を持つ Date に変換する．
  * JST 00:00 = UTC 前日 15:00 になるため，`hour-9` で自動的に日付がロールバックされる．
  */

@@ -7,7 +7,7 @@ import {
   revalidateSettingsPage,
   revalidateTransactionsPage,
 } from "@/lib/revalidate";
-import { formatJSTDate } from "@/lib/utils";
+import { formatJSTDate, toUtcDateOnly } from "@/lib/utils";
 import {
   type TransactionCategoryUpdateInput,
   type TransferMarkInput,
@@ -18,9 +18,6 @@ import {
   transferRuleCreateSchema,
   transferRuleUpdateSchema,
 } from "@/lib/validations";
-
-const toUtcDateOnly = (year: number, month: number, day: number) =>
-  new Date(Date.UTC(year, month - 1, day, 0, 0, 0, 0));
 
 /**
  * 取引明細の一覧を取得する関数である．

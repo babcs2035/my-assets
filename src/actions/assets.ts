@@ -3,17 +3,13 @@
 import type { AssetType } from "@prisma/client";
 import logger from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
-import { formatJSTDate, nowJST } from "@/lib/utils";
-
-const toUtcDateOnly = (year: number, month: number, day: number) =>
-  new Date(Date.UTC(year, month - 1, day, 0, 0, 0, 0));
-
-// ── Internal implementations ──
+import { formatJSTDate, nowJST, toUtcDateOnly } from "@/lib/utils";
 
 /**
  * 資産・負債の詳細データを取得する。
  */
-async function getAssetBreakdownInternal() {
+export async function getAssetBreakdown() {
+  logger.info("Fetching asset breakdown...");
   const subAccounts = await prisma.subAccount.findMany({
     where: { isHidden: false },
     include: {
@@ -113,7 +109,8 @@ async function getAssetBreakdownInternal() {
 /**
  * 今月の収支（収入・支出・収支）を取得する。
  */
-async function getCurrentMonthIncomeExpenseInternal() {
+export async function getCurrentMonthIncomeExpense() {
+  logger.info("Fetching current month income/expense...");
   const now = nowJST();
   // 現在の JST 年月を取得する（TZ 非依存）
   const jst = formatJSTDate(now);
@@ -193,19 +190,3 @@ async function getCurrentMonthIncomeExpenseInternal() {
     },
   };
 }
-
-/**
- * 資産・負債の詳細内訳を取得する。
- */
-export const getAssetBreakdown = async () => {
-  logger.info("Fetching asset breakdown...");
-  return getAssetBreakdownInternal();
-};
-
-/**
- * 今月の収支を取得する。
- */
-export const getCurrentMonthIncomeExpense = async () => {
-  logger.info("Fetching current month income/expense...");
-  return getCurrentMonthIncomeExpenseInternal();
-};
