@@ -65,6 +65,11 @@ description = "Open Prisma Studio"
 depends = ["install"]
 run = "pnpm prisma studio"
 
+[tasks."db:check"]
+description = "Print counts and samples of providers, accounts and holding history for debugging"
+depends = ["install"]
+run = "pnpm tsx scripts/db-check.ts"
+
 [tasks."docker:build"]
 description = "Build app and db containers with docker compose"
 run = "docker compose build"

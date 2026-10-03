@@ -1,3 +1,5 @@
+// prisma.ts は読み込み時に DATABASE_URL を読むので，それより前に .env を読み込む
+import "dotenv/config";
 import { prisma } from "../src/lib/prisma";
 
 async function main() {
