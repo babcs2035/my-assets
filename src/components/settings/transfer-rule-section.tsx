@@ -9,17 +9,7 @@ import {
   deleteTransferRule,
   type getTransferRules,
 } from "@/actions/transactions";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
+import { DeleteConfirmDialog } from "@/components/settings/delete-confirm-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -162,8 +152,8 @@ export function TransferRuleSection({
                       {rule.targetSubAccount.currentName}）
                     </Badge>
                   </div>
-                  <AlertDialog>
-                    <AlertDialogTrigger asChild>
+                  <DeleteConfirmDialog
+                    trigger={
                       <Button
                         variant="ghost"
                         size="icon"
@@ -172,26 +162,12 @@ export function TransferRuleSection({
                       >
                         <Trash2 className="h-4 w-4" />
                       </Button>
-                    </AlertDialogTrigger>
-                    <AlertDialogContent>
-                      <AlertDialogHeader>
-                        <AlertDialogTitle>削除確認</AlertDialogTitle>
-                        <AlertDialogDescription>
-                          キーワード「{rule.keyword}
-                          」の振替ルールを削除しますか？
-                        </AlertDialogDescription>
-                      </AlertDialogHeader>
-                      <AlertDialogFooter>
-                        <AlertDialogCancel>キャンセル</AlertDialogCancel>
-                        <AlertDialogAction
-                          onClick={() => handleDeleteTransferRule(rule.id)}
-                          className="bg-red-600"
-                        >
-                          削除
-                        </AlertDialogAction>
-                      </AlertDialogFooter>
-                    </AlertDialogContent>
-                  </AlertDialog>
+                    }
+                    onConfirm={() => handleDeleteTransferRule(rule.id)}
+                  >
+                    キーワード「{rule.keyword}
+                    」の振替ルールを削除しますか？
+                  </DeleteConfirmDialog>
                 </div>
               </div>
             ))}
@@ -229,8 +205,8 @@ export function TransferRuleSection({
                       {rule.targetSubAccount.currentName}）
                     </TableCell>
                     <TableCell className="text-right">
-                      <AlertDialog>
-                        <AlertDialogTrigger asChild>
+                      <DeleteConfirmDialog
+                        trigger={
                           <Button
                             variant="ghost"
                             size="icon"
@@ -239,26 +215,12 @@ export function TransferRuleSection({
                           >
                             <Trash2 className="h-4 w-4" />
                           </Button>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent>
-                          <AlertDialogHeader>
-                            <AlertDialogTitle>削除確認</AlertDialogTitle>
-                            <AlertDialogDescription>
-                              キーワード「{rule.keyword}
-                              」の振替ルールを削除しますか？
-                            </AlertDialogDescription>
-                          </AlertDialogHeader>
-                          <AlertDialogFooter>
-                            <AlertDialogCancel>キャンセル</AlertDialogCancel>
-                            <AlertDialogAction
-                              onClick={() => handleDeleteTransferRule(rule.id)}
-                              className="bg-red-600"
-                            >
-                              削除
-                            </AlertDialogAction>
-                          </AlertDialogFooter>
-                        </AlertDialogContent>
-                      </AlertDialog>
+                        }
+                        onConfirm={() => handleDeleteTransferRule(rule.id)}
+                      >
+                        キーワード「{rule.keyword}
+                        」の振替ルールを削除しますか？
+                      </DeleteConfirmDialog>
                     </TableCell>
                   </TableRow>
                 ))}

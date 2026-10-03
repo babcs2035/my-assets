@@ -10,17 +10,7 @@ import {
   type getCategoryRules,
 } from "@/actions/categories";
 import { CategoryTypeIcon } from "@/components/settings/category-type-icon";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
+import { DeleteConfirmDialog } from "@/components/settings/delete-confirm-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -162,8 +152,8 @@ export function CategoryRuleSection({
                       {rule.subCategory.name}
                     </Badge>
                   </div>
-                  <AlertDialog>
-                    <AlertDialogTrigger asChild>
+                  <DeleteConfirmDialog
+                    trigger={
                       <Button
                         variant="ghost"
                         size="icon"
@@ -172,26 +162,12 @@ export function CategoryRuleSection({
                       >
                         <Trash2 className="h-4 w-4" />
                       </Button>
-                    </AlertDialogTrigger>
-                    <AlertDialogContent>
-                      <AlertDialogHeader>
-                        <AlertDialogTitle>削除確認</AlertDialogTitle>
-                        <AlertDialogDescription>
-                          キーワード「{rule.keyword}
-                          」の自動分類ルールを削除しますか？
-                        </AlertDialogDescription>
-                      </AlertDialogHeader>
-                      <AlertDialogFooter>
-                        <AlertDialogCancel>キャンセル</AlertDialogCancel>
-                        <AlertDialogAction
-                          onClick={() => handleDeleteRule(rule.id)}
-                          className="bg-red-600"
-                        >
-                          削除
-                        </AlertDialogAction>
-                      </AlertDialogFooter>
-                    </AlertDialogContent>
-                  </AlertDialog>
+                    }
+                    onConfirm={() => handleDeleteRule(rule.id)}
+                  >
+                    キーワード「{rule.keyword}
+                    」の自動分類ルールを削除しますか？
+                  </DeleteConfirmDialog>
                 </div>
               </div>
             ))}
@@ -231,8 +207,8 @@ export function CategoryRuleSection({
                       </Badge>
                     </TableCell>
                     <TableCell className="text-right">
-                      <AlertDialog>
-                        <AlertDialogTrigger asChild>
+                      <DeleteConfirmDialog
+                        trigger={
                           <Button
                             variant="ghost"
                             size="icon"
@@ -241,26 +217,12 @@ export function CategoryRuleSection({
                           >
                             <Trash2 className="h-4 w-4" />
                           </Button>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent>
-                          <AlertDialogHeader>
-                            <AlertDialogTitle>削除確認</AlertDialogTitle>
-                            <AlertDialogDescription>
-                              キーワード「{rule.keyword}
-                              」の自動分類ルールを削除しますか？
-                            </AlertDialogDescription>
-                          </AlertDialogHeader>
-                          <AlertDialogFooter>
-                            <AlertDialogCancel>キャンセル</AlertDialogCancel>
-                            <AlertDialogAction
-                              onClick={() => handleDeleteRule(rule.id)}
-                              className="bg-red-600"
-                            >
-                              削除
-                            </AlertDialogAction>
-                          </AlertDialogFooter>
-                        </AlertDialogContent>
-                      </AlertDialog>
+                        }
+                        onConfirm={() => handleDeleteRule(rule.id)}
+                      >
+                        キーワード「{rule.keyword}
+                        」の自動分類ルールを削除しますか？
+                      </DeleteConfirmDialog>
                     </TableCell>
                   </TableRow>
                 ))}

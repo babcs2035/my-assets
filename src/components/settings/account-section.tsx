@@ -10,18 +10,8 @@ import {
   updateMainAccount,
 } from "@/actions/accounts";
 import type { getProviders } from "@/actions/providers";
+import { DeleteConfirmDialog } from "@/components/settings/delete-confirm-dialog";
 import { getProviderTypeLabel } from "@/components/settings/provider-type-label";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -229,8 +219,8 @@ export function AccountSection({
                                     ))}
                                   </SelectContent>
                                 </Select>
-                                <AlertDialog>
-                                  <AlertDialogTrigger asChild>
+                                <DeleteConfirmDialog
+                                  trigger={
                                     <Button
                                       variant="ghost"
                                       size="icon"
@@ -239,32 +229,14 @@ export function AccountSection({
                                     >
                                       <Trash2 className="h-4 w-4" />
                                     </Button>
-                                  </AlertDialogTrigger>
-                                  <AlertDialogContent>
-                                    <AlertDialogHeader>
-                                      <AlertDialogTitle>
-                                        削除確認
-                                      </AlertDialogTitle>
-                                      <AlertDialogDescription>
-                                        口座「{ac.label}
-                                        」を削除しますか？関連する明細履歴もすべて削除されます．
-                                      </AlertDialogDescription>
-                                    </AlertDialogHeader>
-                                    <AlertDialogFooter>
-                                      <AlertDialogCancel>
-                                        キャンセル
-                                      </AlertDialogCancel>
-                                      <AlertDialogAction
-                                        onClick={() =>
-                                          handleDeleteAccount(ac.id, ac.label)
-                                        }
-                                        className="bg-red-600"
-                                      >
-                                        削除
-                                      </AlertDialogAction>
-                                    </AlertDialogFooter>
-                                  </AlertDialogContent>
-                                </AlertDialog>
+                                  }
+                                  onConfirm={() =>
+                                    handleDeleteAccount(ac.id, ac.label)
+                                  }
+                                >
+                                  口座「{ac.label}
+                                  」を削除しますか？関連する明細履歴もすべて削除されます．
+                                </DeleteConfirmDialog>
                               </div>
                             </div>
                             <div className="flex flex-wrap gap-1.5 mt-1.5">
@@ -363,8 +335,8 @@ export function AccountSection({
                                         ))}
                                       </SelectContent>
                                     </Select>
-                                    <AlertDialog>
-                                      <AlertDialogTrigger asChild>
+                                    <DeleteConfirmDialog
+                                      trigger={
                                         <Button
                                           variant="ghost"
                                           size="icon"
@@ -373,35 +345,14 @@ export function AccountSection({
                                         >
                                           <Trash2 className="h-3.5 w-3.5" />
                                         </Button>
-                                      </AlertDialogTrigger>
-                                      <AlertDialogContent>
-                                        <AlertDialogHeader>
-                                          <AlertDialogTitle>
-                                            削除確認
-                                          </AlertDialogTitle>
-                                          <AlertDialogDescription>
-                                            口座「{ac.label}
-                                            」を削除しますか？関連する明細履歴もすべて削除されます．
-                                          </AlertDialogDescription>
-                                        </AlertDialogHeader>
-                                        <AlertDialogFooter>
-                                          <AlertDialogCancel>
-                                            キャンセル
-                                          </AlertDialogCancel>
-                                          <AlertDialogAction
-                                            onClick={() =>
-                                              handleDeleteAccount(
-                                                ac.id,
-                                                ac.label,
-                                              )
-                                            }
-                                            className="bg-red-600"
-                                          >
-                                            削除
-                                          </AlertDialogAction>
-                                        </AlertDialogFooter>
-                                      </AlertDialogContent>
-                                    </AlertDialog>
+                                      }
+                                      onConfirm={() =>
+                                        handleDeleteAccount(ac.id, ac.label)
+                                      }
+                                    >
+                                      口座「{ac.label}
+                                      」を削除しますか？関連する明細履歴もすべて削除されます．
+                                    </DeleteConfirmDialog>
                                   </div>
                                 </TableCell>
                               </TableRow>

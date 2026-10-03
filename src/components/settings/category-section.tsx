@@ -26,6 +26,7 @@ import {
   updateSubCategory,
 } from "@/actions/categories";
 import { CategoryTypeIcon } from "@/components/settings/category-type-icon";
+import { DeleteConfirmDialog } from "@/components/settings/delete-confirm-dialog";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -35,7 +36,6 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -544,8 +544,8 @@ export function CategorySection({
                   </DialogFooter>
                 </DialogContent>
               </Dialog>
-              <AlertDialog>
-                <AlertDialogTrigger asChild>
+              <DeleteConfirmDialog
+                trigger={
                   <Button
                     variant="ghost"
                     size="icon"
@@ -555,26 +555,12 @@ export function CategorySection({
                   >
                     <Trash2 className="h-4 w-4" />
                   </Button>
-                </AlertDialogTrigger>
-                <AlertDialogContent>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle>削除確認</AlertDialogTitle>
-                    <AlertDialogDescription>
-                      メインカテゴリー「{mc.name}
-                      」を削除します．サブカテゴリーがある場合は削除できません．
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel>キャンセル</AlertDialogCancel>
-                    <AlertDialogAction
-                      onClick={() => handleDeleteMainCategory(mc.id)}
-                      className="bg-red-600"
-                    >
-                      削除
-                    </AlertDialogAction>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
+                }
+                onConfirm={() => handleDeleteMainCategory(mc.id)}
+              >
+                メインカテゴリー「{mc.name}
+                」を削除します．サブカテゴリーがある場合は削除できません．
+              </DeleteConfirmDialog>
             </div>
           </div>
           <CollapsibleContent>
@@ -663,8 +649,8 @@ export function CategorySection({
                         </DialogFooter>
                       </DialogContent>
                     </Dialog>
-                    <AlertDialog>
-                      <AlertDialogTrigger asChild>
+                    <DeleteConfirmDialog
+                      trigger={
                         <Button
                           variant="ghost"
                           size="icon"
@@ -673,25 +659,11 @@ export function CategorySection({
                         >
                           <Trash2 className="h-4 w-4" />
                         </Button>
-                      </AlertDialogTrigger>
-                      <AlertDialogContent>
-                        <AlertDialogHeader>
-                          <AlertDialogTitle>削除確認</AlertDialogTitle>
-                          <AlertDialogDescription>
-                            サブカテゴリー「{sc.name}」を削除します．
-                          </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                          <AlertDialogCancel>キャンセル</AlertDialogCancel>
-                          <AlertDialogAction
-                            onClick={() => handleDeleteSubCategory(sc.id)}
-                            className="bg-red-600"
-                          >
-                            削除
-                          </AlertDialogAction>
-                        </AlertDialogFooter>
-                      </AlertDialogContent>
-                    </AlertDialog>
+                      }
+                      onConfirm={() => handleDeleteSubCategory(sc.id)}
+                    >
+                      サブカテゴリー「{sc.name}」を削除します．
+                    </DeleteConfirmDialog>
                   </div>
                 </div>
               ))}

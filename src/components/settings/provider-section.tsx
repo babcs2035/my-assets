@@ -19,6 +19,7 @@ import {
   type getProviders,
   syncProvider,
 } from "@/actions/providers";
+import { DeleteConfirmDialog } from "@/components/settings/delete-confirm-dialog";
 import { getProviderTypeLabel } from "@/components/settings/provider-type-label";
 import {
   AlertDialog,
@@ -408,8 +409,8 @@ export function ProviderSection({
                             </DialogContent>
                           </Dialog>
                         )}
-                        <AlertDialog>
-                          <AlertDialogTrigger asChild>
+                        <DeleteConfirmDialog
+                          trigger={
                             <Button
                               variant="ghost"
                               size="sm"
@@ -418,32 +419,15 @@ export function ProviderSection({
                               <Trash2 className="mr-2 h-3.5 w-3.5" />
                               削除
                             </Button>
-                          </AlertDialogTrigger>
-                          <AlertDialogContent>
-                            <AlertDialogHeader>
-                              <AlertDialogTitle>削除確認</AlertDialogTitle>
-                              <AlertDialogDescription>
-                                プロバイダー「{provider.name}
-                                」を削除しますか？
-                                関連する口座データも削除される可能性があります．
-                              </AlertDialogDescription>
-                            </AlertDialogHeader>
-                            <AlertDialogFooter>
-                              <AlertDialogCancel>キャンセル</AlertDialogCancel>
-                              <AlertDialogAction
-                                onClick={() =>
-                                  handleDeleteProvider(
-                                    provider.id,
-                                    provider.name,
-                                  )
-                                }
-                                className="bg-red-600"
-                              >
-                                削除
-                              </AlertDialogAction>
-                            </AlertDialogFooter>
-                          </AlertDialogContent>
-                        </AlertDialog>
+                          }
+                          onConfirm={() =>
+                            handleDeleteProvider(provider.id, provider.name)
+                          }
+                        >
+                          プロバイダー「{provider.name}
+                          」を削除しますか？
+                          関連する口座データも削除される可能性があります．
+                        </DeleteConfirmDialog>
                       </div>
                     </>
                   );
@@ -582,8 +566,8 @@ export function ProviderSection({
                             </AlertDialog>
                           );
                         })()}
-                        <AlertDialog>
-                          <AlertDialogTrigger asChild>
+                        <DeleteConfirmDialog
+                          trigger={
                             <Button
                               variant="ghost"
                               size="icon"
@@ -592,32 +576,15 @@ export function ProviderSection({
                             >
                               <Trash2 className="h-4 w-4" />
                             </Button>
-                          </AlertDialogTrigger>
-                          <AlertDialogContent>
-                            <AlertDialogHeader>
-                              <AlertDialogTitle>削除確認</AlertDialogTitle>
-                              <AlertDialogDescription>
-                                プロバイダー「{provider.name}
-                                」を削除しますか？
-                                関連する口座データも削除される可能性があります．
-                              </AlertDialogDescription>
-                            </AlertDialogHeader>
-                            <AlertDialogFooter>
-                              <AlertDialogCancel>キャンセル</AlertDialogCancel>
-                              <AlertDialogAction
-                                onClick={() =>
-                                  handleDeleteProvider(
-                                    provider.id,
-                                    provider.name,
-                                  )
-                                }
-                                className="bg-red-600"
-                              >
-                                削除
-                              </AlertDialogAction>
-                            </AlertDialogFooter>
-                          </AlertDialogContent>
-                        </AlertDialog>
+                          }
+                          onConfirm={() =>
+                            handleDeleteProvider(provider.id, provider.name)
+                          }
+                        >
+                          プロバイダー「{provider.name}
+                          」を削除しますか？
+                          関連する口座データも削除される可能性があります．
+                        </DeleteConfirmDialog>
                       </div>
                     </TableCell>
                   </TableRow>
