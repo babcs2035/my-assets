@@ -87,17 +87,20 @@ export function IncomeExpenseContent({
   // 初期値は true：初回フェッチ完了前に KPI が「¥0」でちらつかないようにする
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [annualError, setAnnualError] = useState<string | null>(null);
   // 月を素早く切り替えた際に古い応答が新しい応答を上書きしないよう，
   // リクエストの順序を管理する
   const requestIdRef = useRef(0);
 
   // 年別データは月に依存しないため，マウント時と再試行時のみ取得する
   const fetchAnnual = useCallback(async () => {
+    setAnnualError(null);
     try {
       const annual = await getAnnualIncomeExpense();
       setAnnualData(annual);
     } catch {
-      // 月次フェッチのエラー表示に集約するためここでは無視する
+      // 月次の取得が成功していると月次のエラー表示は出ないため，年別は別に表示する
+      setAnnualError("年間収支の取得に失敗しました．");
     }
   }, []);
 
@@ -647,7 +650,21 @@ export function IncomeExpenseContent({
       </div>
 
       {/* 年間収支推移（折れ線グラフ） */}
-      {annualTrendData.length > 1 && (
+      {annualError && (
+        <div className="flex flex-col items-center gap-3 py-8 border border-red-900/40 bg-red-950/20 rounded-lg">
+          <p className="text-sm text-red-400">{annualError}</p>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              void fetchAnnual();
+            }}
+          >
+            再試行
+          </Button>
+        </div>
+      )}
+      {!annualError && annualTrendData.length > 1 && (
         <Card>
           <CardHeader>
             <CardTitle className="text-base font-medium text-zinc-200">
