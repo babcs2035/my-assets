@@ -2,6 +2,7 @@ import "dotenv/config";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import type { SubAccount } from "@prisma/client";
 import { chromium, type Page } from "playwright";
 import { generateTransactionId } from "../lib/hash";
 import logger from "../lib/logger";
@@ -1708,6 +1709,92 @@ function writeUnresolvedTransferDebugJson(
 }
 
 /**
+ * 子口座名で照合できなかった通常の明細について，メイン口座の子口座から紐付け先を推定する．
+ * 一意に決まらない場合は undefined を返し，呼び出し元はその明細を保存しない．
+ */
+function findFallbackSubAccount(
+  tx: ScrapedTransaction,
+  mainAccount: { subAccounts: SubAccount[] },
+): SubAccount | undefined {
+  let subAccount: SubAccount | undefined;
+  logger.debug(
+    {
+      subAccounts: mainAccount.subAccounts
+        .map(s => `"${s.currentName}"`)
+        .join(", "),
+    },
+    "   Available DB subAccounts.",
+  );
+  // フォールバック1: MF側で "Main" になった場合、子口座が1つならそこへ紐付ける
+  if (
+    isPlaceholderSubAccountName(tx.subAccountName) &&
+    mainAccount.subAccounts.length === 1
+  ) {
+    subAccount = mainAccount.subAccounts[0];
+    logger.debug(
+      { subAccount: subAccount.currentName },
+      "   Fallback matched to the only sub account.",
+    );
+  }
+
+  // フォールバック2: Main で子口座が複数の場合は、明細説明文から既存子口座を推定
+  if (!subAccount && isPlaceholderSubAccountName(tx.subAccountName)) {
+    const sortedCandidates = [...mainAccount.subAccounts].sort(
+      (a, b) => b.currentName.length - a.currentName.length,
+    );
+    const matched = sortedCandidates.filter(sa =>
+      tx.desc.includes(sa.currentName),
+    );
+    if (matched.length === 1) {
+      subAccount = matched[0];
+      logger.debug(
+        { subAccount: subAccount.currentName },
+        "   Fallback matched by description.",
+      );
+    } else {
+      // 振替でない明細も含め、正規化文字列で再推定
+      const rawInfo = (tx as { rawInfo?: string }).rawInfo ?? "";
+      const normalizedText = normalizeLoose(`${tx.desc} ${rawInfo}`);
+      const normalizedMatched = sortedCandidates.filter(sa =>
+        normalizedText.includes(normalizeLoose(sa.currentName)),
+      );
+      if (normalizedMatched.length === 1) {
+        subAccount = normalizedMatched[0];
+        logger.debug(
+          { subAccount: subAccount.currentName },
+          "   Fallback matched by normalized text.",
+        );
+      } else {
+        logger.debug(
+          `   Skip creating "Main": could not uniquely resolve existing sub account`,
+        );
+      }
+    }
+  }
+  // フォールバック3: Main 以外でも正規化文字列から一意推定
+  if (!subAccount) {
+    const sortedCandidates = [...mainAccount.subAccounts].sort(
+      (a, b) => b.currentName.length - a.currentName.length,
+    );
+    const rawInfo = (tx as { rawInfo?: string }).rawInfo ?? "";
+    const normalizedText = normalizeLoose(
+      `${tx.subAccountName} ${tx.desc} ${rawInfo}`,
+    );
+    const normalizedMatched = sortedCandidates.filter(sa =>
+      normalizedText.includes(normalizeLoose(sa.currentName)),
+    );
+    if (normalizedMatched.length === 1) {
+      subAccount = normalizedMatched[0];
+      logger.debug(
+        { subAccount: subAccount.currentName },
+        "   Fallback matched by normalized text.",
+      );
+    }
+  }
+  return subAccount;
+}
+
+/**
  * 取引明細をDBに保存する関数
  */
 async function saveTransactionsToDatabase(
@@ -2191,83 +2278,8 @@ async function saveTransactionsToDatabase(
         },
         "⚠️ Unmatched transaction not found in DB.",
       );
-      // Debug info: 正規化名でマッチした mainAccount を使用
-      const ma = matchedMainAccount;
-      if (ma) {
-        logger.debug(
-          {
-            subAccounts: ma.subAccounts
-              .map(s => `"${s.currentName}"`)
-              .join(", "),
-          },
-          "   Available DB subAccounts.",
-        );
-        // フォールバック1: MF側で "Main" になった場合、子口座が1つならそこへ紐付ける
-        if (
-          isPlaceholderSubAccountName(tx.subAccountName) &&
-          ma.subAccounts.length === 1
-        ) {
-          subAccount = ma.subAccounts[0];
-          logger.debug(
-            { subAccount: subAccount.currentName },
-            "   Fallback matched to the only sub account.",
-          );
-        }
-
-        // フォールバック2: Main で子口座が複数の場合は、明細説明文から既存子口座を推定
-        if (!subAccount && isPlaceholderSubAccountName(tx.subAccountName)) {
-          const sortedCandidates = [...ma.subAccounts].sort(
-            (a, b) => b.currentName.length - a.currentName.length,
-          );
-          const matched = sortedCandidates.filter(sa =>
-            tx.desc.includes(sa.currentName),
-          );
-          if (matched.length === 1) {
-            subAccount = matched[0];
-            logger.debug(
-              { subAccount: subAccount.currentName },
-              "   Fallback matched by description.",
-            );
-          } else {
-            // 振替でない明細も含め、正規化文字列で再推定
-            const rawInfo = (tx as { rawInfo?: string }).rawInfo ?? "";
-            const normalizedText = normalize(`${tx.desc} ${rawInfo}`);
-            const normalizedMatched = sortedCandidates.filter(sa =>
-              normalizedText.includes(normalize(sa.currentName)),
-            );
-            if (normalizedMatched.length === 1) {
-              subAccount = normalizedMatched[0];
-              logger.debug(
-                { subAccount: subAccount.currentName },
-                "   Fallback matched by normalized text.",
-              );
-            } else {
-              logger.debug(
-                `   Skip creating "Main": could not uniquely resolve existing sub account`,
-              );
-            }
-          }
-        }
-        // フォールバック3: Main 以外でも正規化文字列から一意推定
-        if (!subAccount) {
-          const sortedCandidates = [...ma.subAccounts].sort(
-            (a, b) => b.currentName.length - a.currentName.length,
-          );
-          const rawInfo = (tx as { rawInfo?: string }).rawInfo ?? "";
-          const normalizedText = normalize(
-            `${tx.subAccountName} ${tx.desc} ${rawInfo}`,
-          );
-          const normalizedMatched = sortedCandidates.filter(sa =>
-            normalizedText.includes(normalize(sa.currentName)),
-          );
-          if (normalizedMatched.length === 1) {
-            subAccount = normalizedMatched[0];
-            logger.debug(
-              { subAccount: subAccount.currentName },
-              "   Fallback matched by normalized text.",
-            );
-          }
-        }
+      if (matchedMainAccount) {
+        subAccount = findFallbackSubAccount(tx, matchedMainAccount);
       } else {
         logger.warn(
           { institution: tx.institutionName },
