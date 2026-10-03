@@ -759,6 +759,222 @@ async function scrapeBalances(page: Page, providerId: string) {
   return results;
 }
 
+// scrapeTransactions が返す明細 1 件．変換を関数に切り出したため，
+// 戻り値からの推論ではなく明示的に定義する（推論にすると型が循環する）
+type ScrapedTransaction = {
+  date: string;
+  desc: string;
+  amount: number;
+  institutionName: string;
+  subAccountName: string;
+  msgUrlId: string;
+  rawInfo: string;
+  isTransfer: boolean;
+  transferFromSubAccount?: string;
+  transferToSubAccount?: string;
+  subAccountIdHash?: string;
+  partnerSubAccountIdHash?: string;
+  partnerInstitutionName?: string;
+  partnerSubAccountName?: string;
+  // raw API data for debugging unresolved transfers
+  rawApiData?: Record<string, unknown>;
+};
+
+type MfUserAssetAct = NonNullable<
+  Awaited<ReturnType<typeof fetchTermDataBySubAccount>>["user_asset_acts"]
+>[number]["user_asset_act"];
+
+/**
+ * 明細 API を呼ぶ期間を月初〜月末の組で並べる．scheduled は今月と先月の 2 か月，
+ * それ以外は BACKFILL_START_DATE の月まで 12 か月ずつ遡る．
+ * ローカル TZ が JST である前提は scrapeTransactions の日付計算と同じ．
+ */
+function buildTransactionFetchWindows(
+  isIncrementalSync: boolean,
+  currentMonthStart: Date,
+  minBackfillMonthStart: Date,
+): Array<{ from: string; to: string }> {
+  const windows: Array<{ from: string; to: string }> = [];
+  if (isIncrementalSync) {
+    const cursor = new Date(currentMonthStart);
+    for (let i = 0; i < 2; i++) {
+      const y = cursor.getFullYear();
+      const m = String(cursor.getMonth() + 1).padStart(2, "0");
+      const from = `${y}-${m}-01`;
+      const monthEnd = new Date(y, cursor.getMonth() + 1, 0);
+      const to = `${y}-${m}-${String(monthEnd.getDate()).padStart(2, "0")}`;
+      windows.push({ from, to });
+      cursor.setMonth(cursor.getMonth() - 1);
+    }
+  } else {
+    // API の取得上限を 1 年に制限し、バックフィル時は 1 年単位で区切って遡及する
+    const chunkMonths = 12;
+    let chunkEnd = new Date(currentMonthStart);
+    while (chunkEnd.getTime() >= minBackfillMonthStart.getTime()) {
+      const chunkStart = new Date(chunkEnd);
+      chunkStart.setMonth(chunkStart.getMonth() - (chunkMonths - 1));
+      if (chunkStart.getTime() < minBackfillMonthStart.getTime()) {
+        chunkStart.setTime(minBackfillMonthStart.getTime());
+      }
+
+      const from = `${chunkStart.getFullYear()}-${String(chunkStart.getMonth() + 1).padStart(2, "0")}-01`;
+      const to = `${chunkEnd.getFullYear()}-${String(chunkEnd.getMonth() + 1).padStart(2, "0")}-${String(new Date(chunkEnd.getFullYear(), chunkEnd.getMonth() + 1, 0).getDate()).padStart(2, "0")}`;
+      windows.push({ from, to });
+
+      chunkEnd = new Date(chunkStart);
+      chunkEnd.setMonth(chunkEnd.getMonth() - 1);
+    }
+  }
+  return windows;
+}
+
+/**
+ * 明細 API の act 1 件を保存用の明細に変換する．日付か金額が読めない act は null を返す．
+ * sa は act を取得したときに問い合わせた子口座で，act から子口座名が決まらないときの既定値になる．
+ */
+function convertMfActToScrapedTransaction(
+  act: MfUserAssetAct,
+  sa: { hash: string; name: string },
+  account: Pick<MfAccountSummary, "name">,
+  {
+    localSubNameByHash,
+    globalSubAccountNameByHash,
+    accountNameByIdHash,
+  }: {
+    localSubNameByHash: Map<string, string>;
+    globalSubAccountNameByHash: Map<string, string>;
+    accountNameByIdHash: Map<string, string>;
+  },
+): ScrapedTransaction | null {
+  const recognizedDate = act.recognized_at?.slice(0, 10);
+  const amount = Math.trunc(Number(act.amount));
+  if (!recognizedDate || !Number.isFinite(amount)) return null;
+
+  const subAccountIdHash = act.sub_account_id_hash ?? sa.hash;
+  const partnerSubAccountIdHash =
+    act.partner_act?.sub_account_id_hash ??
+    act.partner_act?.partner_sub_account_id_hash ??
+    undefined;
+  const partnerAccountIdHash =
+    act.partner_account?.partner_account?.account_id_hash;
+
+  const partnerSubFromPayload = buildSubAccountMergeName(
+    act.partner_sub_account?.partner_sub_account?.sub_type ?? "",
+    act.partner_sub_account?.partner_sub_account?.sub_name ?? "",
+  );
+  const currentSubFromPayload = buildSubAccountMergeName(
+    act.sub_account?.sub_account?.sub_type ?? "",
+    act.sub_account?.sub_account?.sub_name ?? "",
+  );
+
+  // 振替取引: subAccountIdHash はクエリ元（振替元）サブアカウントを指すためハッシュベースの名前を優先
+  // 非振替取引: act.sub_account は実際の取引サブアカウントを指す
+  //   - act.sub_account.sub_account が存在し、sub_name が非空 → ペイロード名を優先
+  //   - それ以外（空 / "メイン" プレースホルダー）→ ハッシュベースの名前にフォールバック
+  const currentSubName = act.is_transfer
+    ? (localSubNameByHash.get(subAccountIdHash) ??
+      globalSubAccountNameByHash.get(subAccountIdHash) ??
+      sa.name)
+    : act.sub_account?.sub_account?.sub_name &&
+        currentSubFromPayload !== "メイン"
+      ? currentSubFromPayload
+      : (localSubNameByHash.get(subAccountIdHash) ??
+        globalSubAccountNameByHash.get(subAccountIdHash) ??
+        sa.name);
+  const partnerSubName = partnerSubAccountIdHash
+    ? globalSubAccountNameByHash.get(partnerSubAccountIdHash)
+    : partnerSubFromPayload !== "メイン"
+      ? partnerSubFromPayload
+      : undefined;
+  const partnerInstitutionName =
+    (partnerAccountIdHash
+      ? accountNameByIdHash.get(partnerAccountIdHash)
+      : undefined) ??
+    act.partner_account?.partner_account?.display_name ??
+    undefined;
+
+  let transferFromSubAccount: string | undefined;
+  let transferToSubAccount: string | undefined;
+  // "残高" などは内部ラベルであり実際の口座ではないため振替として処理しない
+  const isInternalLabel = (name: string) =>
+    ["残高", "残高変更", "利息", "ポイント", "ボーナスポイント"].includes(name);
+  // transfer_type: "outside" は他サービスへの振替で partner 口座が存在しない
+  // 振替として処理できない場合は isTransfer: false として通常の取引として保存
+  const shouldTreatAsTransfer =
+    act.is_transfer &&
+    partnerSubName &&
+    !isInternalLabel(partnerSubName) &&
+    act.transfer_type !== "outside";
+
+  if (shouldTreatAsTransfer) {
+    if (amount < 0) {
+      transferFromSubAccount =
+        currentSubName || currentSubFromPayload || sa.name;
+      transferToSubAccount = partnerSubName;
+    } else {
+      transferFromSubAccount = partnerSubName;
+      transferToSubAccount = currentSubName || currentSubFromPayload || sa.name;
+    }
+  } else if (act.is_transfer && !shouldTreatAsTransfer) {
+    // 振替として処理できない場合はログ出力（isTransfer: false として保存される）
+    logger.info(
+      {
+        id: act.id,
+        content: act.content,
+        amount: act.amount,
+        isTransfer: act.is_transfer,
+        transferType: act.transfer_type,
+        partnerSubName,
+        reason:
+          act.transfer_type === "outside"
+            ? "outside transfer (no partner account)"
+            : isInternalLabel(partnerSubName ?? "")
+              ? "internal label partner"
+              : "missing partner",
+      },
+      "Transfer not treated as transfer — saving as regular transaction.",
+    );
+  }
+
+  return {
+    date: recognizedDate,
+    desc: (act.content || "").trim(),
+    amount,
+    institutionName: normalizeInstitutionName(account.name),
+    subAccountName: currentSubName,
+    msgUrlId: String(act.id),
+    rawInfo: JSON.stringify({
+      transferType: act.transfer_type,
+      subAccountIdHash,
+      partnerSubAccountIdHash,
+      partnerAccountIdHash,
+      partnerInstitutionName,
+      partnerSubName,
+      partnerActId: act.partner_act_id,
+    }),
+    isTransfer: Boolean(shouldTreatAsTransfer),
+    transferFromSubAccount,
+    transferToSubAccount,
+    subAccountIdHash,
+    partnerSubAccountIdHash,
+    partnerInstitutionName: partnerInstitutionName ?? undefined,
+    partnerSubAccountName: partnerSubName ?? undefined,
+    rawApiData: {
+      id: act.id,
+      content: act.content,
+      amount: act.amount,
+      recognized_at: act.recognized_at,
+      is_transfer: act.is_transfer,
+      transfer_type: act.transfer_type,
+      sub_account_id_hash: act.sub_account_id_hash,
+      partner_act: act.partner_act,
+      partner_account: act.partner_account,
+      partner_sub_account: act.partner_sub_account,
+      sub_account: act.sub_account,
+    },
+  };
+}
+
 /**
  * 直近の入出金明細をスクレイピングする (今月＋先月)
  */
@@ -808,24 +1024,7 @@ async function scrapeTransactions(
     }
   }
 
-  const allTransactions: Array<{
-    date: string;
-    desc: string;
-    amount: number;
-    institutionName: string;
-    subAccountName: string;
-    msgUrlId: string;
-    rawInfo: string;
-    isTransfer: boolean;
-    transferFromSubAccount?: string;
-    transferToSubAccount?: string;
-    subAccountIdHash?: string;
-    partnerSubAccountIdHash?: string;
-    partnerInstitutionName?: string;
-    partnerSubAccountName?: string;
-    // raw API data for debugging unresolved transfers
-    rawApiData?: Record<string, unknown>;
-  }> = [];
+  const allTransactions: ScrapedTransaction[] = [];
   const seenActIds = new Set<number>();
 
   // 日付ウィンドウの計算はサーバーのローカル TZ が JST (TZ=Asia/Tokyo) であることを
@@ -873,37 +1072,11 @@ async function scrapeTransactions(
       "Processing transactions.",
     );
 
-    const windows: Array<{ from: string; to: string }> = [];
-    if (isIncrementalSync) {
-      const cursor = new Date(currentMonthStart);
-      for (let i = 0; i < 2; i++) {
-        const y = cursor.getFullYear();
-        const m = String(cursor.getMonth() + 1).padStart(2, "0");
-        const from = `${y}-${m}-01`;
-        const monthEnd = new Date(y, cursor.getMonth() + 1, 0);
-        const to = `${y}-${m}-${String(monthEnd.getDate()).padStart(2, "0")}`;
-        windows.push({ from, to });
-        cursor.setMonth(cursor.getMonth() - 1);
-      }
-    } else {
-      // API の取得上限を 1 年に制限し、バックフィル時は 1 年単位で区切って遡及する
-      const chunkMonths = 12;
-      let chunkEnd = new Date(currentMonthStart);
-      while (chunkEnd.getTime() >= minBackfillMonthStart.getTime()) {
-        const chunkStart = new Date(chunkEnd);
-        chunkStart.setMonth(chunkStart.getMonth() - (chunkMonths - 1));
-        if (chunkStart.getTime() < minBackfillMonthStart.getTime()) {
-          chunkStart.setTime(minBackfillMonthStart.getTime());
-        }
-
-        const from = `${chunkStart.getFullYear()}-${String(chunkStart.getMonth() + 1).padStart(2, "0")}-01`;
-        const to = `${chunkEnd.getFullYear()}-${String(chunkEnd.getMonth() + 1).padStart(2, "0")}-${String(new Date(chunkEnd.getFullYear(), chunkEnd.getMonth() + 1, 0).getDate()).padStart(2, "0")}`;
-        windows.push({ from, to });
-
-        chunkEnd = new Date(chunkStart);
-        chunkEnd.setMonth(chunkEnd.getMonth() - 1);
-      }
-    }
+    const windows = buildTransactionFetchWindows(
+      isIncrementalSync,
+      currentMonthStart,
+      minBackfillMonthStart,
+    );
 
     for (const { from, to } of windows) {
       for (const sa of accountSubAccounts) {
@@ -921,140 +1094,17 @@ async function scrapeTransactions(
             if (!act || seenActIds.has(act.id)) continue;
             seenActIds.add(act.id);
 
-            const recognizedDate = act.recognized_at?.slice(0, 10);
-            const amount = Math.trunc(Number(act.amount));
-            if (!recognizedDate || !Number.isFinite(amount)) continue;
-
-            const subAccountIdHash = act.sub_account_id_hash ?? sa.hash;
-            const partnerSubAccountIdHash =
-              act.partner_act?.sub_account_id_hash ??
-              act.partner_act?.partner_sub_account_id_hash ??
-              undefined;
-            const partnerAccountIdHash =
-              act.partner_account?.partner_account?.account_id_hash;
-
-            const partnerSubFromPayload = buildSubAccountMergeName(
-              act.partner_sub_account?.partner_sub_account?.sub_type ?? "",
-              act.partner_sub_account?.partner_sub_account?.sub_name ?? "",
-            );
-            const currentSubFromPayload = buildSubAccountMergeName(
-              act.sub_account?.sub_account?.sub_type ?? "",
-              act.sub_account?.sub_account?.sub_name ?? "",
-            );
-
-            // 振替取引: subAccountIdHash はクエリ元（振替元）サブアカウントを指すためハッシュベースの名前を優先
-            // 非振替取引: act.sub_account は実際の取引サブアカウントを指す
-            //   - act.sub_account.sub_account が存在し、sub_name が非空 → ペイロード名を優先
-            //   - それ以外（空 / "メイン" プレースホルダー）→ ハッシュベースの名前にフォールバック
-            const currentSubName = act.is_transfer
-              ? (localSubNameByHash.get(subAccountIdHash) ??
-                globalSubAccountNameByHash.get(subAccountIdHash) ??
-                sa.name)
-              : act.sub_account?.sub_account?.sub_name &&
-                  currentSubFromPayload !== "メイン"
-                ? currentSubFromPayload
-                : (localSubNameByHash.get(subAccountIdHash) ??
-                  globalSubAccountNameByHash.get(subAccountIdHash) ??
-                  sa.name);
-            const partnerSubName = partnerSubAccountIdHash
-              ? globalSubAccountNameByHash.get(partnerSubAccountIdHash)
-              : partnerSubFromPayload !== "メイン"
-                ? partnerSubFromPayload
-                : undefined;
-            const partnerInstitutionName =
-              (partnerAccountIdHash
-                ? accountNameByIdHash.get(partnerAccountIdHash)
-                : undefined) ??
-              act.partner_account?.partner_account?.display_name ??
-              undefined;
-
-            let transferFromSubAccount: string | undefined;
-            let transferToSubAccount: string | undefined;
-            // "残高" などは内部ラベルであり実際の口座ではないため振替として処理しない
-            const isInternalLabel = (name: string) =>
-              [
-                "残高",
-                "残高変更",
-                "利息",
-                "ポイント",
-                "ボーナスポイント",
-              ].includes(name);
-            // transfer_type: "outside" は他サービスへの振替で partner 口座が存在しない
-            // 振替として処理できない場合は isTransfer: false として通常の取引として保存
-            const shouldTreatAsTransfer =
-              act.is_transfer &&
-              partnerSubName &&
-              !isInternalLabel(partnerSubName) &&
-              act.transfer_type !== "outside";
-
-            if (shouldTreatAsTransfer) {
-              if (amount < 0) {
-                transferFromSubAccount =
-                  currentSubName || currentSubFromPayload || sa.name;
-                transferToSubAccount = partnerSubName;
-              } else {
-                transferFromSubAccount = partnerSubName;
-                transferToSubAccount =
-                  currentSubName || currentSubFromPayload || sa.name;
-              }
-            } else if (act.is_transfer && !shouldTreatAsTransfer) {
-              // 振替として処理できない場合はログ出力（isTransfer: false として保存される）
-              logger.info(
-                {
-                  id: act.id,
-                  content: act.content,
-                  amount: act.amount,
-                  isTransfer: act.is_transfer,
-                  transferType: act.transfer_type,
-                  partnerSubName,
-                  reason:
-                    act.transfer_type === "outside"
-                      ? "outside transfer (no partner account)"
-                      : isInternalLabel(partnerSubName ?? "")
-                        ? "internal label partner"
-                        : "missing partner",
-                },
-                "Transfer not treated as transfer — saving as regular transaction.",
-              );
-            }
-
-            allTransactions.push({
-              date: recognizedDate,
-              desc: (act.content || "").trim(),
-              amount,
-              institutionName: normalizeInstitutionName(account.name),
-              subAccountName: currentSubName,
-              msgUrlId: String(act.id),
-              rawInfo: JSON.stringify({
-                transferType: act.transfer_type,
-                subAccountIdHash,
-                partnerSubAccountIdHash,
-                partnerAccountIdHash,
-                partnerInstitutionName,
-                partnerSubName,
-                partnerActId: act.partner_act_id,
-              }),
-              isTransfer: Boolean(shouldTreatAsTransfer),
-              transferFromSubAccount,
-              transferToSubAccount,
-              subAccountIdHash,
-              partnerSubAccountIdHash,
-              partnerInstitutionName: partnerInstitutionName ?? undefined,
-              partnerSubAccountName: partnerSubName ?? undefined,
-              rawApiData: {
-                id: act.id,
-                content: act.content,
-                amount: act.amount,
-                recognized_at: act.recognized_at,
-                is_transfer: act.is_transfer,
-                transfer_type: act.transfer_type,
-                sub_account_id_hash: act.sub_account_id_hash,
-                partner_act: act.partner_act,
-                partner_account: act.partner_account,
-                partner_sub_account: act.partner_sub_account,
-                sub_account: act.sub_account,
+            const transaction = convertMfActToScrapedTransaction(
+              act,
+              sa,
+              account,
+              {
+                localSubNameByHash,
+                globalSubAccountNameByHash,
+                accountNameByIdHash,
               },
-            });
+            );
+            if (transaction) allTransactions.push(transaction);
           }
         } catch (error) {
           logger.warn(
@@ -1589,10 +1639,6 @@ async function saveBalancesToDatabase(
     "✅ Saved balance records to database.",
   );
 }
-
-type ScrapedTransaction = Awaited<
-  ReturnType<typeof scrapeTransactions>
->[number];
 
 /**
  * メイン口座内でまだ振替になっていない明細のうち，同日・逆符号・同額で，
@@ -2189,7 +2235,7 @@ async function saveTransferPair(
  * 取引明細をDBに保存する関数
  */
 async function saveTransactionsToDatabase(
-  transactions: Awaited<ReturnType<typeof scrapeTransactions>>,
+  transactions: ScrapedTransaction[],
   providerId: string,
 ) {
   logger.info("💾 Saving transactions to database...");
@@ -2459,7 +2505,7 @@ async function saveTransactionsToDatabase(
  * これにより、同日の複数取引が逆算結果に重複して影響するのを防ぐ。
  */
 async function recalculateLiabilityHistory(
-  _transactions: Awaited<ReturnType<typeof scrapeTransactions>>,
+  _transactions: ScrapedTransaction[],
   providerId: string,
 ) {
   logger.info("🔄 Recalculating liability balance history...");
