@@ -210,12 +210,17 @@ export function getItemField(itemId: string, field: string): string {
             "or set OP_SECRETS_FILE for runtime secrets.",
         );
       }
+      // stderr は機密情報を含む可能性があるため，ログにもユーザー向けエラーにも含めない．
+      // execFileSync のエラーは message と stderr/stdout プロパティに出力を持つので，
+      // err として渡さず終了コードだけを記録する
+      const exitStatus =
+        error !== null && typeof error === "object" && "status" in error
+          ? error.status
+          : undefined;
       logger.error(
-        { err: error, field, itemId },
+        { field, itemId, exitStatus },
         `Failed to get field '${field}' from 1Password CLI for item: ${itemId}.`,
       );
-      // stderr は機密情報を含む可能性があるためユーザー向けエラーには含めない．
-      // 詳細は上記の logger.error({ err: error }) で既にログ出力済み．
       throw new Error(
         `Failed to get field '${field}' from 1Password CLI for item: ${itemId}.`,
       );
@@ -275,12 +280,17 @@ export function getItemOtp(itemId: string): string {
             "or set OP_SECRETS_FILE for runtime secrets.",
         );
       }
+      // stderr は機密情報を含む可能性があるため，ログにもユーザー向けエラーにも含めない．
+      // execFileSync のエラーは message と stderr/stdout プロパティに出力を持つので，
+      // err として渡さず終了コードだけを記録する
+      const exitStatus =
+        error !== null && typeof error === "object" && "status" in error
+          ? error.status
+          : undefined;
       logger.error(
-        { err: error, itemId },
+        { itemId, exitStatus },
         `Failed to get OTP from 1Password CLI for item: ${itemId}.`,
       );
-      // stderr は機密情報を含む可能性があるためユーザー向けエラーには含めない．
-      // 詳細は上記の logger.error({ err: error }) で既にログ出力済み．
       throw new Error(
         `Failed to get OTP from 1Password CLI for item: ${itemId}.`,
       );
