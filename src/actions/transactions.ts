@@ -312,26 +312,27 @@ export async function updateTransactionCategory(
   if (data.createRule && data.subCategoryId && transaction.desc) {
     logger.info(`➕ Creating auto-category rule for: ${transaction.desc}`);
 
-    await prisma.categoryRule.deleteMany({
-      where: { keyword: transaction.desc },
-    });
-
-    await prisma.categoryRule.create({
-      data: {
-        keyword: transaction.desc,
-        subCategoryId: data.subCategoryId,
-      },
-    });
-
-    const result = await prisma.transaction.updateMany({
-      where: {
-        desc: transaction.desc,
-        subCategoryId: null,
-      },
-      data: {
-        subCategoryId: data.subCategoryId,
-      },
-    });
+    // 旧ルールの削除だけが成功して新ルールがない状態を残さないよう，まとめて実行する
+    const [, , result] = await prisma.$transaction([
+      prisma.categoryRule.deleteMany({
+        where: { keyword: transaction.desc },
+      }),
+      prisma.categoryRule.create({
+        data: {
+          keyword: transaction.desc,
+          subCategoryId: data.subCategoryId,
+        },
+      }),
+      prisma.transaction.updateMany({
+        where: {
+          desc: transaction.desc,
+          subCategoryId: null,
+        },
+        data: {
+          subCategoryId: data.subCategoryId,
+        },
+      }),
+    ]);
     logger.info(`✅ Rule applied to ${result.count} transactions.`);
   }
 
@@ -514,15 +515,18 @@ export async function markTransactionAsTransfer(input: TransferMarkInput) {
   // 摘要に基づき自動で振替ルールを作成する
   if (data.createRule && source.desc) {
     logger.info(`➕ Creating auto-transfer rule for: ${source.desc}`);
-    await prisma.transferRule.deleteMany({
-      where: { keyword: source.desc },
-    });
-    await prisma.transferRule.create({
-      data: {
-        keyword: source.desc,
-        targetSubAccountId: data.targetSubAccountId,
-      },
-    });
+    // 旧ルールの削除だけが成功して新ルールがない状態を残さないよう，まとめて実行する
+    await prisma.$transaction([
+      prisma.transferRule.deleteMany({
+        where: { keyword: source.desc },
+      }),
+      prisma.transferRule.create({
+        data: {
+          keyword: source.desc,
+          targetSubAccountId: data.targetSubAccountId,
+        },
+      }),
+    ]);
     revalidateSettingsPage();
   }
 

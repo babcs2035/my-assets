@@ -210,17 +210,20 @@ export async function updateSubCategory(
  */
 export async function deleteSubCategory(id: string) {
   logger.info(`🗑️ Deleting sub category: ${id}`);
-  // 紐付くトランザクションのsubCategoryIdをnullにする
-  await prisma.transaction.updateMany({
-    where: { subCategoryId: id },
-    data: { subCategoryId: null },
-  });
-  await prisma.categoryRule.deleteMany({
-    where: { subCategoryId: id },
-  });
-  const result = await prisma.subCategoryItem.delete({
-    where: { id },
-  });
+  // 紐付くトランザクションのsubCategoryIdをnullにする．
+  // 最後の削除だけが失敗して分類とルールだけが消えないよう，1 つのトランザクションにまとめる
+  const [, , result] = await prisma.$transaction([
+    prisma.transaction.updateMany({
+      where: { subCategoryId: id },
+      data: { subCategoryId: null },
+    }),
+    prisma.categoryRule.deleteMany({
+      where: { subCategoryId: id },
+    }),
+    prisma.subCategoryItem.delete({
+      where: { id },
+    }),
+  ]);
   revalidateSettingsAndTransactionPages();
   return result;
 }
