@@ -1071,6 +1071,219 @@ async function scrapeTransactions(
   return allTransactions;
 }
 
+// 残高履歴の日付計算に使う．toJstMidnight は YYYY-MM-DD を JST の 0 時の Date にする
+const toJstMidnight = (dateStr: string) =>
+  new Date(`${dateStr}T00:00:00+09:00`);
+const formatYmd = (d: Date) => formatJSTDate(d);
+
+// service_detail API の disp_sum_history にある資産種別ごとの系列を，日ごとに足して 1 本にする．
+// to_date がないか，系列が空なら null を返す
+const parseMergedHistory = (
+  detail?: MfServiceDetailResponse["account_detail"],
+) => {
+  const toDateStr = detail?.to_date;
+  const fromDateStr = detail?.from_date;
+  const histories = detail?.disp_sum_history ?? {};
+  const historyEntries = Object.entries(histories).filter(
+    (entry): entry is [string, number[]] =>
+      Array.isArray(entry[1]) && entry[1].length > 0,
+  );
+  const seriesByType = historyEntries.map(([, series]) => series);
+  if (!toDateStr || seriesByType.length === 0) return null;
+
+  const seriesLen = Math.max(...seriesByType.map(arr => arr.length));
+  if (seriesLen <= 0) return null;
+
+  const mergedSeries = Array.from({ length: seriesLen }, (_, index) =>
+    Math.trunc(seriesByType.reduce((sum, arr) => sum + (arr[index] ?? 0), 0)),
+  );
+  return { toDateStr, fromDateStr, mergedSeries };
+};
+
+/**
+ * 証券口座なら，口座詳細ページから投資信託の保有銘柄を取って Holding に保存し，保有履歴を計算し直す．
+ * 証券の子口座がない，ページを読めないなどの場合は何もしない．失敗は警告に留め，例外は投げない
+ * （呼び出し側はこのあと同じ金融機関の残高履歴の取得を続ける）．
+ */
+async function saveInvestmentHoldings(
+  page: Page,
+  mainAccount: { label: string; subAccounts: SubAccount[] },
+  summary: MfAccountSummary,
+  today: Date,
+): Promise<void> {
+  const mainSubAccountsForHolding = mainAccount.subAccounts;
+  const investmentSubAccount = mainSubAccountsForHolding.find(
+    sa => sa.assetType === "INVESTMENT",
+  );
+  logger.debug(
+    { label: mainAccount.label, hasInvestment: !!investmentSubAccount },
+    "🔍 Holdings fetch check.",
+  );
+  if (investmentSubAccount && summary.sub_accounts) {
+    const securitiesSubSummary = summary.sub_accounts.find(sa =>
+      sa.sub_type.startsWith("証券"),
+    );
+    if (securitiesSubSummary) {
+      try {
+        const showAccountId = extractShowAccountId(summary.show_path);
+        // continue だと，この金融機関の残高履歴（下のループ）まで飛ばしてしまう
+        if (!showAccountId) {
+          throw new Error("show_path has no account id");
+        }
+        const pageData = await fetchAccountHoldingsPage(page, showAccountId);
+        logger.debug(
+          {
+            label: mainAccount.label,
+            hasPageData: !!pageData,
+            hasAssetClasses:
+              !!pageData?.account?.grouped_asset_details_by_asset_classes,
+          },
+          "📋 Account page data.",
+        );
+        if (pageData?.account?.grouped_asset_details_by_asset_classes) {
+          const allAssetDetails: MfAssetDetail[] = [];
+          for (const assetClass of pageData.account
+            .grouped_asset_details_by_asset_classes) {
+            for (const subclass of assetClass.asset_subclasses ?? []) {
+              allAssetDetails.push(...(subclass.asset_details ?? []));
+            }
+          }
+          // asset_class_id=3 (MF) かつ asset_subclass_id=12 (MUTUAL_FUND/投資信託)
+          const mfDetails = allAssetDetails.filter(
+            d => d.asset_class_id === 3 && d.asset_subclass_id === 12,
+          );
+          logger.debug(
+            { label: mainAccount.label, mfCount: mfDetails.length },
+            "📊 Found asset_details from account page.",
+          );
+          // ページを読めていれば，投資信託が 0 件でも呼ぶ（全部売却したときに Holding を消すため）
+          const todayStr = formatJSTDate(today);
+          await saveHoldingsFromAccountPage(
+            investmentSubAccount.id,
+            investmentSubAccount.currentName,
+            mfDetails,
+            todayStr,
+          );
+          await recalculateHoldingHistory(investmentSubAccount.id);
+        }
+      } catch (error) {
+        logger.warn(
+          { err: error, label: mainAccount.label },
+          "⚠️ Failed to fetch account holdings page.",
+        );
+      }
+    }
+  }
+}
+
+/**
+ * 1 つの子口座について，対応する MF の子口座ごとに range=all で残高履歴を取り，日ごとに合算して
+ * minDate〜today の範囲を BalanceHistory に保存する．保存した件数を返す．
+ * 取得や保存に失敗したら警告を出し，例外は投げずに，それまでに保存した件数を返す．
+ */
+async function saveSubAccountBalanceHistory(
+  page: Page,
+  mainAccount: { label: string },
+  summary: MfAccountSummary,
+  subAccount: SubAccount,
+  uniqueCandidateSubSummaries: MfSubAccountSummary[],
+  minDate: Date,
+  today: Date,
+): Promise<number> {
+  let saved = 0;
+  try {
+    const mergedHistoryByDate = new Map<string, number>();
+
+    for (const subSummary of uniqueCandidateSubSummaries) {
+      // range: "all" で全履歴を1回のAPI呼び出しで取得
+      logger.debug(
+        {
+          label: mainAccount.label,
+          subAccount: subAccount.currentName,
+          subHash: subSummary.sub_account_id_hash,
+        },
+        "🔗 Calling service_detail API.",
+      );
+      const payload = await fetchServiceDetailBySubAccount(
+        page,
+        summary.account_id_hash,
+        subSummary.sub_account_id_hash,
+        "all",
+      );
+      const parsed = parseMergedHistory(payload.account_detail);
+      if (!parsed) continue;
+
+      const toDate = toJstMidnight(parsed.toDateStr);
+      const inferredFromDate = new Date(toDate);
+      inferredFromDate.setDate(
+        toDate.getDate() - (parsed.mergedSeries.length - 1),
+      );
+
+      logger.debug(
+        {
+          label: mainAccount.label,
+          subAccount: subAccount.currentName,
+          subHash: subSummary.sub_account_id_hash,
+          range: "all",
+          points: parsed.mergedSeries.length,
+          from: formatYmd(inferredFromDate),
+          to: parsed.toDateStr,
+        },
+        "History fetched with range=all.",
+      );
+
+      // minDate 〜 today の範囲にクリップしてマージ
+      for (let i = 0; i < parsed.mergedSeries.length; i++) {
+        const day = new Date(
+          inferredFromDate.getTime() + i * 24 * 60 * 60 * 1000,
+        );
+        if (day < minDate || day > today) continue;
+
+        const dateKey = formatYmd(day);
+        const balance = parsed.mergedSeries[i];
+        if (!Number.isFinite(balance)) continue;
+        mergedHistoryByDate.set(
+          dateKey,
+          Math.trunc((mergedHistoryByDate.get(dateKey) ?? 0) + balance),
+        );
+      }
+    }
+
+    for (const [dateKey, balance] of Array.from(
+      mergedHistoryByDate.entries(),
+    ).sort((a, b) => a[0].localeCompare(b[0]))) {
+      const historyDate = new Date(`${dateKey}T08:00:00+09:00`);
+      await prisma.balanceHistory.upsert({
+        where: {
+          subAccountId_date: {
+            subAccountId: subAccount.id,
+            date: historyDate,
+          },
+        },
+        create: {
+          subAccountId: subAccount.id,
+          date: historyDate,
+          balance,
+        },
+        update: {
+          balance,
+        },
+      });
+      saved++;
+    }
+  } catch (error) {
+    logger.warn(
+      {
+        err: error,
+        label: mainAccount.label,
+        subAccount: subAccount.currentName,
+      },
+      "⚠️ Failed to fetch history.",
+    );
+  }
+  return saved;
+}
+
 /**
  * 残高履歴ページから過去の残高を取得する（同期中のプロバイダーの全金融機関対象）
  * URL: https://moneyforward.com/bs/history/list/{YYYY-MM-DD}
@@ -1082,31 +1295,6 @@ async function scrapeBalanceHistory(
   options: MfScraperOptions,
 ) {
   logger.info("📊 Scraping balance history via service_detail API...");
-
-  const toJstMidnight = (dateStr: string) =>
-    new Date(`${dateStr}T00:00:00+09:00`);
-  const formatYmd = (d: Date) => formatJSTDate(d);
-  const parseMergedHistory = (
-    detail?: MfServiceDetailResponse["account_detail"],
-  ) => {
-    const toDateStr = detail?.to_date;
-    const fromDateStr = detail?.from_date;
-    const histories = detail?.disp_sum_history ?? {};
-    const historyEntries = Object.entries(histories).filter(
-      (entry): entry is [string, number[]] =>
-        Array.isArray(entry[1]) && entry[1].length > 0,
-    );
-    const seriesByType = historyEntries.map(([, series]) => series);
-    if (!toDateStr || seriesByType.length === 0) return null;
-
-    const seriesLen = Math.max(...seriesByType.map(arr => arr.length));
-    if (seriesLen <= 0) return null;
-
-    const mergedSeries = Array.from({ length: seriesLen }, (_, index) =>
-      Math.trunc(seriesByType.reduce((sum, arr) => sum + (arr[index] ?? 0), 0)),
-    );
-    return { toDateStr, fromDateStr, mergedSeries };
-  };
 
   // 同期中のプロバイダーに絞る．他の MF アカウントの口座を含めると，金融機関名の照合で
   // このセッションの履歴が別アカウントの子口座に書き込まれ，そのアカウントのロックも取っていない
@@ -1183,70 +1371,7 @@ async function scrapeBalanceHistory(
       continue;
     }
 
-    // 証券口座の場合、アカウント詳細ページから保有銘柄データを取得
-    const mainSubAccountsForHolding = mainAccount.subAccounts;
-    const investmentSubAccount = mainSubAccountsForHolding.find(
-      sa => sa.assetType === "INVESTMENT",
-    );
-    logger.debug(
-      { label: mainAccount.label, hasInvestment: !!investmentSubAccount },
-      "🔍 Holdings fetch check.",
-    );
-    if (investmentSubAccount && summary.sub_accounts) {
-      const securitiesSubSummary = summary.sub_accounts.find(sa =>
-        sa.sub_type.startsWith("証券"),
-      );
-      if (securitiesSubSummary) {
-        try {
-          const showAccountId = extractShowAccountId(summary.show_path);
-          // continue だと，この金融機関の残高履歴（下のループ）まで飛ばしてしまう
-          if (!showAccountId) {
-            throw new Error("show_path has no account id");
-          }
-          const pageData = await fetchAccountHoldingsPage(page, showAccountId);
-          logger.debug(
-            {
-              label: mainAccount.label,
-              hasPageData: !!pageData,
-              hasAssetClasses:
-                !!pageData?.account?.grouped_asset_details_by_asset_classes,
-            },
-            "📋 Account page data.",
-          );
-          if (pageData?.account?.grouped_asset_details_by_asset_classes) {
-            const allAssetDetails: MfAssetDetail[] = [];
-            for (const assetClass of pageData.account
-              .grouped_asset_details_by_asset_classes) {
-              for (const subclass of assetClass.asset_subclasses ?? []) {
-                allAssetDetails.push(...(subclass.asset_details ?? []));
-              }
-            }
-            // asset_class_id=3 (MF) かつ asset_subclass_id=12 (MUTUAL_FUND/投資信託)
-            const mfDetails = allAssetDetails.filter(
-              d => d.asset_class_id === 3 && d.asset_subclass_id === 12,
-            );
-            logger.debug(
-              { label: mainAccount.label, mfCount: mfDetails.length },
-              "📊 Found asset_details from account page.",
-            );
-            // ページを読めていれば，投資信託が 0 件でも呼ぶ（全部売却したときに Holding を消すため）
-            const todayStr = formatJSTDate(today);
-            await saveHoldingsFromAccountPage(
-              investmentSubAccount.id,
-              investmentSubAccount.currentName,
-              mfDetails,
-              todayStr,
-            );
-            await recalculateHoldingHistory(investmentSubAccount.id);
-          }
-        } catch (error) {
-          logger.warn(
-            { err: error, label: mainAccount.label },
-            "⚠️ Failed to fetch account holdings page.",
-          );
-        }
-      }
-    }
+    await saveInvestmentHoldings(page, mainAccount, summary, today);
 
     const subSummaryByDisplayName = new Map<string, MfSubAccountSummary[]>();
     const subSummaryByNormalizedDisplay = new Map<
@@ -1330,96 +1455,15 @@ async function scrapeBalanceHistory(
       }
       totalSubAccounts++;
 
-      try {
-        const mergedHistoryByDate = new Map<string, number>();
-
-        for (const subSummary of uniqueCandidateSubSummaries) {
-          // range: "all" で全履歴を1回のAPI呼び出しで取得
-          logger.debug(
-            {
-              label: mainAccount.label,
-              subAccount: subAccount.currentName,
-              subHash: subSummary.sub_account_id_hash,
-            },
-            "🔗 Calling service_detail API.",
-          );
-          const payload = await fetchServiceDetailBySubAccount(
-            page,
-            summary.account_id_hash,
-            subSummary.sub_account_id_hash,
-            "all",
-          );
-          const parsed = parseMergedHistory(payload.account_detail);
-          if (!parsed) continue;
-
-          const toDate = toJstMidnight(parsed.toDateStr);
-          const inferredFromDate = new Date(toDate);
-          inferredFromDate.setDate(
-            toDate.getDate() - (parsed.mergedSeries.length - 1),
-          );
-
-          logger.debug(
-            {
-              label: mainAccount.label,
-              subAccount: subAccount.currentName,
-              subHash: subSummary.sub_account_id_hash,
-              range: "all",
-              points: parsed.mergedSeries.length,
-              from: formatYmd(inferredFromDate),
-              to: parsed.toDateStr,
-            },
-            "History fetched with range=all.",
-          );
-
-          // minDate 〜 today の範囲にクリップしてマージ
-          for (let i = 0; i < parsed.mergedSeries.length; i++) {
-            const day = new Date(
-              inferredFromDate.getTime() + i * 24 * 60 * 60 * 1000,
-            );
-            if (day < minDate || day > today) continue;
-
-            const dateKey = formatYmd(day);
-            const balance = parsed.mergedSeries[i];
-            if (!Number.isFinite(balance)) continue;
-            mergedHistoryByDate.set(
-              dateKey,
-              Math.trunc((mergedHistoryByDate.get(dateKey) ?? 0) + balance),
-            );
-          }
-        }
-
-        for (const [dateKey, balance] of Array.from(
-          mergedHistoryByDate.entries(),
-        ).sort((a, b) => a[0].localeCompare(b[0]))) {
-          const historyDate = new Date(`${dateKey}T08:00:00+09:00`);
-          await prisma.balanceHistory.upsert({
-            where: {
-              subAccountId_date: {
-                subAccountId: subAccount.id,
-                date: historyDate,
-              },
-            },
-            create: {
-              subAccountId: subAccount.id,
-              date: historyDate,
-              balance,
-            },
-            update: {
-              balance,
-            },
-          });
-          totalSaved++;
-        }
-      } catch (error) {
-        logger.warn(
-          {
-            err: error,
-            label: mainAccount.label,
-            subAccount: subAccount.currentName,
-          },
-          "⚠️ Failed to fetch history.",
-        );
-      }
+      totalSaved += await saveSubAccountBalanceHistory(
+        page,
+        mainAccount,
+        summary,
+        subAccount,
+        uniqueCandidateSubSummaries,
+        minDate,
+        today,
+      );
     }
   }
 
