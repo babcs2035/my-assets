@@ -9,7 +9,14 @@ import {
   Loader2,
   SlidersHorizontal,
 } from "lucide-react";
-import { useCallback, useEffect, useRef, useState, useTransition } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useTransition,
+} from "react";
 import { toast } from "sonner";
 import { getCategories } from "@/actions/categories";
 import {
@@ -82,6 +89,26 @@ type FilterOption = Awaited<
 export type SortKey = "date" | "amount";
 export type SortDirection = "asc" | "desc";
 
+// 描画関数の中で定義すると毎回別のコンポーネントとして扱われ作り直されるため，最上位に置く
+function SortIcon({
+  columnKey,
+  sortKey,
+  sortDir,
+}: {
+  columnKey: SortKey;
+  sortKey: SortKey;
+  sortDir: SortDirection;
+}) {
+  if (sortKey !== columnKey) {
+    return <ArrowUpDown className="ml-1 h-3 w-3 text-zinc-500" />;
+  }
+  return sortDir === "asc" ? (
+    <ChevronUp className="ml-1 h-3 w-3 text-zinc-300" />
+  ) : (
+    <ChevronDown className="ml-1 h-3 w-3 text-zinc-300" />
+  );
+}
+
 export function TransactionsContent() {
   const [currentDate, setCurrentDate] = useState<Date>(nowJST());
   const [selectedDay, setSelectedDay] = useState<number | null>(null);
@@ -117,16 +144,20 @@ export function TransactionsContent() {
     selectedMainAccountId === "all" ? undefined : selectedMainAccountId;
   const activeSubAccountId =
     selectedSubAccountId === "all" ? undefined : selectedSubAccountId;
-  const availableSubAccounts =
-    selectedMainAccountId === "all"
-      ? filterOptions.flatMap(ma =>
-          ma.subAccounts.map(sa => ({
-            ...sa,
-            mainLabel: ma.label,
-          })),
-        )
-      : (filterOptions.find(ma => ma.id === selectedMainAccountId)
-          ?.subAccounts ?? []);
+  // 毎回新しい配列を作ると，これに依存する子口座の検証 useEffect が描画のたびに動くため memo 化する
+  const availableSubAccounts = useMemo(
+    () =>
+      selectedMainAccountId === "all"
+        ? filterOptions.flatMap(ma =>
+            ma.subAccounts.map(sa => ({
+              ...sa,
+              mainLabel: ma.label,
+            })),
+          )
+        : (filterOptions.find(ma => ma.id === selectedMainAccountId)
+            ?.subAccounts ?? []),
+    [filterOptions, selectedMainAccountId],
+  );
 
   /**
    * 現在の年・月・日・ページに基づいてデータをフェッチする関数である．
@@ -268,17 +299,6 @@ export function TransactionsContent() {
       sourceSubAccountId: tx.subAccount?.id ?? null,
     });
     setTransferDialogOpen(true);
-  };
-
-  const SortIcon = ({ columnKey }: { columnKey: SortKey }) => {
-    if (sortKey !== columnKey) {
-      return <ArrowUpDown className="ml-1 h-3 w-3 text-zinc-500" />;
-    }
-    return sortDir === "asc" ? (
-      <ChevronUp className="ml-1 h-3 w-3 text-zinc-300" />
-    ) : (
-      <ChevronDown className="ml-1 h-3 w-3 text-zinc-300" />
-    );
   };
 
   return (
@@ -593,7 +613,11 @@ export function TransactionsContent() {
                             className="mx-auto flex cursor-pointer select-none items-center justify-center gap-1 hover:text-zinc-300"
                           >
                             日付
-                            <SortIcon columnKey="date" />
+                            <SortIcon
+                              columnKey="date"
+                              sortKey={sortKey}
+                              sortDir={sortDir}
+                            />
                           </button>
                         </TableHead>
                         <TableHead className="select-none whitespace-nowrap">
@@ -618,7 +642,11 @@ export function TransactionsContent() {
                             className="mx-auto flex cursor-pointer select-none items-center justify-end gap-1 hover:text-zinc-300"
                           >
                             金額
-                            <SortIcon columnKey="amount" />
+                            <SortIcon
+                              columnKey="amount"
+                              sortKey={sortKey}
+                              sortDir={sortDir}
+                            />
                           </button>
                         </TableHead>
                         <TableHead className="whitespace-nowrap">
