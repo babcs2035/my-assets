@@ -110,7 +110,7 @@ export type TransferRuleCreateInput = z.infer<typeof transferRuleCreateSchema>;
  * 振替ルール (TransferRule) 更新時のバリデーションスキーマである．
  */
 export const transferRuleUpdateSchema = z.object({
-  keyword: z.string().optional(),
+  keyword: z.string().min(1, "キーワードは必須です").optional(),
   targetSubAccountId: z.string().optional(),
 });
 export type TransferRuleUpdateInput = z.infer<typeof transferRuleUpdateSchema>;
@@ -119,7 +119,7 @@ export type TransferRuleUpdateInput = z.infer<typeof transferRuleUpdateSchema>;
  * メイン口座 (MainAccount) 更新時のバリデーションスキーマである．
  */
 export const mainAccountUpdateSchema = z.object({
-  label: z.string().max(255).optional(),
+  label: z.string().min(1, "ラベルは必須です").max(255).optional(),
   providerId: z.string().min(1, "プロバイダーは必須です").optional(),
   mfUrlId: z.string().max(255).nullable().optional(),
 });
@@ -129,7 +129,8 @@ export type MainAccountUpdateInput = z.infer<typeof mainAccountUpdateSchema>;
  * カテゴリールール (CategoryRule) 更新時のバリデーションスキーマである．
  */
 export const categoryRuleUpdateSchema = z.object({
-  keyword: z.string().optional(),
+  // 空文字だと contains: "" が未分類の明細すべてに当たる
+  keyword: z.string().min(1, "キーワードは必須です").optional(),
   priority: z.number().int().optional(),
   subCategoryId: z.string().optional(),
 });
