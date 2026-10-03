@@ -343,7 +343,7 @@ export function HoldingTrendChart({ holdings }: Props) {
               }}
             />
             <Area
-              type="monotone"
+              type="linear"
               dataKey="acquisitionCost"
               stroke="#60a5fa"
               strokeWidth={1.5}
@@ -354,7 +354,7 @@ export function HoldingTrendChart({ holdings }: Props) {
               animationDuration={800}
             />
             <Area
-              type="monotone"
+              type="linear"
               dataKey="valuation"
               stroke="#8b5cf6"
               strokeWidth={2}

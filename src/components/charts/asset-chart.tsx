@@ -126,7 +126,7 @@ export function AssetChart({ data }: { data: AssetHistoryEntry[] }) {
         {assetTypes.map(type => (
           <Area
             key={type}
-            type="monotone"
+            type="linear"
             dataKey={type}
             stackId="1"
             name={assetTypeLabel(type)}

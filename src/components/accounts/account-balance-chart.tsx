@@ -312,7 +312,7 @@ export function AccountBalanceChart({
             {hasSplitTotal ? (
               <>
                 <Area
-                  type="monotone"
+                  type="linear"
                   dataKey="assetTotal"
                   stroke="#3b82f6"
                   strokeWidth={2}
@@ -322,7 +322,7 @@ export function AccountBalanceChart({
                   animationDuration={800}
                 />
                 <Area
-                  type="monotone"
+                  type="linear"
                   dataKey="liabilityTotal"
                   stroke="#ef4444"
                   strokeWidth={2}
@@ -335,7 +335,7 @@ export function AccountBalanceChart({
             ) : (
               <Area
                 key={selectedId}
-                type="monotone"
+                type="linear"
                 dataKey="balance"
                 stroke={chartColor}
                 strokeWidth={2}

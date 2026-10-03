@@ -669,7 +669,7 @@ export function IncomeExpenseContent({
                       stackId="negative"
                     />
                     <Line
-                      type="monotone"
+                      type="linear"
                       dataKey="balance"
                       stroke="var(--color-balance)"
                       strokeWidth={2}
@@ -808,7 +808,7 @@ export function IncomeExpenseContent({
                     radius={[4, 4, 0, 0]}
                   />
                   <Line
-                    type="monotone"
+                    type="linear"
                     dataKey="balance"
                     stroke="var(--color-balance)"
                     strokeWidth={2}

@@ -310,7 +310,7 @@ export function DashboardAreaChart({ data }: DashboardAreaChartProps) {
               <Area
                 key={item.key}
                 dataKey={item.key}
-                type="monotone"
+                type="linear"
                 fill={`url(#color${item.key.charAt(0)}${item.key.slice(1).toLowerCase()})`}
                 stroke={item.color}
                 strokeWidth={2}
@@ -325,7 +325,7 @@ export function DashboardAreaChart({ data }: DashboardAreaChartProps) {
               <Area
                 key={item.key}
                 dataKey={item.key}
-                type="monotone"
+                type="linear"
                 fill={`url(#color${item.key.charAt(0)}${item.key.slice(1).toLowerCase()})`}
                 stroke={item.color}
                 strokeWidth={2}
