@@ -1682,12 +1682,29 @@ async function saveBalancesToDatabase(
  * 両方の説明に「振替」を含む 2 件を振替のペアとして結び付ける．
  */
 async function buildTransferPairs(mainAccountId: string) {
+  // 同日同額（±amount）だけでは無関係な収入＋支出ペアを振替と誤認するため，
+  // 両明細の説明に「振替」を含むこと（スクレイパーは振替を
+  // `振替: X → Y` で保存し，MF の生データも「…への振替」を含む）を要求する．
+  // ペアリングできない明細は通常取引として表示され続ける（安全側）．
+  // 条件を満たさない明細は相手にもならないので，取得の段階で絞る
   const unresolved = await prisma.transaction.findMany({
     where: {
       subAccount: { mainAccount: { id: mainAccountId } },
       isTransfer: false,
+      desc: { contains: "振替" },
     },
-    orderBy: [{ date: "asc" }, { amount: "asc" }],
+    orderBy: [{ date: "asc" }, { amount: "asc" }, { id: "asc" }],
+  });
+
+  // 同期のたびに全件を総当たりすると O(n²) になるので，日付と金額で相手の候補を引く．
+  // 候補は取得順に並ぶので，前から見て最初に条件を満たすものと組む（総当たりと同じ結果になる）
+  const pairKey = (date: Date, amount: number) => `${date.getTime()}:${amount}`;
+  const indexesByKey = new Map<string, number[]>();
+  unresolved.forEach((tx, index) => {
+    const key = pairKey(tx.date, tx.amount);
+    const indexes = indexesByKey.get(key);
+    if (indexes) indexes.push(index);
+    else indexesByKey.set(key, [index]);
   });
 
   const used = new Set<string>();
@@ -1695,41 +1712,36 @@ async function buildTransferPairs(mainAccountId: string) {
     const a = unresolved[i];
     if (used.has(a.id) || a.amount === 0) continue;
 
-    for (let j = i + 1; j < unresolved.length; j++) {
-      const b = unresolved[j];
-      if (used.has(b.id)) continue;
-      if (a.id === b.id) continue;
-      if (a.date.getTime() !== b.date.getTime()) continue;
-      if (a.subAccountId === b.subAccountId) continue;
-      if (a.amount + b.amount !== 0) continue;
-      // 同日同額（±amount）だけでは無関係な収入＋支出ペアを振替と誤認するため，
-      // 両明細の説明に「振替」を含むこと（スクレイパーは振替を
-      // `振替: X → Y` で保存し，MF の生データも「…への振替」を含む）を要求する．
-      // ペアリングできない明細は通常取引として表示され続ける（安全側）．
-      if (!a.desc.includes("振替") || !b.desc.includes("振替")) continue;
+    const candidates = indexesByKey.get(pairKey(a.date, -a.amount)) ?? [];
+    const j = candidates.find(
+      index =>
+        index > i &&
+        !used.has(unresolved[index].id) &&
+        unresolved[index].subAccountId !== a.subAccountId,
+    );
+    if (j === undefined) continue;
+    const b = unresolved[j];
 
-      // 片方だけ更新されると linkedTransId が相手を指さない半端なペアが残るため，
-      // 2 件の更新を 1 つのトランザクションにまとめる
-      await prisma.$transaction([
-        prisma.transaction.update({
-          where: { id: a.id },
-          data: {
-            isTransfer: true,
-            linkedTransId: b.id,
-          },
-        }),
-        prisma.transaction.update({
-          where: { id: b.id },
-          data: {
-            isTransfer: true,
-            linkedTransId: a.id,
-          },
-        }),
-      ]);
-      used.add(a.id);
-      used.add(b.id);
-      break;
-    }
+    // 片方だけ更新されると linkedTransId が相手を指さない半端なペアが残るため，
+    // 2 件の更新を 1 つのトランザクションにまとめる
+    await prisma.$transaction([
+      prisma.transaction.update({
+        where: { id: a.id },
+        data: {
+          isTransfer: true,
+          linkedTransId: b.id,
+        },
+      }),
+      prisma.transaction.update({
+        where: { id: b.id },
+        data: {
+          isTransfer: true,
+          linkedTransId: a.id,
+        },
+      }),
+    ]);
+    used.add(a.id);
+    used.add(b.id);
   }
 }
 
