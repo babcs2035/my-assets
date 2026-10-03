@@ -2634,6 +2634,226 @@ export interface MfScraperOptions {
 }
 
 /**
+ * MoneyForward にメールアドレスとパスワードでログインし，OTP を求められたら 1Password から取って入力する．
+ * OTP が期限切れで弾かれた場合は新しいコードで 2 回まで再試行する．ログインを確認できなければ例外を投げる．
+ */
+async function loginToMoneyForward(
+  page: Page,
+  providerName: string,
+  email: string,
+  password: string,
+): Promise<void> {
+  logger.info("🔐 Logging in to MoneyForward...");
+  await page.goto("https://moneyforward.com/sign_in");
+
+  if (!page.url().includes("id.moneyforward.com")) {
+    logger.debug({ url: page.url() }, "Current URL.");
+  }
+
+  try {
+    await page.waitForSelector('input[name="mfid_user[email]"]', {
+      timeout: 20000,
+    });
+  } catch {
+    logger.error({ url: page.url() }, "❌ Login form not found.");
+    throw new Error("Login form not found");
+  }
+  logger.info("📧 Submitting email...");
+  await page.fill('input[name="mfid_user[email]"]', email);
+  await page.click("button#submitto");
+
+  logger.info("⏳️ Waiting for password field...");
+  await page.waitForSelector('input[name="mfid_user[password]"]');
+  logger.info("🔑 Submitting password...");
+  await page.fill('input[name="mfid_user[password]"]', password);
+  await page.click("button#submitto");
+
+  // count() は待たないため，送信直後に呼ぶと OTP 画面の表示前に 0 を返し，
+  // OTP を入力せずに進んでしまう．OTP 入力欄かログイン後の要素が出るまで待つ．
+  // どちらも出ない場合は後続の verifyLoggedIn が失敗として扱う
+  await page
+    .waitForSelector('input[name="otp_attempt"], a[href="/sign_out"]', {
+      timeout: 20000,
+    })
+    .catch(() => {});
+  const otpInputFound = await page.locator('input[name="otp_attempt"]').count();
+  logger.info({ otpInputFound }, "🔑 Checking for OTP input field...");
+
+  if (otpInputFound > 0) {
+    logger.info("🔑 Entering OTP (fetching fresh token)...");
+    const currentOtp = getItemOtp(providerName);
+    // OTP コードは認証情報のためログに含めない
+    logger.info("🔑 OTP code generated.");
+
+    await page.fill('input[name="otp_attempt"]', currentOtp);
+    const filledValue = await page.inputValue('input[name="otp_attempt"]');
+    logger.info(
+      { match: filledValue === currentOtp },
+      "🔑 OTP input verified.",
+    );
+
+    await page.click("button#submitto");
+    // MoneyForwardの2FAはSPA的挙動でページ遷移しないため、
+    // 単に時間を待ってからログイン状態を再検証する
+    await page.waitForTimeout(8000);
+    await page.waitForLoadState("domcontentloaded").catch(() => {});
+  } else {
+    logger.debug("ℹ️ No OTP input field found, skipping OTP step.");
+  }
+
+  // ログイン成功確認要素（ログアウトリンク）— SPA遷移で実行コンテキストが
+  // 破棄される場合があるため、リトライ付きで検証する
+  async function verifyLoggedIn(): Promise<boolean> {
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        await page.waitForLoadState("domcontentloaded").catch(() => {});
+        const result = await page.evaluate(() => {
+          return document.querySelector('a[href="/sign_out"]') !== null;
+        });
+        return result;
+      } catch {
+        await page.waitForTimeout(2000);
+        await page.waitForLoadState("domcontentloaded").catch(() => {});
+      }
+    }
+    return false;
+  }
+  let isLoggedIn = await verifyLoggedIn();
+
+  if (!isLoggedIn) {
+    const currentUrl = page.url();
+    const title = await page.title();
+    const bodyText = await page.evaluate(
+      () => document.body?.innerText?.slice(0, 500) ?? "",
+    );
+    const buttons = await page.evaluate(() =>
+      Array.from(
+        document.querySelectorAll(
+          'button, input[type="submit"], a[role="button"]',
+        ),
+      ).map(el => ({
+        text: el.textContent?.trim(),
+        className: el.className,
+        href: el.getAttribute("href"),
+        type: el.getAttribute("type"),
+      })),
+    );
+    // 本文とボタンの一覧は，セレクタだけが変わった場合に氏名や資産額を含みうる．
+    // 本番（logger は info 以上）に残さないよう debug で出す
+    logger.error({ currentUrl, title }, "❌ Login verification failed.");
+    logger.debug(
+      { bodyText, buttons },
+      "Login verification failed: page details.",
+    );
+
+    // two_factor_auth ページでエラーメッセージが表示されている場合、
+    // OTPコードが期限切れの可能性がある。再試行する
+    if (
+      currentUrl.includes("two_factor_auth") &&
+      bodyText.includes("コードが間違っています")
+    ) {
+      logger.warn(
+        "⚠️ OTP code expired or incorrect. Retrying with fresh code...",
+      );
+      for (let attempt = 0; attempt < 2; attempt++) {
+        const freshOtp = getItemOtp(providerName);
+        // OTP コードは認証情報のためログに含めない
+        logger.info({ attempt }, "🔑 Fresh OTP code generated for retry.");
+
+        const otpInput = page.locator('input[name="otp_attempt"]');
+        if ((await otpInput.count()) > 0) {
+          await otpInput.fill(freshOtp);
+          await page.click("button#submitto");
+          await page.waitForTimeout(10000);
+
+          isLoggedIn = await verifyLoggedIn();
+          if (isLoggedIn) {
+            logger.info("✅ Login verification passed on retry.");
+            break;
+          }
+        }
+      }
+
+      if (!isLoggedIn) {
+        const retryUrl = page.url();
+        const retryTitle = await page.title();
+        const retryBody = await page.evaluate(
+          () => document.body?.innerText?.slice(0, 500) ?? "",
+        );
+        logger.error(
+          { currentUrl: retryUrl, title: retryTitle },
+          "❌ Login verification failed after all retries.",
+        );
+        logger.debug(
+          { bodyText: retryBody },
+          "Login verification failed after retries: page details.",
+        );
+      }
+    }
+
+    if (!isLoggedIn) {
+      throw new Error(
+        `Login verification failed: User appears not to be logged in. (current page: ${currentUrl}, title: ${title})`,
+      );
+    }
+  }
+
+  logger.info("✅ Logged in successfully (verified).");
+}
+
+/**
+ * MF 側の一括更新が終わるまで，ページを再読み込みしながら読み込み中アイコンが消えるのを待つ．
+ * 60 分で打ち切り，その場合も例外にはせず，その時点のデータで続ける．
+ */
+async function waitForMfSyncToFinish(page: Page): Promise<void> {
+  logger.info("⏳️ Waiting for sync to complete (max 60 min)...");
+  const startTime = Date.now();
+  const timeout = 60 * 60 * 1000;
+
+  while (Date.now() - startTime < timeout) {
+    await page.reload({ waitUntil: "domcontentloaded" }).catch(() => {});
+    await page.waitForTimeout(5000);
+
+    const loadingIcons = page.locator('img[src*="loading"]:visible');
+    const count = await loadingIcons.count();
+
+    if (count === 0) {
+      logger.info("✅ All syncs completed.");
+      break;
+    }
+    logger.info({ count }, "🔄 Still syncing... accounts updating.");
+    await page.waitForTimeout(10000);
+  }
+}
+
+/**
+ * 正規化した金融機関名から，DB にある子口座名の一覧への Map を作る．
+ * scrapeTransactions が明細の子口座名を見分けるのに使う．
+ */
+async function retrieveSubAccountNamesByInstitution(): Promise<
+  Map<string, string[]>
+> {
+  const allMainAccounts = await prisma.mainAccount.findMany({
+    include: { subAccounts: { select: { currentName: true } } },
+  });
+  const allSubAccountNames = new Map<string, string[]>();
+  for (const ma of allMainAccounts) {
+    const key = normalizeInstitutionName(ma.label);
+    const existing = allSubAccountNames.get(key) ?? [];
+    const names = ma.subAccounts.map(sa => sa.currentName);
+    allSubAccountNames.set(key, [...new Set([...existing, ...names])]);
+  }
+  logger.info(
+    {
+      institutions: allMainAccounts.length,
+      subAccounts: Array.from(allSubAccountNames.values()).flat().length,
+    },
+    "✅ Found institutions with sub-accounts.",
+  );
+  return allSubAccountNames;
+}
+
+/**
  * スクレイパーのメイン処理
  */
 export async function runMfScraper(
@@ -2700,186 +2920,12 @@ export async function runMfScraper(
       });
     });
 
-    logger.info("🔐 Logging in to MoneyForward...");
-    await page.goto("https://moneyforward.com/sign_in");
-
-    if (!page.url().includes("id.moneyforward.com")) {
-      logger.debug({ url: page.url() }, "Current URL.");
-    }
-
-    try {
-      await page.waitForSelector('input[name="mfid_user[email]"]', {
-        timeout: 20000,
-      });
-    } catch {
-      logger.error({ url: page.url() }, "❌ Login form not found.");
-      throw new Error("Login form not found");
-    }
-    logger.info("📧 Submitting email...");
-    await page.fill('input[name="mfid_user[email]"]', email);
-    await page.click("button#submitto");
-
-    logger.info("⏳️ Waiting for password field...");
-    await page.waitForSelector('input[name="mfid_user[password]"]');
-    logger.info("🔑 Submitting password...");
-    await page.fill('input[name="mfid_user[password]"]', password);
-    await page.click("button#submitto");
-
-    // count() は待たないため，送信直後に呼ぶと OTP 画面の表示前に 0 を返し，
-    // OTP を入力せずに進んでしまう．OTP 入力欄かログイン後の要素が出るまで待つ．
-    // どちらも出ない場合は後続の verifyLoggedIn が失敗として扱う
-    await page
-      .waitForSelector('input[name="otp_attempt"], a[href="/sign_out"]', {
-        timeout: 20000,
-      })
-      .catch(() => {});
-    const otpInputFound = await page
-      .locator('input[name="otp_attempt"]')
-      .count();
-    logger.info({ otpInputFound }, "🔑 Checking for OTP input field...");
-
-    if (otpInputFound > 0) {
-      logger.info("🔑 Entering OTP (fetching fresh token)...");
-      const currentOtp = getItemOtp(providerName);
-      // OTP コードは認証情報のためログに含めない
-      logger.info("🔑 OTP code generated.");
-
-      await page.fill('input[name="otp_attempt"]', currentOtp);
-      const filledValue = await page.inputValue('input[name="otp_attempt"]');
-      logger.info(
-        { match: filledValue === currentOtp },
-        "🔑 OTP input verified.",
-      );
-
-      await page.click("button#submitto");
-      // MoneyForwardの2FAはSPA的挙動でページ遷移しないため、
-      // 単に時間を待ってからログイン状態を再検証する
-      await page.waitForTimeout(8000);
-      await page.waitForLoadState("domcontentloaded").catch(() => {});
-    } else {
-      logger.debug("ℹ️ No OTP input field found, skipping OTP step.");
-    }
-
-    // ログイン成功確認要素（ログアウトリンク）— SPA遷移で実行コンテキストが
-    // 破棄される場合があるため、リトライ付きで検証する
-    async function verifyLoggedIn(): Promise<boolean> {
-      for (let attempt = 0; attempt < 3; attempt++) {
-        try {
-          await page.waitForLoadState("domcontentloaded").catch(() => {});
-          const result = await page.evaluate(() => {
-            return document.querySelector('a[href="/sign_out"]') !== null;
-          });
-          return result;
-        } catch {
-          await page.waitForTimeout(2000);
-          await page.waitForLoadState("domcontentloaded").catch(() => {});
-        }
-      }
-      return false;
-    }
-    let isLoggedIn = await verifyLoggedIn();
-
-    if (!isLoggedIn) {
-      const currentUrl = page.url();
-      const title = await page.title();
-      const bodyText = await page.evaluate(
-        () => document.body?.innerText?.slice(0, 500) ?? "",
-      );
-      const buttons = await page.evaluate(() =>
-        Array.from(
-          document.querySelectorAll(
-            'button, input[type="submit"], a[role="button"]',
-          ),
-        ).map(el => ({
-          text: el.textContent?.trim(),
-          className: el.className,
-          href: el.getAttribute("href"),
-          type: el.getAttribute("type"),
-        })),
-      );
-      // 本文とボタンの一覧は，セレクタだけが変わった場合に氏名や資産額を含みうる．
-      // 本番（logger は info 以上）に残さないよう debug で出す
-      logger.error({ currentUrl, title }, "❌ Login verification failed.");
-      logger.debug(
-        { bodyText, buttons },
-        "Login verification failed: page details.",
-      );
-
-      // two_factor_auth ページでエラーメッセージが表示されている場合、
-      // OTPコードが期限切れの可能性がある。再試行する
-      if (
-        currentUrl.includes("two_factor_auth") &&
-        bodyText.includes("コードが間違っています")
-      ) {
-        logger.warn(
-          "⚠️ OTP code expired or incorrect. Retrying with fresh code...",
-        );
-        for (let attempt = 0; attempt < 2; attempt++) {
-          const freshOtp = getItemOtp(providerName);
-          // OTP コードは認証情報のためログに含めない
-          logger.info({ attempt }, "🔑 Fresh OTP code generated for retry.");
-
-          const otpInput = page.locator('input[name="otp_attempt"]');
-          if ((await otpInput.count()) > 0) {
-            await otpInput.fill(freshOtp);
-            await page.click("button#submitto");
-            await page.waitForTimeout(10000);
-
-            isLoggedIn = await verifyLoggedIn();
-            if (isLoggedIn) {
-              logger.info("✅ Login verification passed on retry.");
-              break;
-            }
-          }
-        }
-
-        if (!isLoggedIn) {
-          const retryUrl = page.url();
-          const retryTitle = await page.title();
-          const retryBody = await page.evaluate(
-            () => document.body?.innerText?.slice(0, 500) ?? "",
-          );
-          logger.error(
-            { currentUrl: retryUrl, title: retryTitle },
-            "❌ Login verification failed after all retries.",
-          );
-          logger.debug(
-            { bodyText: retryBody },
-            "Login verification failed after retries: page details.",
-          );
-        }
-      }
-
-      if (!isLoggedIn) {
-        throw new Error(
-          `Login verification failed: User appears not to be logged in. (current page: ${currentUrl}, title: ${title})`,
-        );
-      }
-    }
-
-    logger.info("✅ Logged in successfully (verified).");
+    await loginToMoneyForward(page, providerName, email, password);
 
     if (options.mode === "scheduled") {
       await triggerSync(page, provider.id);
 
-      logger.info("⏳️ Waiting for sync to complete (max 60 min)...");
-      const startTime = Date.now();
-      const timeout = 60 * 60 * 1000;
-
-      while (Date.now() - startTime < timeout) {
-        await page.reload({ waitUntil: "domcontentloaded" }).catch(() => {});
-        await page.waitForTimeout(5000);
-
-        const loadingIcons = page.locator('img[src*="loading"]:visible');
-        const count = await loadingIcons.count();
-
-        if (count === 0) {
-          logger.info("✅ All syncs completed.");
-          break;
-        }
-        logger.info({ count }, "🔄 Still syncing... accounts updating.");
-        await page.waitForTimeout(10000);
-      }
+      await waitForMfSyncToFinish(page);
     } else {
       logger.info(
         "ℹ️ Manual mode: skipping MF update button flow, starting API fetch immediately.",
@@ -2895,23 +2941,7 @@ export async function runMfScraper(
 
     // Phase 2: 全金融機関の全子口座名を収集
     logger.info("📋 Phase 2: Collecting all sub-account names from DB...");
-    const allMainAccounts = await prisma.mainAccount.findMany({
-      include: { subAccounts: { select: { currentName: true } } },
-    });
-    const allSubAccountNames = new Map<string, string[]>();
-    for (const ma of allMainAccounts) {
-      const key = normalizeInstitutionName(ma.label);
-      const existing = allSubAccountNames.get(key) ?? [];
-      const names = ma.subAccounts.map(sa => sa.currentName);
-      allSubAccountNames.set(key, [...new Set([...existing, ...names])]);
-    }
-    logger.info(
-      {
-        institutions: allMainAccounts.length,
-        subAccounts: Array.from(allSubAccountNames.values()).flat().length,
-      },
-      "✅ Found institutions with sub-accounts.",
-    );
+    const allSubAccountNames = await retrieveSubAccountNamesByInstitution();
 
     // Phase 3: 入出金明細・振替をスクレイプ（全子口座情報を使用）
     logger.info(
