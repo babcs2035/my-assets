@@ -1,8 +1,16 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Load .env if present
-[ -f .env ] && export $(grep -v '^#' .env | xargs) || true
+# The temporary files hold passwords and TOTP secrets: create them readable by this user only
+umask 077
+
+# Load .env if present. Sourcing keeps values with spaces or quotes intact (export $(... | xargs) split them)
+if [ -f .env ]; then
+  set -a
+  # shellcheck source=/dev/null
+  . ./.env
+  set +a
+fi
 
 # Export service account token if available (preferred on headless Linux)
 if [ -n "${OP_SERVICE_ACCOUNT_TOKEN:-}" ]; then
@@ -27,10 +35,24 @@ if [ ${#ITEM_IDS[@]} -eq 0 ]; then
   exit 0
 fi
 
-echo "Retrieving ${#ITEM_IDS[@]} item(s) from 1Password vault: $OP_VAULT"
+# 出力先は docker-compose(.yml) がマウントする data/runtime/op-secrets.json と揃える
+OUTPUT_DIR=data/runtime
+OUTPUT_FILE="$OUTPUT_DIR/op-secrets.json"
 
-# Clear temp file
-> /tmp/op-secrets-item-tmp.json
+work_dir=$(mktemp -d)
+output_tmp=""
+cleanup() {
+  rm -rf "$work_dir"
+  [ -n "$output_tmp" ] && rm -f "$output_tmp"
+  return 0
+}
+trap cleanup EXIT
+
+items_file="$work_dir/items.jsonl"
+: > "$items_file"
+failed_count=0
+
+echo "Retrieving ${#ITEM_IDS[@]} item(s) from 1Password vault: $OP_VAULT"
 
 for item_id in "${ITEM_IDS[@]}"; do
   # Trim whitespace
@@ -39,7 +61,8 @@ for item_id in "${ITEM_IDS[@]}"; do
 
   echo "  Retrieving item: $item_id ..."
 
-  if op item get "$item_id" --reveal --vault "$OP_VAULT" --format json > /tmp/op-secrets-tmp.json 2>&1; then
+  # stderr goes to its own file so op's messages cannot end up in the JSON
+  if op item get "$item_id" --reveal --vault "$OP_VAULT" --format json > "$work_dir/item.json" 2> "$work_dir/op-error.log"; then
     # Output compact JSON (single line) so line-by-line reading works
     python3 -c "
 import sys, json
@@ -53,43 +76,40 @@ for f in d.get('fields', []):
 
 key = d.get('title') or d.get('id')
 print(json.dumps({key: fields}))
-" < /tmp/op-secrets-tmp.json >> /tmp/op-secrets-item-tmp.json
+" < "$work_dir/item.json" >> "$items_file"
     echo "  ✅ Retrieved: $item_id"
   else
-    echo "  ⚠️  Failed to retrieve: $item_id"
-    rm -f /tmp/op-secrets-tmp.json
-    continue
+    echo "  ⚠️  Failed to retrieve: $item_id: $(cat "$work_dir/op-error.log")"
+    failed_count=$((failed_count + 1))
   fi
 done
 
-rm -f /tmp/op-secrets-tmp.json
-
-# Combine all items into final JSON
-# 出力先は docker-compose(.yml) がマウントする data/runtime/op-secrets.json と揃える
-if [ -f /tmp/op-secrets-item-tmp.json ]; then
-  mkdir -p data/runtime
-  python3 -c "
-import json
-
-all_items = {}
-with open('/tmp/op-secrets-item-tmp.json', 'r') as f:
-    for line in f:
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            item = json.loads(line)
-            all_items.update(item)
-        except json.JSONDecodeError:
-            pass
-
-print(json.dumps({'items': all_items}, indent=2))
-" < /tmp/op-secrets-item-tmp.json > data/runtime/op-secrets.json
-
-  rm -f /tmp/op-secrets-item-tmp.json
-  echo "✅ Generated data/runtime/op-secrets.json with ${#ITEM_IDS[@]} item(s)."
-else
-  echo "⚠️  No items were successfully retrieved."
-  rm -f data/runtime/op-secrets.json
+# Same rule as the deploy workflow: a partial file would only fail later, at the next sync
+if [ "$failed_count" -gt 0 ]; then
+  echo "❌ Failed to retrieve $failed_count item(s). Keeping the existing $OUTPUT_FILE."
   exit 1
 fi
+
+# The file stays 0644 so uid 1001 in the container can read the bind mount; the 0700 directory keeps other users out
+mkdir -p "$OUTPUT_DIR"
+chmod 700 "$OUTPUT_DIR"
+
+# Write next to the target and rename, so an interrupted run cannot leave a broken file
+output_tmp=$(mktemp "$OUTPUT_DIR/.op-secrets.XXXXXX")
+python3 -c "
+import json, sys
+
+all_items = {}
+for line in sys.stdin:
+    line = line.strip()
+    if not line:
+        continue
+    all_items.update(json.loads(line))
+
+print(json.dumps({'items': all_items}, indent=2))
+" < "$items_file" > "$output_tmp"
+chmod 644 "$output_tmp"
+mv "$output_tmp" "$OUTPUT_FILE"
+output_tmp=""
+
+echo "✅ Generated $OUTPUT_FILE with ${#ITEM_IDS[@]} item(s)."
