@@ -53,12 +53,6 @@ export const viewport: Viewport = {
 };
 
 /**
- * すべてのページを動的レンダリングにする設定である．
- * CSP の nonce はリクエストごとに描画時に付ける（`src/proxy.ts`）ので，ビルド時に作った静的な HTML のスクリプトは CSP に止められる．
- */
-export const dynamic = "force-dynamic";
-
-/**
  * アプリケーション全体のレイアウトを規定するルートレイアウトコンポーネントである．
  */
 export default function RootLayout({
