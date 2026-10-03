@@ -1403,8 +1403,9 @@ async function scrapeBalanceHistory(
     }
   }
 
+  // todayJST() と toJstMidnight() は TZ に依存せず JST 0 時を返す．ここで setHours(0) をかけると，
+  // TZ が JST でないホストではローカル TZ の 0 時に動き，日付が 1 日前にずれる
   const today = todayJST();
-  today.setHours(0, 0, 0, 0);
 
   let minDate: Date;
   if (options.mode === "manual") {
@@ -1424,7 +1425,6 @@ async function scrapeBalanceHistory(
       )}-${String(dt.getUTCDate()).padStart(2, "0")}`,
     );
   }
-  minDate.setHours(0, 0, 0, 0);
 
   let totalSaved = 0;
   let totalSubAccounts = 0;
