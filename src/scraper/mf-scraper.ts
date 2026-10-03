@@ -1693,20 +1693,24 @@ async function saveTransactionsToDatabase(
         // ペアリングできない明細は通常取引として表示され続ける（安全側）．
         if (!a.desc.includes("振替") || !b.desc.includes("振替")) continue;
 
-        await prisma.transaction.update({
-          where: { id: a.id },
-          data: {
-            isTransfer: true,
-            linkedTransId: b.id,
-          },
-        });
-        await prisma.transaction.update({
-          where: { id: b.id },
-          data: {
-            isTransfer: true,
-            linkedTransId: a.id,
-          },
-        });
+        // 片方だけ更新されると linkedTransId が相手を指さない半端なペアが残るため，
+        // 2 件の更新を 1 つのトランザクションにまとめる
+        await prisma.$transaction([
+          prisma.transaction.update({
+            where: { id: a.id },
+            data: {
+              isTransfer: true,
+              linkedTransId: b.id,
+            },
+          }),
+          prisma.transaction.update({
+            where: { id: b.id },
+            data: {
+              isTransfer: true,
+              linkedTransId: a.id,
+            },
+          }),
+        ]);
         used.add(a.id);
         used.add(b.id);
         break;
