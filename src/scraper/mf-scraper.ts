@@ -26,6 +26,19 @@ const toUtcDateOnly = (ymd: string) => {
   return new Date(Date.UTC(year, month - 1, day, 0, 0, 0, 0));
 };
 
+// MF API の日時の形式は確かめられていない．時差付き（Z や +09:00）なら JST の日付に直す．
+// 先頭 10 文字を切り取るだけだと，UTC 表記の値で日付が 1 日前にずれる．
+// 日付だけや時差のない日時は new Date がローカル TZ で解釈するので，変換せず先頭 10 文字を使う
+const MF_DATETIME_WITH_OFFSET =
+  /^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:?\d{2})$/i;
+const toJstDateString = (value: string) => {
+  if (MF_DATETIME_WITH_OFFSET.test(value)) {
+    const date = new Date(value);
+    if (!Number.isNaN(date.getTime())) return formatJSTDate(date);
+  }
+  return value.slice(0, 10);
+};
+
 const normalizeLoose = (value: string) =>
   value
     .normalize("NFKC")
@@ -235,12 +248,12 @@ async function saveCreditCardBillings(
             where: {
               subAccountId_billingDate: {
                 subAccountId: dbSubAccount.id,
-                billingDate: toUtcDateOnly(act.updated_at.slice(0, 10)),
+                billingDate: toUtcDateOnly(toJstDateString(act.updated_at)),
               },
             },
             create: {
               subAccountId: dbSubAccount.id,
-              billingDate: toUtcDateOnly(act.updated_at.slice(0, 10)),
+              billingDate: toUtcDateOnly(toJstDateString(act.updated_at)),
               amount,
               content: act.content?.trim() || null,
             },
@@ -863,7 +876,9 @@ function convertMfActToScrapedTransaction(
     accountNameByIdHash: Map<string, string>;
   },
 ): ScrapedTransaction | null {
-  const recognizedDate = act.recognized_at?.slice(0, 10);
+  const recognizedDate = act.recognized_at
+    ? toJstDateString(act.recognized_at)
+    : undefined;
   const amount = Math.trunc(Number(act.amount));
   if (!recognizedDate || !Number.isFinite(amount)) return null;
 
