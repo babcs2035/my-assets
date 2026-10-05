@@ -74,7 +74,7 @@ export function AccountSection({
       <CardContent className="space-y-6">
         {/* Account Creation Form */}
         <div className="rounded-md border border-zinc-800 bg-zinc-900/20 p-4 space-y-3">
-          <h2 className="text-sm font-medium text-zinc-400">口座の追加</h2>
+          <h3 className="text-sm font-medium text-zinc-400">口座の追加</h3>
           <div className="flex flex-wrap gap-3">
             <div className="flex-1 min-w-[160px]">
               <Label
@@ -151,7 +151,7 @@ export function AccountSection({
 
         {/* Account List by Provider */}
         <div className="space-y-4">
-          <h2 className="text-sm font-medium text-zinc-400">口座一覧</h2>
+          <h3 className="text-sm font-medium text-zinc-400">口座一覧</h3>
           {providers.map(provider => {
             const providerAccounts = accounts.filter(
               a => a.providerId === provider.id,

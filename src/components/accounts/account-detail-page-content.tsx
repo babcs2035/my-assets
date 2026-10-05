@@ -400,18 +400,22 @@ function AccountDetailContent({
       {/* ポイント詳細 */}
       {visibleSubAccounts.filter(sa => sa.pointDetail).length > 0 && (
         <div className="space-y-3">
-          <h3 className="text-lg font-bold tracking-tight text-zinc-200 flex items-center gap-2">
+          <h2 className="text-lg font-bold tracking-tight text-zinc-200 flex items-center gap-2">
             <CreditCard className="h-4 w-4 text-emerald-400" />
             ポイント詳細
-          </h3>
+          </h2>
           <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
             {visibleSubAccounts
               .filter(sa => sa.pointDetail)
               .map(sa => (
                 <Card key={sa.id}>
                   <CardHeader className="pb-2">
-                    <CardTitle className="text-sm tracking-tight text-zinc-200">
-                      {sa.currentName}
+                    {/* 「ポイント詳細」（h2）の下に並ぶカードなので h3 にする */}
+                    <CardTitle
+                      asChild
+                      className="text-sm tracking-tight text-zinc-200"
+                    >
+                      <h3>{sa.currentName}</h3>
                     </CardTitle>
                   </CardHeader>
                   <CardContent>

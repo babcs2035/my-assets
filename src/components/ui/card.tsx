@@ -1,3 +1,4 @@
+import { Slot } from "radix-ui";
 import type * as React from "react";
 
 import { cn } from "@/lib/utils";
@@ -28,9 +29,15 @@ function CardHeader({ className, ...props }: React.ComponentProps<"div">) {
   );
 }
 
-function CardTitle({ className, ...props }: React.ComponentProps<"div">) {
+// ページの h1 の直下に並ぶことが多いため既定を h2 にする．入れ子の階層では asChild で h3 などに差し替える
+function CardTitle({
+  className,
+  asChild = false,
+  ...props
+}: React.ComponentProps<"h2"> & { asChild?: boolean }) {
+  const Comp = asChild ? Slot.Root : "h2";
   return (
-    <div
+    <Comp
       data-slot="card-title"
       className={cn("leading-none font-semibold", className)}
       {...props}
