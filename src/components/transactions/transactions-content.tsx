@@ -674,7 +674,8 @@ export function TransactionsContent() {
                           <button
                             type="button"
                             onClick={() => handleSort("date")}
-                            className="mx-auto flex cursor-pointer select-none items-center justify-center gap-1 hover:text-zinc-300 pointer-coarse:min-h-11"
+                            // mx-auto で中央に置くと，左寄せのセルと見出しがずれる (TX-17)
+                            className="flex cursor-pointer select-none items-center gap-1 hover:text-zinc-300 pointer-coarse:min-h-11"
                           >
                             日付
                             <SortIcon
@@ -703,7 +704,8 @@ export function TransactionsContent() {
                           <button
                             type="button"
                             onClick={() => handleSort("amount")}
-                            className="mx-auto flex cursor-pointer select-none items-center justify-end gap-1 hover:text-zinc-300 pointer-coarse:min-h-11"
+                            // 右寄せのセルに揃えるため，ボタンごと右端に寄せる (TX-17)
+                            className="ml-auto flex cursor-pointer select-none items-center justify-end gap-1 hover:text-zinc-300 pointer-coarse:min-h-11"
                           >
                             金額
                             <SortIcon
