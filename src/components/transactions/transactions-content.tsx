@@ -536,7 +536,11 @@ export function TransactionsContent() {
                                 振替
                               </Badge>
                             ) : (
-                              <span className="text-sm font-medium text-zinc-200 truncate">
+                              // 長い摘要は truncate で切れるため，title で全文を見られるようにする (TX-13)
+                              <span
+                                className="text-sm font-medium text-zinc-200 truncate"
+                                title={tx.desc}
+                              >
                                 {tx.desc}
                               </span>
                             )}
@@ -747,7 +751,10 @@ export function TransactionsContent() {
                               </>
                             )}
                           </TableCell>
-                          <TableCell className="max-w-[300px] truncate text-zinc-200">
+                          <TableCell
+                            className="max-w-[300px] truncate text-zinc-200"
+                            title={tx.isTransfer ? undefined : tx.desc}
+                          >
                             {tx.isTransfer ? (
                               <span className="text-sm text-zinc-400 italic">
                                 —
