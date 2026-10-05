@@ -68,7 +68,8 @@ function toDateKey(date: Date | string): string {
  */
 export function HoldingTrendChart({ holdings, soldHoldings = [] }: Props) {
   const [selectedHoldingId, setSelectedHoldingId] = useState<string>("");
-  const [timeRange, setTimeRange] = useState<UnifiedTimeRange>("1Y");
+  // 同じ画面の残高推移チャートやダッシュボードと初期期間を揃える (ACC-20)
+  const [timeRange, setTimeRange] = useState<UnifiedTimeRange>("1M");
 
   // 最初の銘柄をデフォルト選択
   if (!selectedHoldingId && holdings.length > 0) {
