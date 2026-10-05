@@ -189,16 +189,12 @@ function AccountDetailContent({
     <div className="space-y-6 animate-fade-in">
       {/* ヘッダー */}
       <div className="flex items-center gap-3">
-        <Link href="/accounts">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-9 w-9"
-            aria-label="口座一覧に戻る"
-          >
+        {/* Link の中に button を入れると，フォーカスが 2 回止まり，リンクとボタンが入れ子になる (ACC-10) */}
+        <Button asChild variant="ghost" size="icon" className="h-9 w-9">
+          <Link href="/accounts" aria-label="口座一覧に戻る">
             <ArrowLeft className="h-4 w-4" />
-          </Button>
-        </Link>
+          </Link>
+        </Button>
         <div className="min-w-0">
           {/* truncate は flex コンテナ（h1）では効かないため，内側の span に付与する */}
           <h1 className="flex items-center gap-2 text-xl font-bold tracking-tight text-zinc-50 sm:text-2xl">
