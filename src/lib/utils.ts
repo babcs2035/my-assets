@@ -209,6 +209,20 @@ export function formatPercent(value: number): string {
 }
 
 /**
+ * base から current への増減率を百分率の文字列 (例: +5.00%) にする関数である．
+ * base が 0 だと率が定まらないので null を返し，呼び出し元で率を出さない (DASH-5)．
+ * base が少額だと数千 % になって表の列を押し広げ，数字としての意味も薄いので，±1000% 以上は丸める．
+ * base が負のときも増えた向きを + にするため，絶対値で割る
+ */
+export function formatChangeRate(current: number, base: number): string | null {
+  if (base === 0) return null;
+  const rate = (current - base) / Math.abs(base);
+  if (rate >= 10) return ">+999%";
+  if (rate <= -10) return "<-999%";
+  return formatPercent(rate);
+}
+
+/**
  * 資産タイプ (AssetType) に対応する日本語の表示名を返す関数である．
  */
 export function assetTypeLabel(type: string): string {

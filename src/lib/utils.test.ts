@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   calculateDayBeforeRatio,
+  formatChangeRate,
   formatCurrency,
   formatJSTDate,
   formatJSTDateTime,
@@ -160,5 +161,27 @@ describe("符号付きの数値の整形", () => {
   it("formatPercent は比率を百分率にする", () => {
     expect(formatPercent(0.05)).toBe("+5.00%");
     expect(formatPercent(-0.0123)).toBe("-1.23%");
+  });
+
+  it("formatChangeRate は基準が 0 なら null を返す", () => {
+    expect(formatChangeRate(1000, 0)).toBeNull();
+    expect(formatChangeRate(0, 0)).toBeNull();
+  });
+
+  it("formatChangeRate は増減率を百分率にする", () => {
+    expect(formatChangeRate(105, 100)).toBe("+5.00%");
+    expect(formatChangeRate(90, 100)).toBe("-10.00%");
+    expect(formatChangeRate(100, 100)).toBe("+0.00%");
+  });
+
+  it("formatChangeRate は ±1000% 以上を丸める", () => {
+    expect(formatChangeRate(6994.55, 100)).toBe(">+999%");
+    expect(formatChangeRate(1100, 100)).toBe(">+999%");
+    expect(formatChangeRate(1099, 100)).toBe("+999.00%");
+    expect(formatChangeRate(-1000, 100)).toBe("<-999%");
+  });
+
+  it("formatChangeRate は基準が負でも増えた向きを + にする", () => {
+    expect(formatChangeRate(-50, -100)).toBe("+50.00%");
   });
 });

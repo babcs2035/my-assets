@@ -27,6 +27,7 @@ import {
 } from "@/components/ui/table";
 import logger from "@/lib/logger";
 import {
+  formatChangeRate,
   formatCurrency,
   formatJSTDate,
   formatSignedCurrency,
@@ -307,33 +308,35 @@ async function DashboardContent() {
                     : null;
                 };
 
-                const diff = (nowVal: number, agoVal: number) => {
-                  const d = nowVal - agoVal;
-                  const p =
-                    agoVal !== 0 ? ((d / agoVal) * 100).toFixed(2) : "0.00";
-                  return { num: d, pct: p };
-                };
-
                 // 比較対象のデータが無い（null）場合は「—」を表示する．
                 // 0 と比較すると「+X (0.00%)」という誤解を招く表示になるため．
+                // 差が 0 なら増えた扱いの緑にせず，基準が 0 なら率を出さない (DASH-5)
                 const renderChange = (current: number, ago: number | null) => {
                   if (ago === null) {
                     return <span className="text-zinc-400">—</span>;
                   }
-                  const d = diff(current, ago);
+                  const change = current - ago;
+                  const rate = formatChangeRate(current, ago);
                   return (
                     <>
                       <span
                         className={
-                          d.num >= 0 ? "text-emerald-400" : "text-red-400"
+                          change > 0
+                            ? "text-emerald-400"
+                            : change < 0
+                              ? "text-red-400"
+                              : "text-zinc-400"
                         }
                       >
-                        {formatSignedCurrency(d.num)}
+                        {change === 0
+                          ? formatCurrency(0)
+                          : formatSignedCurrency(change)}
                       </span>
-                      <span className="whitespace-nowrap text-zinc-400 ml-0.5">
-                        ({d.num >= 0 && "+"}
-                        {d.pct}%)
-                      </span>
+                      {rate !== null && (
+                        <span className="whitespace-nowrap text-zinc-400 ml-0.5">
+                          ({rate})
+                        </span>
+                      )}
                     </>
                   );
                 };
