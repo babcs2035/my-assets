@@ -360,6 +360,9 @@ export function TransactionsContent() {
                 </Badge>
               )}
             </CardTitle>
+            {/* カレンダーは振替を除いて集計するが，日付で絞り込んだ一覧には振替も並ぶ．
+                断りがないと日の金額と一覧が合わないように見える (TX-16) */}
+            <p className="text-xs text-zinc-400">振替を除いた日ごとの収支</p>
           </CardHeader>
           <CardContent className="relative p-4">
             {isLoading && (
