@@ -133,7 +133,8 @@ export function SettingsContent() {
  */
 function SettingsSkeleton() {
   return (
-    <div className="grid gap-8">
+    <div role="status" className="grid gap-8">
+      <span className="sr-only">読み込み中</span>
       {Array.from({ length: 5 }).map((_, i) => (
         <Skeleton key={i} className="h-[300px] w-full" />
       ))}

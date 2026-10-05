@@ -110,7 +110,7 @@ export function AccountList({ accounts }: { accounts: AccountListItem[] }) {
     <div className="relative grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
       {isPending && (
         <div className="absolute inset-0 z-10 flex items-center justify-center rounded-lg backdrop-blur-sm pointer-events-none">
-          <div className="flex flex-col items-center gap-2">
+          <div role="status" className="flex flex-col items-center gap-2">
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
             <span className="text-sm text-muted-foreground">読み込み中...</span>
           </div>

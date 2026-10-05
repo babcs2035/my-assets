@@ -36,7 +36,11 @@ export default function AccountsPage() {
  */
 function AccountsPageSkeleton() {
   return (
-    <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+    <div
+      role="status"
+      className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3"
+    >
+      <span className="sr-only">読み込み中</span>
       {Array.from({ length: 6 }).map((_, i) => (
         <Skeleton key={i} className="h-48 w-full" />
       ))}

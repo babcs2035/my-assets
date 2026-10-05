@@ -466,8 +466,11 @@ async function DashboardContent() {
  * KPI，今月の収支 3 枚，推移グラフ，資産構成の並びに合わせ，表示時のずれを抑える．
  */
 function DashboardSkeleton() {
+  // 包む div で親の space-y-6 が子に届かなくなるので，同じ間隔をここで付け直す．
+  // スケルトンは見た目だけなので，読み込み中であることを status で伝える (UI-7)
   return (
-    <>
+    <div role="status" className="space-y-6">
+      <span className="sr-only">読み込み中</span>
       <Skeleton className="h-[118px] w-full" />
       <div className="grid gap-4 md:grid-cols-3">
         <Skeleton className="h-[118px] w-full" />
@@ -476,6 +479,6 @@ function DashboardSkeleton() {
       </div>
       <Skeleton className="h-[400px] w-full" />
       <Skeleton className="h-[280px] w-full" />
-    </>
+    </div>
   );
 }

@@ -26,7 +26,8 @@ export default function TransactionsPage() {
 
       <Suspense
         fallback={
-          <div className="space-y-4">
+          <div role="status" className="space-y-4">
+            <span className="sr-only">読み込み中</span>
             <Skeleton className="h-10 w-full" />
             <Skeleton className="h-[400px] w-full" />
           </div>

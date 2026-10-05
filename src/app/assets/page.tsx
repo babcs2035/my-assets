@@ -28,7 +28,8 @@ export default function AssetsPage() {
       {/* layout ではなくページ内で Suspense に包む（layout で包むと口座詳細の notFound() が HTTP 200 になる） */}
       <Suspense
         fallback={
-          <div className="space-y-4">
+          <div role="status" className="space-y-4">
+            <span className="sr-only">読み込み中</span>
             <Skeleton className="h-[300px] w-full" />
             <Skeleton className="h-[300px] w-full" />
           </div>
