@@ -17,6 +17,29 @@ export const BACKFILL_START_DATE = "2023-01-01";
 export const INCOME_EXPENSE_AGGREGATION_START_DATE = "2024-01-01";
 
 /**
+ * URL の年月パラメーター（YYYY-MM）を年と月に変換する関数である．
+ * 再読み込みや戻る操作で，選んでいた月を開き直すために使う (TX-7)．
+ * 形式が違う場合や，minDate の月から JST の今月までの範囲の外の場合は null を返す．
+ * 範囲の外を受け入れると，年月ナビゲーターで選べない月が URL から開けてしまう．
+ */
+export function parseYearMonthParam(
+  value: string | string[] | undefined,
+  minDate: string,
+): { year: number; month: number } | null {
+  // 同じ名前のパラメーターが複数あると配列になるが，どれを採るか決められないので捨てる
+  if (typeof value !== "string") return null;
+  const match = /^(\d{4})-(\d{2})$/.exec(value);
+  if (!match) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  if (month < 1 || month > 12) return null;
+  // "YYYY-MM" は辞書順と時系列の順が一致するので，文字列のまま範囲を比べる
+  const currentMonthKey = formatJSTDate(nowJST()).slice(0, 7);
+  if (value < minDate.slice(0, 7) || value > currentMonthKey) return null;
+  return { year, month };
+}
+
+/**
  * JST の時刻要素を UTC 値を持つ Date に変換するヘルパーである．
  * `Date.UTC(year, month-1, day, hour-9, minute, second)` を計算し，
  * JST の (y,M,d,h,m,s) が表す瞬間の UTC 値を持つ Date を返す．

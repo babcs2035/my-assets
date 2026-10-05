@@ -2,7 +2,12 @@ import { ArrowLeftRight } from "lucide-react";
 import type { Metadata } from "next";
 import { IncomeExpenseContent } from "@/components/income-expense/income-expense-content";
 import { PageHeader } from "@/components/page-header";
-import { formatJSTDate, nowJST } from "@/lib/utils";
+import {
+  formatJSTDate,
+  INCOME_EXPENSE_AGGREGATION_START_DATE,
+  nowJST,
+  parseYearMonthParam,
+} from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
@@ -19,7 +24,16 @@ export const metadata: Metadata = {
  * 月ごとの収入・支出・収支の推移と，カテゴリ別内訳，キャッシュフロー可視化を表示する．
  * 年別推移データはクライアントサイドで年切り替え時にfetchする．
  */
-export default async function IncomeExpensePage() {
+export default async function IncomeExpensePage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  // URL に残した年月があれば開き直す (TX-7)．なければ今月を開く
+  const fromUrl = parseYearMonthParam(
+    (await searchParams).month,
+    INCOME_EXPENSE_AGGREGATION_START_DATE,
+  );
   // JST 基準で年月を導出する（ローカル TZ の getFullYear/getMonth では
   // JST 日付境界で前後 1 日ずれる）
   const nowKey = formatJSTDate(nowJST());
@@ -29,8 +43,8 @@ export default async function IncomeExpensePage() {
       <PageHeader title="収支" icon={ArrowLeftRight} />
 
       <IncomeExpenseContent
-        initialYear={Number(nowKey.slice(0, 4))}
-        initialMonth={Number(nowKey.slice(5, 7))}
+        initialYear={fromUrl?.year ?? Number(nowKey.slice(0, 4))}
+        initialMonth={fromUrl?.month ?? Number(nowKey.slice(5, 7))}
       />
     </div>
   );

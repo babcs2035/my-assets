@@ -230,6 +230,17 @@ export function IncomeExpenseContent({
     }));
   }, [annualData]);
 
+  // 選んだ年月を URL に残し，再読み込みしても今月に戻らないようにする (TX-7)．
+  // router.replace だと force-dynamic のページをサーバーで描き直し，クライアントで取得済みの
+  // データまで取り直すので，履歴の項目を置き換えるだけにする
+  const changeMonth = (newYear: number, newMonth: number) => {
+    setYear(newYear);
+    setMonth(newMonth);
+    const params = new URLSearchParams(window.location.search);
+    params.set("month", `${newYear}-${String(newMonth).padStart(2, "0")}`);
+    window.history.replaceState(null, "", `?${params.toString()}`);
+  };
+
   return (
     <div className="space-y-6">
       {/* 年月セレクターと累計表示 */}
@@ -240,15 +251,11 @@ export function IncomeExpenseContent({
           // 年間推移・月別推移は集計開始日以降しか数えないため，それより前の月を選べると
           // KPI だけ出て推移に年がない食い違いになる (IE-8)
           minDate={INCOME_EXPENSE_AGGREGATION_START_DATE}
-          onMonthChange={(newYear, newMonth) => {
-            setYear(newYear);
-            setMonth(newMonth);
-          }}
+          onMonthChange={changeMonth}
           onThisMonth={() => {
             // ブラウザの TZ に依存せず JST の年月を判定する
             const nowKey = formatJSTDate(nowJST());
-            setYear(Number(nowKey.slice(0, 4)));
-            setMonth(Number(nowKey.slice(5, 7)));
+            changeMonth(Number(nowKey.slice(0, 4)), Number(nowKey.slice(5, 7)));
           }}
         />
 

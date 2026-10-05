@@ -9,6 +9,7 @@ import {
   formatSignedCurrency,
   nowJST,
   parseJSTDate,
+  parseYearMonthParam,
   retrieveTodaySyncTimeJST,
   shiftUtcDateOnlyByMonths,
   todayJST,
@@ -143,6 +144,52 @@ describe("現在時刻から JST の日付を求める関数", () => {
     expect(retrieveTodaySyncTimeJST().toISOString()).toBe(
       "2026-10-02T23:00:00.000Z",
     );
+  });
+});
+
+describe("parseYearMonthParam", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    // JST 2026-10-01 00:30．UTC ではまだ 9 月なので，今月の判定が JST で行われるかも確かめられる
+    vi.setSystemTime(new Date("2026-09-30T15:30:00Z"));
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("範囲内の YYYY-MM を年と月に変換する", () => {
+    expect(parseYearMonthParam("2025-03", "2024-01-01")).toEqual({
+      year: 2025,
+      month: 3,
+    });
+  });
+
+  it("下限の月と JST の今月を受け入れる", () => {
+    expect(parseYearMonthParam("2024-01", "2024-01-01")).toEqual({
+      year: 2024,
+      month: 1,
+    });
+    expect(parseYearMonthParam("2026-10", "2024-01-01")).toEqual({
+      year: 2026,
+      month: 10,
+    });
+  });
+
+  it("下限より前と今月より先は null にする", () => {
+    expect(parseYearMonthParam("2023-12", "2024-01-01")).toBeNull();
+    expect(parseYearMonthParam("2026-11", "2024-01-01")).toBeNull();
+  });
+
+  it("形式が違う値・存在しない月・配列・未指定は null にする", () => {
+    expect(parseYearMonthParam("2025-3", "2024-01-01")).toBeNull();
+    expect(parseYearMonthParam("2025-13", "2024-01-01")).toBeNull();
+    expect(parseYearMonthParam("2025-00", "2024-01-01")).toBeNull();
+    expect(parseYearMonthParam("2025-03-01", "2024-01-01")).toBeNull();
+    expect(
+      parseYearMonthParam(["2025-03", "2025-04"], "2024-01-01"),
+    ).toBeNull();
+    expect(parseYearMonthParam(undefined, "2024-01-01")).toBeNull();
   });
 });
 
