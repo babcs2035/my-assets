@@ -27,6 +27,7 @@ import logger from "@/lib/logger";
 import {
   formatCurrency,
   formatJSTDate,
+  formatSignedCurrency,
   shiftUtcDateOnlyByMonths,
 } from "@/lib/utils";
 
@@ -98,8 +99,7 @@ export default async function DashboardPage() {
                 : "text-zinc-500"
           }
         >
-          {diff > 0 && "+"}
-          {diff.toLocaleString("ja-JP")} 円
+          {formatSignedCurrency(diff)}
         </span>
         <span className="text-zinc-400">前月同期比</span>
       </>
@@ -150,8 +150,7 @@ export default async function DashboardPage() {
                           : "text-zinc-500"
                     }
                   >
-                    {kpi.dailyChange > 0 && "+"}
-                    {kpi.dailyChange.toLocaleString("ja-JP")} 円
+                    {formatSignedCurrency(kpi.dailyChange)}
                   </span>
                   <span className="text-zinc-400">前日比</span>
                 </>
@@ -312,8 +311,7 @@ export default async function DashboardPage() {
                           d.num >= 0 ? "text-emerald-400" : "text-red-400"
                         }
                       >
-                        {d.num >= 0 && "+"}
-                        {d.num.toLocaleString("ja-JP")}
+                        {formatSignedCurrency(d.num)}
                       </span>
                       <span className="whitespace-nowrap text-zinc-400 ml-0.5">
                         ({d.num >= 0 && "+"}
