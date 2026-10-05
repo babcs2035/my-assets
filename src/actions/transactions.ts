@@ -96,8 +96,12 @@ export async function getTransactions(params: {
     },
   };
 
-  // 基本フィルタ + 振替重複排除を結合
-  const dedupedWhere = { ...where, ...transferExclusion };
+  // 重複排除は，振替の両側が並ぶ絞り込みなしの一覧だけにかける．口座で絞り込んだときに
+  // 入金側を除くと，振替先の口座に入ってきた振替が出なかった (TX-5)
+  const isFilteredByAccount = Boolean(subAccountId || mainAccountId);
+  const dedupedWhere = isFilteredByAccount
+    ? where
+    : { ...where, ...transferExclusion };
 
   const [transactions, total] = await Promise.all([
     prisma.transaction.findMany({

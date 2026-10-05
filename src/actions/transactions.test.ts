@@ -13,6 +13,8 @@ const mocks = vi.hoisted(() => ({
   categoryUpdateMany: vi.fn(),
   ruleDeleteMany: vi.fn(),
   ruleCreate: vi.fn(),
+  listFindMany: vi.fn(),
+  count: vi.fn(),
 }));
 
 // 本物の logger は pino-pretty の worker を起動するので，テストでは使わない
@@ -35,6 +37,8 @@ vi.mock("@/lib/prisma", () => {
         findUnique: mocks.findUnique,
         update: mocks.update,
         updateMany: mocks.categoryUpdateMany,
+        findMany: mocks.listFindMany,
+        count: mocks.count,
       },
       transferRule: { deleteMany: vi.fn(), create: vi.fn() },
       categoryRule: {
@@ -58,6 +62,7 @@ vi.mock("@/lib/revalidate", () => ({
 }));
 
 import {
+  getTransactions,
   markTransactionAsTransfer,
   unmarkTransfer,
   updateTransactionCategory,
@@ -241,5 +246,39 @@ describe("updateTransactionCategory", () => {
     expect(ruleAppliedCount).toBeNull();
     expect(mocks.ruleCreate).not.toHaveBeenCalled();
     expect(mocks.categoryUpdateMany).not.toHaveBeenCalled();
+  });
+});
+
+// 振替先の子口座で絞り込むと，入ってきた振替が出なかった（TX-5）
+describe("getTransactions", () => {
+  const INCOMING_TRANSFER_EXCLUSION = {
+    NOT: { isTransfer: true, amount: { gt: 0 } },
+  };
+
+  beforeEach(() => {
+    mocks.listFindMany.mockResolvedValue([]);
+    mocks.count.mockResolvedValue(0);
+  });
+
+  it("絞り込みのない一覧では，振替の入金側を除いて両側が並ばないようにする", async () => {
+    await getTransactions({});
+
+    expect(mocks.count.mock.calls[0][0].where).toMatchObject(
+      INCOMING_TRANSFER_EXCLUSION,
+    );
+  });
+
+  it("子口座で絞り込んだときは，入ってきた振替も出す", async () => {
+    await getTransactions({ subAccountId: TARGET_SUB_ACCOUNT_ID });
+
+    const { where } = mocks.count.mock.calls[0][0];
+    expect(where.subAccountId).toBe(TARGET_SUB_ACCOUNT_ID);
+    expect(where).not.toHaveProperty("NOT");
+  });
+
+  it("金融機関で絞り込んだときも，入ってきた振替を出す", async () => {
+    await getTransactions({ mainAccountId: "main-bank" });
+
+    expect(mocks.count.mock.calls[0][0].where).not.toHaveProperty("NOT");
   });
 });
