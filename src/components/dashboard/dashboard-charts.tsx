@@ -80,14 +80,11 @@ export function DashboardAreaChart({ data }: DashboardAreaChartProps) {
     setMounted(true);
   }, []);
 
-  // useMemo を early return より前に配置
-  const filteredData = useMemo(
+  // useMemo を early return より前に配置．
+  // 期間内が空でも全期間に差し替えない（同期が止まったときに「1週間」のまま全期間が出て気付けないため）
+  const chartData = useMemo(
     () => filterByUnifiedTimeRange(data, timeRange, d => d.date),
     [data, timeRange],
-  );
-  const chartData = useMemo(
-    () => (filteredData.length > 0 ? filteredData : data),
-    [filteredData, data],
   );
 
   const activeSeries = useMemo(() => {
@@ -114,11 +111,13 @@ export function DashboardAreaChart({ data }: DashboardAreaChartProps) {
       <div className="flex flex-col gap-3">
         <UnifiedTimeRangeTabs value={timeRange} onChange={setTimeRange} />
         <div className="flex h-60 w-full items-center justify-center text-sm text-zinc-400 border border-dashed border-zinc-800 rounded-md">
-          {chartData.length === 0
+          {data.length === 0
             ? "表示するデータがありません"
-            : chartData.length === 1
-              ? "データが 1 件のみのため，グラフを描画できません"
-              : "表示する項目を選択してください"}
+            : chartData.length === 0
+              ? `選択した期間のデータがありません（最新: ${data[data.length - 1].date}）`
+              : chartData.length === 1
+                ? "データが 1 件のみのため，グラフを描画できません"
+                : "表示する項目を選択してください"}
         </div>
         <SeriesLegend
           visibleSeries={visibleSeries}

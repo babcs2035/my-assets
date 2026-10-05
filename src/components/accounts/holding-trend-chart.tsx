@@ -149,9 +149,11 @@ export function HoldingTrendChart({ holdings }: Props) {
     d => d.date,
   );
 
-  const chartDataToShow = filteredData.length > 0 ? filteredData : chartData;
+  // 期間内が空でも全期間に差し替えない（同期が止まったときに，選んだ期間と違う範囲が出て気付けないため）．
+  // 空のときは本体だけを空表示にし，期間タブのあるヘッダーは残す
+  const chartDataToShow = filteredData;
 
-  if (chartDataToShow.length === 0) {
+  if (chartData.length === 0) {
     return (
       <Card>
         <CardHeader className="pb-2">
@@ -161,23 +163,25 @@ export function HoldingTrendChart({ holdings }: Props) {
           </CardTitle>
         </CardHeader>
         <CardContent className="flex items-center justify-center h-[250px] text-zinc-400">
-          選択期間のデータがありません
+          推移データがまだありません
         </CardContent>
       </Card>
     );
   }
 
-  const currentValuation =
-    chartDataToShow[chartDataToShow.length - 1]?.valuation ?? 0;
+  // 期間内が空のときも，見出しには全期間の最新値を出す（¥0 と +0.00% に見えないようにする）
+  const latestPoint =
+    chartDataToShow[chartDataToShow.length - 1] ??
+    chartData[chartData.length - 1];
+  const latestDate = chartData[chartData.length - 1].date;
+  const currentValuation = latestPoint.valuation;
   const allValues = chartDataToShow.flatMap(d => [
     d.valuation,
     d.acquisitionCost,
   ]);
   const [domainMin, domainMax] = getNiceChartDomain(allValues);
-  const totalGainLoss =
-    chartDataToShow[chartDataToShow.length - 1]?.gainLoss ?? 0;
-  const totalGainLossRate =
-    chartDataToShow[chartDataToShow.length - 1]?.gainLossRate ?? 0;
+  const totalGainLoss = latestPoint.gainLoss;
+  const totalGainLossRate = latestPoint.gainLossRate;
   const isPositive = totalGainLoss >= 0;
 
   return (
@@ -234,138 +238,144 @@ export function HoldingTrendChart({ holdings }: Props) {
           </div>
         </div>
       </CardHeader>
-      <CardContent className="h-[250px] w-full p-0 pb-4 pr-4">
-        <ResponsiveContainer width="100%" height="100%">
-          <AreaChart
-            data={chartDataToShow}
-            margin={{ top: 10, right: 10, left: 30, bottom: 0 }}
-          >
-            <defs>
-              <linearGradient
-                id="colorHoldingValuation"
-                x1="0"
-                y1="0"
-                x2="0"
-                y2="1"
-              >
-                <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.35} />
-                <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0} />
-              </linearGradient>
-              <linearGradient
-                id="colorHoldingAcquisition"
-                x1="0"
-                y1="0"
-                x2="0"
-                y2="1"
-              >
-                <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.5} />
-                <stop offset="95%" stopColor="#3b82f6" stopOpacity={0.08} />
-              </linearGradient>
-            </defs>
-            <CartesianGrid
-              strokeDasharray="3 3"
-              vertical={false}
-              stroke="#27272a"
-            />
-            <XAxis
-              dataKey="date"
-              stroke="#a1a1aa"
-              tickLine={false}
-              axisLine={false}
-              tickFormatter={value => {
-                const [year, month, day] = String(value).split("-");
-                if (!year || !month || !day) return String(value);
-                return `${month}/${day}`;
-              }}
-              minTickGap={20}
-            />
-            <YAxis
-              stroke="#a1a1aa"
-              tickLine={false}
-              axisLine={false}
-              tickFormatter={value => formatYAxisCurrency(Number(value))}
-              domain={[domainMin, domainMax]}
-              tickCount={6}
-              width={56}
-            />
-            <Tooltip
-              content={({ active, payload }) => {
-                if (active && payload?.length) {
-                  const p = payload[0]
-                    .payload as (typeof chartDataToShow)[number];
-                  return (
-                    <div className="rounded-lg border border-zinc-700 bg-zinc-900 p-3 shadow-sm">
-                      <div className="mb-1.5 text-sm text-zinc-400">
-                        {String(p.date).replaceAll("-", "/")}
-                      </div>
-                      <div className="space-y-1.5 text-sm">
-                        <div className="flex items-center justify-between gap-4">
-                          <span className="text-zinc-300">取得価額</span>
-                          <span className="font-mono font-bold text-blue-400">
-                            {formatCurrency(p.acquisitionCost)}
-                          </span>
+      {chartDataToShow.length === 0 ? (
+        <CardContent className="flex items-center justify-center h-[250px] text-sm text-zinc-400">
+          選択した期間のデータがありません（最新: {latestDate}）
+        </CardContent>
+      ) : (
+        <CardContent className="h-[250px] w-full p-0 pb-4 pr-4">
+          <ResponsiveContainer width="100%" height="100%">
+            <AreaChart
+              data={chartDataToShow}
+              margin={{ top: 10, right: 10, left: 30, bottom: 0 }}
+            >
+              <defs>
+                <linearGradient
+                  id="colorHoldingValuation"
+                  x1="0"
+                  y1="0"
+                  x2="0"
+                  y2="1"
+                >
+                  <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.35} />
+                  <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0} />
+                </linearGradient>
+                <linearGradient
+                  id="colorHoldingAcquisition"
+                  x1="0"
+                  y1="0"
+                  x2="0"
+                  y2="1"
+                >
+                  <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.5} />
+                  <stop offset="95%" stopColor="#3b82f6" stopOpacity={0.08} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid
+                strokeDasharray="3 3"
+                vertical={false}
+                stroke="#27272a"
+              />
+              <XAxis
+                dataKey="date"
+                stroke="#a1a1aa"
+                tickLine={false}
+                axisLine={false}
+                tickFormatter={value => {
+                  const [year, month, day] = String(value).split("-");
+                  if (!year || !month || !day) return String(value);
+                  return `${month}/${day}`;
+                }}
+                minTickGap={20}
+              />
+              <YAxis
+                stroke="#a1a1aa"
+                tickLine={false}
+                axisLine={false}
+                tickFormatter={value => formatYAxisCurrency(Number(value))}
+                domain={[domainMin, domainMax]}
+                tickCount={6}
+                width={56}
+              />
+              <Tooltip
+                content={({ active, payload }) => {
+                  if (active && payload?.length) {
+                    const p = payload[0]
+                      .payload as (typeof chartDataToShow)[number];
+                    return (
+                      <div className="rounded-lg border border-zinc-700 bg-zinc-900 p-3 shadow-sm">
+                        <div className="mb-1.5 text-sm text-zinc-400">
+                          {String(p.date).replaceAll("-", "/")}
                         </div>
-                        <div className="flex items-center justify-between gap-4">
-                          <span className="text-zinc-300">評価額</span>
-                          <span className="font-mono font-bold text-zinc-100">
-                            {formatCurrency(p.valuation)}
-                          </span>
-                        </div>
-                        {p.unitPrice != null && (
+                        <div className="space-y-1.5 text-sm">
                           <div className="flex items-center justify-between gap-4">
-                            <span className="text-zinc-300">基準価額</span>
-                            <span className="font-mono font-bold text-zinc-100">
-                              {formatCurrency(p.unitPrice)}
+                            <span className="text-zinc-300">取得価額</span>
+                            <span className="font-mono font-bold text-blue-400">
+                              {formatCurrency(p.acquisitionCost)}
                             </span>
                           </div>
-                        )}
-                        <div className="flex items-center justify-between gap-4">
-                          <span className="text-zinc-300">評価損益</span>
-                          <span
-                            className={`font-mono font-bold ${p.gainLoss >= 0 ? "text-success" : "text-destructive"}`}
-                          >
-                            {formatCurrency(p.gainLoss)}
-                          </span>
-                        </div>
-                        <div className="flex items-center justify-between gap-4">
-                          <span className="text-zinc-300">損益率</span>
-                          <span
-                            className={`font-mono font-bold ${p.gainLossRate >= 0 ? "text-success" : "text-destructive"}`}
-                          >
-                            {`${p.gainLossRate >= 0 ? "+" : ""}${p.gainLossRate.toFixed(2)}%`}
-                          </span>
+                          <div className="flex items-center justify-between gap-4">
+                            <span className="text-zinc-300">評価額</span>
+                            <span className="font-mono font-bold text-zinc-100">
+                              {formatCurrency(p.valuation)}
+                            </span>
+                          </div>
+                          {p.unitPrice != null && (
+                            <div className="flex items-center justify-between gap-4">
+                              <span className="text-zinc-300">基準価額</span>
+                              <span className="font-mono font-bold text-zinc-100">
+                                {formatCurrency(p.unitPrice)}
+                              </span>
+                            </div>
+                          )}
+                          <div className="flex items-center justify-between gap-4">
+                            <span className="text-zinc-300">評価損益</span>
+                            <span
+                              className={`font-mono font-bold ${p.gainLoss >= 0 ? "text-success" : "text-destructive"}`}
+                            >
+                              {formatCurrency(p.gainLoss)}
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between gap-4">
+                            <span className="text-zinc-300">損益率</span>
+                            <span
+                              className={`font-mono font-bold ${p.gainLossRate >= 0 ? "text-success" : "text-destructive"}`}
+                            >
+                              {`${p.gainLossRate >= 0 ? "+" : ""}${p.gainLossRate.toFixed(2)}%`}
+                            </span>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  );
-                }
-                return null;
-              }}
-            />
-            <Area
-              type="linear"
-              dataKey="acquisitionCost"
-              stroke="#60a5fa"
-              strokeWidth={1.5}
-              strokeDasharray="4 4"
-              fillOpacity={1}
-              fill="url(#colorHoldingAcquisition)"
-              isAnimationActive={true}
-              animationDuration={800}
-            />
-            <Area
-              type="linear"
-              dataKey="valuation"
-              stroke="#8b5cf6"
-              strokeWidth={2}
-              fillOpacity={1}
-              fill="url(#colorHoldingValuation)"
-              isAnimationActive={true}
-              animationDuration={800}
-            />
-          </AreaChart>
-        </ResponsiveContainer>
-      </CardContent>
+                    );
+                  }
+                  return null;
+                }}
+              />
+              <Area
+                type="linear"
+                dataKey="acquisitionCost"
+                stroke="#60a5fa"
+                strokeWidth={1.5}
+                strokeDasharray="4 4"
+                fillOpacity={1}
+                fill="url(#colorHoldingAcquisition)"
+                isAnimationActive={true}
+                animationDuration={800}
+              />
+              <Area
+                type="linear"
+                dataKey="valuation"
+                stroke="#8b5cf6"
+                strokeWidth={2}
+                fillOpacity={1}
+                fill="url(#colorHoldingValuation)"
+                isAnimationActive={true}
+                animationDuration={800}
+              />
+            </AreaChart>
+          </ResponsiveContainer>
+        </CardContent>
+      )}
     </Card>
   );
 }

@@ -92,9 +92,10 @@ export function AccountBalanceChart({
     d => d.date,
   );
 
-  // 万一データが空になってしまった場合のフォールバック（グラフが壊れないため）
-  const chartData =
-    filteredData.length > 0 ? filteredData : selectedSeries.data;
+  // 期間内が空でも全期間に差し替えない（同期が止まったときに，選んだ期間と違う範囲が出て気付けないため）．
+  // 空のときは本体だけを空表示にし，期間タブのあるヘッダーは残す
+  const chartData = filteredData;
+  const latestDate = selectedSeries.data[selectedSeries.data.length - 1].date;
   const isTotalSeries = selectedSeries.id === "total";
   const hasSplitTotal =
     isTotalSeries &&
@@ -199,155 +200,167 @@ export function AccountBalanceChart({
           </div>
         </div>
       </CardHeader>
-      <CardContent className="h-[250px] w-full p-0 pb-4 pr-4">
-        <ResponsiveContainer width="100%" height="100%">
-          <AreaChart
-            data={chartData}
-            margin={{ top: 10, right: 10, left: 30, bottom: 0 }}
-          >
-            <defs>
-              <linearGradient
-                id={`colorBalance-${selectedId}`}
-                x1="0"
-                y1="0"
-                x2="0"
-                y2="1"
-              >
-                <stop offset="5%" stopColor={chartColor} stopOpacity={0.4} />
-                <stop offset="95%" stopColor={chartColor} stopOpacity={0} />
-              </linearGradient>
-              <linearGradient id="colorAssetTotal" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.35} />
-                <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
-              </linearGradient>
-              <linearGradient
-                id="colorLiabilityTotal"
-                x1="0"
-                y1="0"
-                x2="0"
-                y2="1"
-              >
-                <stop offset="5%" stopColor="#ef4444" stopOpacity={0.35} />
-                <stop offset="95%" stopColor="#ef4444" stopOpacity={0} />
-              </linearGradient>
-            </defs>
-            <CartesianGrid
-              strokeDasharray="3 3"
-              vertical={false}
-              stroke="#27272a"
-            />
-            <XAxis
-              dataKey="date"
-              stroke="#a1a1aa"
-              tickLine={false}
-              axisLine={false}
-              tickFormatter={value => {
-                const [year, month, day] = String(value).split("-");
-                if (!year || !month || !day) return String(value);
-                return `${month}/${day}`;
-              }}
-              minTickGap={20}
-            />
-            <YAxis
-              stroke="#a1a1aa"
-              tickLine={false}
-              axisLine={false}
-              tickFormatter={value => formatYAxisCurrency(Number(value))}
-              domain={[domainMin, domainMax]}
-              tickCount={6}
-              width={56}
-            />
-            <Tooltip
-              content={({ active, payload }) => {
-                if (active && payload?.length) {
-                  if (hasSplitTotal) {
-                    const p = payload[0].payload as {
-                      date: string;
-                      balance: number;
-                      assetTotal?: number;
-                      liabilityTotal?: number;
-                    };
+      {chartData.length === 0 ? (
+        <CardContent className="flex items-center justify-center h-[250px] text-sm text-zinc-400">
+          選択した期間のデータがありません（最新: {latestDate}）
+        </CardContent>
+      ) : (
+        <CardContent className="h-[250px] w-full p-0 pb-4 pr-4">
+          <ResponsiveContainer width="100%" height="100%">
+            <AreaChart
+              data={chartData}
+              margin={{ top: 10, right: 10, left: 30, bottom: 0 }}
+            >
+              <defs>
+                <linearGradient
+                  id={`colorBalance-${selectedId}`}
+                  x1="0"
+                  y1="0"
+                  x2="0"
+                  y2="1"
+                >
+                  <stop offset="5%" stopColor={chartColor} stopOpacity={0.4} />
+                  <stop offset="95%" stopColor={chartColor} stopOpacity={0} />
+                </linearGradient>
+                <linearGradient
+                  id="colorAssetTotal"
+                  x1="0"
+                  y1="0"
+                  x2="0"
+                  y2="1"
+                >
+                  <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.35} />
+                  <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
+                </linearGradient>
+                <linearGradient
+                  id="colorLiabilityTotal"
+                  x1="0"
+                  y1="0"
+                  x2="0"
+                  y2="1"
+                >
+                  <stop offset="5%" stopColor="#ef4444" stopOpacity={0.35} />
+                  <stop offset="95%" stopColor="#ef4444" stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid
+                strokeDasharray="3 3"
+                vertical={false}
+                stroke="#27272a"
+              />
+              <XAxis
+                dataKey="date"
+                stroke="#a1a1aa"
+                tickLine={false}
+                axisLine={false}
+                tickFormatter={value => {
+                  const [year, month, day] = String(value).split("-");
+                  if (!year || !month || !day) return String(value);
+                  return `${month}/${day}`;
+                }}
+                minTickGap={20}
+              />
+              <YAxis
+                stroke="#a1a1aa"
+                tickLine={false}
+                axisLine={false}
+                tickFormatter={value => formatYAxisCurrency(Number(value))}
+                domain={[domainMin, domainMax]}
+                tickCount={6}
+                width={56}
+              />
+              <Tooltip
+                content={({ active, payload }) => {
+                  if (active && payload?.length) {
+                    if (hasSplitTotal) {
+                      const p = payload[0].payload as {
+                        date: string;
+                        balance: number;
+                        assetTotal?: number;
+                        liabilityTotal?: number;
+                      };
+                      return (
+                        <div className="rounded-lg border border-zinc-700 bg-zinc-900 p-3 shadow-sm">
+                          <div className="mb-1.5 text-sm text-zinc-400">
+                            {String(p.date).replaceAll("-", "/")}
+                          </div>
+                          <div className="space-y-1.5 text-sm">
+                            <div className="flex items-center justify-between gap-4">
+                              <span className="text-zinc-300">資産</span>
+                              <span className="font-mono font-bold text-zinc-100">
+                                {formatCurrency(p.assetTotal ?? 0)}
+                              </span>
+                            </div>
+                            <div className="flex items-center justify-between gap-4">
+                              <span className="text-zinc-300">負債</span>
+                              <span className="font-mono font-bold text-zinc-100">
+                                {formatCurrency(p.liabilityTotal ?? 0)}
+                              </span>
+                            </div>
+                            <div className="mt-1 border-t border-zinc-700 pt-1 flex items-center justify-between gap-4">
+                              <span className="text-zinc-300">合計</span>
+                              <span className="font-mono font-bold text-zinc-100">
+                                {formatCurrency(p.balance)}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    }
                     return (
                       <div className="rounded-lg border border-zinc-700 bg-zinc-900 p-3 shadow-sm">
                         <div className="mb-1.5 text-sm text-zinc-400">
-                          {String(p.date).replaceAll("-", "/")}
+                          {String(payload[0].payload.date).replaceAll("-", "/")}
                         </div>
-                        <div className="space-y-1.5 text-sm">
-                          <div className="flex items-center justify-between gap-4">
-                            <span className="text-zinc-300">資産</span>
-                            <span className="font-mono font-bold text-zinc-100">
-                              {formatCurrency(p.assetTotal ?? 0)}
-                            </span>
-                          </div>
-                          <div className="flex items-center justify-between gap-4">
-                            <span className="text-zinc-300">負債</span>
-                            <span className="font-mono font-bold text-zinc-100">
-                              {formatCurrency(p.liabilityTotal ?? 0)}
-                            </span>
-                          </div>
-                          <div className="mt-1 border-t border-zinc-700 pt-1 flex items-center justify-between gap-4">
-                            <span className="text-zinc-300">合計</span>
-                            <span className="font-mono font-bold text-zinc-100">
-                              {formatCurrency(p.balance)}
-                            </span>
-                          </div>
+                        <div className="font-mono text-sm font-bold text-zinc-100">
+                          {formatCurrency(payload[0].value as number)}
                         </div>
                       </div>
                     );
                   }
-                  return (
-                    <div className="rounded-lg border border-zinc-700 bg-zinc-900 p-3 shadow-sm">
-                      <div className="mb-1.5 text-sm text-zinc-400">
-                        {String(payload[0].payload.date).replaceAll("-", "/")}
-                      </div>
-                      <div className="font-mono text-sm font-bold text-zinc-100">
-                        {formatCurrency(payload[0].value as number)}
-                      </div>
-                    </div>
-                  );
-                }
-                return null;
-              }}
-            />
-            {hasSplitTotal ? (
-              <>
-                <Area
-                  type="linear"
-                  dataKey="assetTotal"
-                  stroke="#3b82f6"
-                  strokeWidth={2}
-                  fillOpacity={1}
-                  fill="url(#colorAssetTotal)"
-                  isAnimationActive={true}
-                  animationDuration={800}
-                />
-                <Area
-                  type="linear"
-                  dataKey="liabilityTotal"
-                  stroke="#ef4444"
-                  strokeWidth={2}
-                  fillOpacity={1}
-                  fill="url(#colorLiabilityTotal)"
-                  isAnimationActive={true}
-                  animationDuration={800}
-                />
-              </>
-            ) : (
-              <Area
-                key={selectedId}
-                type="linear"
-                dataKey="balance"
-                stroke={chartColor}
-                strokeWidth={2}
-                fillOpacity={1}
-                fill={`url(#colorBalance-${selectedId})`}
-                isAnimationActive={true}
-                animationDuration={800}
+                  return null;
+                }}
               />
-            )}
-          </AreaChart>
-        </ResponsiveContainer>
-      </CardContent>
+              {hasSplitTotal ? (
+                <>
+                  <Area
+                    type="linear"
+                    dataKey="assetTotal"
+                    stroke="#3b82f6"
+                    strokeWidth={2}
+                    fillOpacity={1}
+                    fill="url(#colorAssetTotal)"
+                    isAnimationActive={true}
+                    animationDuration={800}
+                  />
+                  <Area
+                    type="linear"
+                    dataKey="liabilityTotal"
+                    stroke="#ef4444"
+                    strokeWidth={2}
+                    fillOpacity={1}
+                    fill="url(#colorLiabilityTotal)"
+                    isAnimationActive={true}
+                    animationDuration={800}
+                  />
+                </>
+              ) : (
+                <Area
+                  key={selectedId}
+                  type="linear"
+                  dataKey="balance"
+                  stroke={chartColor}
+                  strokeWidth={2}
+                  fillOpacity={1}
+                  fill={`url(#colorBalance-${selectedId})`}
+                  isAnimationActive={true}
+                  animationDuration={800}
+                />
+              )}
+            </AreaChart>
+          </ResponsiveContainer>
+        </CardContent>
+      )}
     </Card>
   );
 }
