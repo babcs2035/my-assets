@@ -4,7 +4,14 @@ import type { AssetType } from "@prisma/client";
 import { unstable_cache } from "next/cache";
 import logger from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
-import { formatJSTDate, nowJST, todayJST, yesterdayJST } from "@/lib/utils";
+import {
+  formatJSTDate,
+  nowJST,
+  shiftUtcDateOnlyByMonths,
+  todayJST,
+  toUtcDateOnly,
+  yesterdayJST,
+} from "@/lib/utils";
 
 // ── Internal (uncached) implementations ──
 
@@ -195,24 +202,19 @@ async function getAssetHistoryInternal(days?: number) {
 
 async function getExpiringPointsInternal() {
   logger.info("Checking for expiring points...");
-  const now = nowJST();
-  // 現在の JST 年月から「翌月 1 日」を組む（TZ 非依存）．
-  // 保存日付は JST 暦日の UTC 0 時なので，Date.UTC（0 始まり月）で境界を組む．
-  // 現在月が 12 月なら翌年の 1 月になる（Date.UTC の月オーバーフローに
-  // 依存せず，意図を明示する）．
-  const jst = formatJSTDate(now);
-  const currentYear = Number(jst.slice(0, 4));
-  const currentMonth = Number(jst.slice(5, 7)); // 1 始まり
-  const nextMonth = currentMonth === 12 ? 1 : currentMonth + 1;
-  const nextYear = currentMonth === 12 ? currentYear + 1 : currentYear;
-  const oneMonthLater = new Date(Date.UTC(nextYear, nextMonth - 1, 1));
+  // 期限日は JST 日付の UTC 00:00（JST 09:00）で保存している．現在の瞬間と比べると，
+  // 今日が期限のポイントが JST 09:00 以降に消えるため，JST の今日の日付で比べる (DASH-12)．
+  // 上限は 1 か月後の同じ日にする．翌月 1 日までにすると，月末は 1〜2 日分しか出なかった
+  const [year, month, day] = formatJSTDate(nowJST()).split("-").map(Number);
+  const today = toUtcDateOnly(year, month, day);
+  const oneMonthLater = shiftUtcDateOnlyByMonths(year, month, day, 1);
 
   const points = await prisma.pointDetail.findMany({
     where: {
       subAccount: { isHidden: false },
       expirationDate: {
+        gte: today,
         lte: oneMonthLater,
-        gt: now,
       },
     },
     select: {
