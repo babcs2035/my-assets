@@ -457,12 +457,12 @@ export function AssetsContent({ breakdown }: AssetsContentProps) {
                 {/* 棒にラベルを付けないとどちらの棒が何を表すか分からない */}
                 <XAxis
                   dataKey="name"
-                  stroke="#52525b"
+                  stroke="#a1a1aa"
                   tickLine={false}
                   axisLine={false}
                 />
                 <YAxis
-                  stroke="#52525b"
+                  stroke="#a1a1aa"
                   tickLine={false}
                   axisLine={false}
                   tickFormatter={value => formatYAxisCurrency(Number(value))}

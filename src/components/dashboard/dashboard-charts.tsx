@@ -233,7 +233,7 @@ export function DashboardAreaChart({ data }: DashboardAreaChartProps) {
             />
             <XAxis
               dataKey="date"
-              stroke="#52525b"
+              stroke="#a1a1aa"
               tickLine={false}
               axisLine={false}
               tickFormatter={value => dayjs(value).format("MM/DD")}
@@ -241,7 +241,7 @@ export function DashboardAreaChart({ data }: DashboardAreaChartProps) {
             />
             {/* ガイドブック: Y軸原点を0に */}
             <YAxis
-              stroke="#52525b"
+              stroke="#a1a1aa"
               tickLine={false}
               axisLine={false}
               tickFormatter={value => formatYAxisCurrency(Number(value))}

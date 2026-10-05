@@ -100,14 +100,14 @@ export function AssetChart({ data }: { data: AssetHistoryEntry[] }) {
         <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
         <XAxis
           dataKey="date"
-          stroke="#52525b"
+          stroke="#a1a1aa"
           tickLine={false}
           axisLine={false}
           tickFormatter={v => v.slice(5)}
           minTickGap={24}
         />
         <YAxis
-          stroke="#52525b"
+          stroke="#a1a1aa"
           tickLine={false}
           axisLine={false}
           tickFormatter={v => formatYAxisCurrency(Number(v))}

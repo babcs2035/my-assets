@@ -107,7 +107,7 @@ export function CreditCardBillingSection({
             />
             <XAxis
               dataKey="month"
-              stroke="#52525b"
+              stroke="#a1a1aa"
               tickLine={false}
               axisLine={false}
               tickFormatter={value => {
@@ -117,7 +117,7 @@ export function CreditCardBillingSection({
               minTickGap={30}
             />
             <YAxis
-              stroke="#52525b"
+              stroke="#a1a1aa"
               tickLine={false}
               axisLine={false}
               tickFormatter={value => formatYAxisCurrency(Number(value))}

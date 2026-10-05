@@ -269,7 +269,7 @@ export function HoldingTrendChart({ holdings }: Props) {
             />
             <XAxis
               dataKey="date"
-              stroke="#52525b"
+              stroke="#a1a1aa"
               tickLine={false}
               axisLine={false}
               tickFormatter={value => {
@@ -280,7 +280,7 @@ export function HoldingTrendChart({ holdings }: Props) {
               minTickGap={20}
             />
             <YAxis
-              stroke="#52525b"
+              stroke="#a1a1aa"
               tickLine={false}
               axisLine={false}
               tickFormatter={value => formatYAxisCurrency(Number(value))}

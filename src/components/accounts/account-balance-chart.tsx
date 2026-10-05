@@ -238,7 +238,7 @@ export function AccountBalanceChart({
             />
             <XAxis
               dataKey="date"
-              stroke="#52525b"
+              stroke="#a1a1aa"
               tickLine={false}
               axisLine={false}
               tickFormatter={value => {
@@ -249,7 +249,7 @@ export function AccountBalanceChart({
               minTickGap={20}
             />
             <YAxis
-              stroke="#52525b"
+              stroke="#a1a1aa"
               tickLine={false}
               axisLine={false}
               tickFormatter={value => formatYAxisCurrency(Number(value))}

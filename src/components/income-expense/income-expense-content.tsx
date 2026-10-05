@@ -586,14 +586,14 @@ export function IncomeExpenseContent({
                     />
                     <XAxis
                       dataKey="month"
-                      stroke="#52525b"
+                      stroke="#a1a1aa"
                       tickLine={false}
                       axisLine={false}
                       // period は "YYYY-MM" なので月はゼロ埋め文字列（"01" 等）
                       tickFormatter={v => `${Number(v)}月`}
                     />
                     <YAxis
-                      stroke="#52525b"
+                      stroke="#a1a1aa"
                       tickLine={false}
                       axisLine={false}
                       tickFormatter={value =>
@@ -736,12 +736,12 @@ export function IncomeExpenseContent({
                   />
                   <XAxis
                     dataKey="year"
-                    stroke="#52525b"
+                    stroke="#a1a1aa"
                     tickLine={false}
                     axisLine={false}
                   />
                   <YAxis
-                    stroke="#52525b"
+                    stroke="#a1a1aa"
                     tickLine={false}
                     axisLine={false}
                     tickFormatter={value => formatYAxisCurrency(Number(value))}
