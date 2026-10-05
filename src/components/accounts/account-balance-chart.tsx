@@ -120,9 +120,12 @@ export function AccountBalanceChart({
     domainMin = liabilityMin < 0 ? Math.floor(liabilityMin * 1.2) : 0;
     domainMax = assetMax > 0 ? Math.ceil(assetMax * 1.1) : 0;
   } else if (isLiability) {
-    // 負債の場合: 下限は最小値にマージン、上限は0
-    domainMin = minBalance < 0 ? Math.floor(minBalance * 1.1) : minBalance;
-    domainMax = 0;
+    // 負債の場合: 下限は最小値にマージン、上限は0．
+    // ただしカードの過払いや返金で残高が一時的に正になることがあり，上限を 0 に固定すると
+    // その部分が見切れ，すべて正なら下限と上限が逆転するため，正の値があるときだけ上限を広げる (ACC-8)
+    const maxBalance = Math.max(...balances);
+    domainMin = minBalance < 0 ? Math.floor(minBalance * 1.1) : 0;
+    domainMax = maxBalance > 0 ? Math.ceil(maxBalance * 1.1) : 0;
   } else if (minBalance < 0) {
     // 資産だがマイナスが含まれる場合
     domainMin = Math.floor(minBalance * 1.1);
