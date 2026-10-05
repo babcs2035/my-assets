@@ -91,7 +91,8 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                 <div className="flex aspect-square size-8 items-center justify-center overflow-hidden rounded-lg">
                   <Image
                     src={`${basePath}/icon.svg`}
-                    alt="My Assets"
+                    // 隣に同じ名前の文字があるので，読み上げが二重にならないよう飾りとして扱う
+                    alt=""
                     width={32}
                     height={32}
                     className="size-8"

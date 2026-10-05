@@ -120,7 +120,7 @@ export function Sidebar({
           side="left"
           className="w-[280px] p-0 bg-zinc-950 text-zinc-50 border-r border-zinc-800"
         >
-          <SheetTitle className="sr-only">Menu</SheetTitle>
+          <SheetTitle className="sr-only">メニュー</SheetTitle>
           <div className="flex h-full flex-col">{children}</div>
         </SheetContent>
       </Sheet>
@@ -286,7 +286,7 @@ export function SidebarRail({
         "absolute -right-3 top-1/2 z-40 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full border border-zinc-800 bg-zinc-950 text-zinc-400 shadow-sm hover:bg-zinc-800 hover:text-zinc-50 transition-all duration-200 md:flex hidden",
         className,
       )}
-      aria-label="Toggle Sidebar"
+      aria-label={expanded ? "サイドバーを折りたたむ" : "サイドバーを展開する"}
       {...props}
     >
       <PanelLeft
@@ -295,7 +295,6 @@ export function SidebarRail({
           !expanded && "rotate-180",
         )}
       />
-      <span className="sr-only">Toggle Sidebar</span>
     </button>
   );
 }
@@ -319,7 +318,7 @@ export function SidebarTrigger({
       {...props}
     >
       <PanelLeft className="h-5 w-5" />
-      <span className="sr-only">Toggle Sidebar</span>
+      <span className="sr-only">メニューを開く</span>
     </Button>
   );
 }
