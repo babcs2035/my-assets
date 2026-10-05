@@ -12,7 +12,13 @@ import {
   Trash2,
   Upload,
 } from "lucide-react";
-import { useEffect, useRef, useState, useTransition } from "react";
+import {
+  type KeyboardEvent,
+  useEffect,
+  useRef,
+  useState,
+  useTransition,
+} from "react";
 import { toast } from "sonner";
 import {
   createMainCategory,
@@ -178,13 +184,22 @@ export function CategorySection({
     }
   };
 
+  // Enter の連打や Enter とボタンの両方で，同じ名前変更が二重に送られないようにする (SET-7)．
+  // state は再描画まで古い値のままなので，同じ tick に届く keydown を止められない．
+  // 判定は同期的に書き換わる ref で行い，state はボタンの disabled 表示にだけ使う
+  const isRenamingRef = useRef(false);
+  const [isRenaming, setIsRenaming] = useState(false);
+
   const handleUpdateMainCategory = async (id: string, name: string) => {
+    if (isRenamingRef.current) return;
     // trim して空の場合は更新しない（zod min(1) は空白のみを通過させるため）
     const trimmed = name.trim();
     if (!trimmed) {
       toast.error("カテゴリー名は空にできません．");
       return;
     }
+    isRenamingRef.current = true;
+    setIsRenaming(true);
     try {
       await updateMainCategory(id, { name: trimmed });
       toast.success("カテゴリー名を更新しました．");
@@ -194,6 +209,9 @@ export function CategorySection({
       // server action の ZodError の message は issues の JSON 文字列になるため，
       // ユーザーには共通の表現で通知する（内部状態を推測させない）
       toast.error("カテゴリー名の更新に失敗しました．");
+    } finally {
+      isRenamingRef.current = false;
+      setIsRenaming(false);
     }
   };
 
@@ -208,12 +226,15 @@ export function CategorySection({
   };
 
   const handleUpdateSubCategory = async (id: string, name: string) => {
+    if (isRenamingRef.current) return;
     // trim して空の場合は更新しない（zod min(1) は空白のみを通過させるため）
     const trimmed = name.trim();
     if (!trimmed) {
       toast.error("サブカテゴリー名は空にできません．");
       return;
     }
+    isRenamingRef.current = true;
+    setIsRenaming(true);
     try {
       await updateSubCategory(id, { name: trimmed });
       toast.success("サブカテゴリー名を更新しました．");
@@ -223,6 +244,9 @@ export function CategorySection({
       // server action の ZodError の message は issues の JSON 文字列になるため，
       // ユーザーには共通の表現で通知する（内部状態を推測させない）
       toast.error("サブカテゴリー名の更新に失敗しました．");
+    } finally {
+      isRenamingRef.current = false;
+      setIsRenaming(false);
     }
   };
 
@@ -597,7 +621,7 @@ export function CategorySection({
                       id="edit-main-category-name"
                       defaultValue={mc.name}
                       onKeyDown={e => {
-                        if (e.key === "Enter") {
+                        if (isSubmitEnter(e)) {
                           const input = e.currentTarget;
                           handleUpdateMainCategory(mc.id, input.value);
                         }
@@ -612,6 +636,7 @@ export function CategorySection({
                       キャンセル
                     </Button>
                     <Button
+                      disabled={isRenaming}
                       onClick={() => {
                         const input = document.getElementById(
                           "edit-main-category-name",
@@ -726,7 +751,7 @@ export function CategorySection({
                             id="edit-sub-category-name"
                             defaultValue={sc.name}
                             onKeyDown={e => {
-                              if (e.key === "Enter") {
+                              if (isSubmitEnter(e)) {
                                 const input = e.currentTarget;
                                 handleUpdateSubCategory(sc.id, input.value);
                               }
@@ -741,6 +766,7 @@ export function CategorySection({
                             キャンセル
                           </Button>
                           <Button
+                            disabled={isRenaming}
                             onClick={() => {
                               const input = document.getElementById(
                                 "edit-sub-category-name",
@@ -965,5 +991,18 @@ export function CategorySection({
         </div>
       </CardContent>
     </Card>
+  );
+}
+
+/**
+ * 名前変更の入力欄で，送信として扱う Enter かどうかを返す．
+ * IME の変換を確定する Enter でも keydown は発火するので，それを送信と取り違えないようにする (SET-7)．
+ * Safari は確定の Enter で isComposing が false になる場合があり，keyCode 229 も合わせて見る．
+ */
+function isSubmitEnter(e: KeyboardEvent<HTMLInputElement>): boolean {
+  return (
+    e.key === "Enter" &&
+    !e.nativeEvent.isComposing &&
+    e.nativeEvent.keyCode !== 229
   );
 }
