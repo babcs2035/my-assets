@@ -15,6 +15,8 @@ const Toaster = ({ ...props }: ToasterProps) => {
       theme="dark"
       className="toaster group"
       position="bottom-right"
+      // 既定の "Notifications" は英語で読み上げられるため日本語にする (sonner が後ろにショートカット表記を足す)
+      containerAriaLabel="通知"
       icons={{
         success: <CircleCheckIcon className="size-5" />,
         info: <InfoIcon className="size-5" />,
