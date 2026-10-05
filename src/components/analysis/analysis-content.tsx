@@ -268,7 +268,7 @@ const AnalysisContent = () => {
                       </button>
                       <button
                         type="button"
-                        className="p-2 text-zinc-600 hover:text-red-400 transition-colors cursor-pointer shrink-0"
+                        className="p-2 text-zinc-400 hover:text-red-400 transition-colors cursor-pointer shrink-0"
                         aria-label={`分析結果を削除（${formatJSTDateTime(
                           result.analysisDate,
                         )}）`}

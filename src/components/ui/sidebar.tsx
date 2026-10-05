@@ -358,7 +358,7 @@ export function SidebarGroupLabel({
   const { expanded } = useSidebar();
   if (!expanded) return null;
   return (
-    <div className={cn("px-2 text-xs font-medium text-zinc-500", className)}>
+    <div className={cn("px-2 text-xs font-medium text-zinc-400", className)}>
       {children}
     </div>
   );

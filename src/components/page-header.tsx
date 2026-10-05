@@ -26,9 +26,9 @@ export function PageHeader({
           {title}
         </h1>
         {description && (
-          <p className="mt-1 text-base text-zinc-500">{description}</p>
+          <p className="mt-1 text-base text-zinc-400">{description}</p>
         )}
-        {meta && <p className="mt-0.5 text-sm text-zinc-600">{meta}</p>}
+        {meta && <p className="mt-0.5 text-sm text-zinc-400">{meta}</p>}
       </div>
       {actions && <div className="mt-2 shrink-0 sm:mt-0">{actions}</div>}
     </div>
