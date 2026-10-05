@@ -2,7 +2,6 @@
 
 import type { AssetType, SubAccount } from "@prisma/client";
 import { GripVertical } from "lucide-react";
-import { useRouter } from "next/navigation";
 import { useEffect, useState, useTransition } from "react";
 import { toast } from "sonner";
 import {
@@ -35,16 +34,18 @@ type SubAccountWithRelations = SubAccount & {
  */
 export function AccountSubAccountManager({
   subAccounts,
+  onSubAccountsChanged,
 }: {
   subAccounts: SubAccountWithRelations[];
   mainAccountId: string;
+  /** 変更後に詳細ページのグラフと合計へ反映するため，口座データを取り直すコールバック */
+  onSubAccountsChanged: () => Promise<void>;
 }) {
-  const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [items, setItems] = useState(subAccounts);
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
 
-  // props が更新されたら（router.refresh() 後の残高・区分変更など）
+  // props が更新されたら（onSubAccountsChanged で取り直した残高・区分など）
   // ローカル状態を同期する（useState(props) は初回のみ参照される）
   useEffect(() => {
     setItems(subAccounts);
@@ -68,8 +69,7 @@ export function AccountSubAccountManager({
         ),
       );
       toast.success("資産区分を更新しました．");
-      // Server Component を再フェッチしてグラフの色を即座に更新する
-      router.refresh();
+      await onSubAccountsChanged();
     } catch {
       toast.error("資産区分の更新に失敗しました．");
       setItems(subAccounts);
@@ -100,7 +100,7 @@ export function AccountSubAccountManager({
       try {
         await reorderSubAccounts(orderedIds);
         toast.success("並び順を更新しました．");
-        router.refresh();
+        await onSubAccountsChanged();
       } catch {
         toast.error("並び順の更新に失敗しました．");
         setItems(subAccounts);
@@ -122,7 +122,7 @@ export function AccountSubAccountManager({
       toast.success(
         isHidden ? "子口座を非表示にしました．" : "子口座を表示にしました．",
       );
-      router.refresh();
+      await onSubAccountsChanged();
     } catch {
       toast.error("表示設定の更新に失敗しました．");
     }

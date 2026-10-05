@@ -3,7 +3,8 @@
 import { ArrowLeft, Coins, CreditCard, TrendingUp } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { toast } from "sonner";
 import { getAccountDetail, getCreditCardBillings } from "@/actions/accounts";
 import { AccountSubAccountManager } from "@/components/account-sub-account-manager";
 import { AccountBalanceChart } from "@/components/accounts/account-balance-chart";
@@ -62,6 +63,20 @@ export function AccountDetailPageContent() {
     };
   }, [id, reloadKey]);
 
+  // 子口座の非表示・資産区分・並び順を変えたあとに，口座データだけを取り直す．
+  // このページはクライアントで取得しているため，router.refresh() では取り直されず，
+  // 再読み込みするまでグラフと合計に反映されなかった (ACC-2)．
+  // loaded を戻すとスケルトンに切り替わり子口座の管理画面がアンマウントされるので，account だけを差し替える
+  const refreshAccount = useCallback(async () => {
+    try {
+      setAccount(await getAccountDetail(id));
+    } catch {
+      toast.error(
+        "最新の口座データを取得できませんでした．再読み込みしてください．",
+      );
+    }
+  }, [id]);
+
   if (error) {
     return (
       <div className="flex flex-col items-center justify-center gap-3 py-16">
@@ -104,6 +119,7 @@ export function AccountDetailPageContent() {
       key={account.id}
       account={account}
       billings={billings ?? []}
+      onSubAccountsChanged={refreshAccount}
     />
   );
 }
@@ -114,9 +130,11 @@ export function AccountDetailPageContent() {
 function AccountDetailContent({
   account,
   billings,
+  onSubAccountsChanged,
 }: {
   account: NonNullable<Awaited<ReturnType<typeof getAccountDetail>>>;
   billings: Awaited<ReturnType<typeof getCreditCardBillings>>;
+  onSubAccountsChanged: () => Promise<void>;
 }) {
   const visibleSubAccounts = account.subAccounts.filter(sa => !sa.isHidden);
 
@@ -264,6 +282,7 @@ function AccountDetailContent({
         <AccountSubAccountManager
           subAccounts={account.subAccounts}
           mainAccountId={account.id}
+          onSubAccountsChanged={onSubAccountsChanged}
         />
       </div>
 
