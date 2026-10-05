@@ -1,6 +1,5 @@
 import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
-import { Suspense } from "react";
 import { Toaster } from "@/components/ui/sonner";
 import "./globals.css";
 import { AppSidebar } from "@/components/app-sidebar";
@@ -10,7 +9,6 @@ import {
   SidebarProvider,
   SidebarTrigger,
 } from "@/components/ui/sidebar";
-import { Skeleton } from "@/components/ui/skeleton";
 import logger from "@/lib/logger";
 
 /**
@@ -92,17 +90,10 @@ export default function RootLayout({
                 tabIndex={-1}
                 className="flex flex-1 flex-col gap-4 p-4 pt-2 md:p-8 scroll-mt-14 outline-none"
               >
-                <Suspense
-                  fallback={
-                    <div className="flex flex-1 flex-col items-center justify-center gap-4 rounded-lg border p-8">
-                      <Skeleton className="h-8 w-48" />
-                      <Skeleton className="h-4 w-32" />
-                      <Skeleton className="h-64 w-full" />
-                    </div>
-                  }
-                >
-                  {children}
-                </Suspense>
+                {/* children を Suspense で包まない．包むとストリーミングが先に始まり，
+                    ページ内の notFound() が HTTP 200 になる（口座詳細の soft 404）．
+                    データを待つページは，それぞれページ内に Suspense を持つ */}
+                {children}
               </div>
             </SidebarInset>
           </div>

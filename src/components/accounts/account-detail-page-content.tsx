@@ -2,10 +2,12 @@
 
 import { ArrowLeft, Coins, CreditCard, TrendingUp } from "lucide-react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { toast } from "sonner";
-import { getAccountDetail, getCreditCardBillings } from "@/actions/accounts";
+import {
+  getAccountDetail,
+  type getCreditCardBillings,
+} from "@/actions/accounts";
 import { AccountSubAccountManager } from "@/components/account-sub-account-manager";
 import { AccountBalanceChart } from "@/components/accounts/account-balance-chart";
 import { CreditCardBillingSection } from "@/components/accounts/credit-card-billing-section";
@@ -14,111 +16,42 @@ import { HoldingTrendChart } from "@/components/accounts/holding-trend-chart";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Skeleton } from "@/components/ui/skeleton";
 import { formatCurrency, formatJSTDate } from "@/lib/utils";
 
 /**
  * 口座詳細ページのコンテンツコンポーネントである．
- * クライアントサイドでデータをフェッチし，チャートやサブアカウントマネージャーに渡す．
+ * サーバーで取得した口座データを受け取り，チャートやサブアカウントマネージャーに渡す．
  */
-export function AccountDetailPageContent() {
-  const { id } = useParams<{ id: string }>();
-  const [account, setAccount] = useState<Awaited<
-    ReturnType<typeof getAccountDetail>
-  > | null>(null);
-  const [billings, setBillings] = useState<Awaited<
-    ReturnType<typeof getCreditCardBillings>
-  > | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  // フェッチ完了のフラグ：存在しない ID では getAccountDetail が null を返すため，
-  // 「未読込み」と「口座が存在しない」を区別する必要がある
-  const [loaded, setLoaded] = useState(false);
-  // エラー時の再試行用（増やすとフェッチ effect が再実行される）
-  const [reloadKey, setReloadKey] = useState(0);
-
-  // biome-ignore lint/correctness/useExhaustiveDependencies: reloadKey は再試行トリガーであり，effect 本体では使用しない
-  useEffect(() => {
-    let cancelled = false;
-    setLoaded(false);
-    (async () => {
-      try {
-        const [accountData, billingData] = await Promise.all([
-          getAccountDetail(id),
-          getCreditCardBillings(id),
-        ]);
-        if (!cancelled) {
-          setAccount(accountData);
-          setBillings(billingData);
-          setLoaded(true);
-        }
-      } catch {
-        if (!cancelled) {
-          setError("データの取得に失敗しました．");
-          setLoaded(true);
-        }
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [id, reloadKey]);
+export function AccountDetailPageContent({
+  initialAccount,
+  billings,
+}: {
+  initialAccount: NonNullable<Awaited<ReturnType<typeof getAccountDetail>>>;
+  billings: Awaited<ReturnType<typeof getCreditCardBillings>>;
+}) {
+  const [account, setAccount] = useState(initialAccount);
 
   // 子口座の非表示・資産区分・並び順を変えたあとに，口座データだけを取り直す．
-  // このページはクライアントで取得しているため，router.refresh() では取り直されず，
-  // 再読み込みするまでグラフと合計に反映されなかった (ACC-2)．
-  // loaded を戻すとスケルトンに切り替わり子口座の管理画面がアンマウントされるので，account だけを差し替える
+  // useState の初期値はサーバーの再描画 (router.refresh()) では差し替わらないため，
+  // ここで取り直さないとグラフと合計に反映されない (ACC-2)
   const refreshAccount = useCallback(async () => {
     try {
-      setAccount(await getAccountDetail(id));
+      const latest = await getAccountDetail(initialAccount.id);
+      // 管理画面を開いている間に口座が消えた場合は，表示中のデータを残す
+      if (latest) {
+        setAccount(latest);
+      }
     } catch {
       toast.error(
         "最新の口座データを取得できませんでした．再読み込みしてください．",
       );
     }
-  }, [id]);
+  }, [initialAccount.id]);
 
-  if (error) {
-    return (
-      <div className="flex flex-col items-center justify-center gap-3 py-16">
-        <p className="text-sm text-red-400">{error}</p>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => {
-            setError(null);
-            setReloadKey(k => k + 1);
-          }}
-        >
-          再試行する
-        </Button>
-      </div>
-    );
-  }
-
-  if (!loaded) {
-    return <AccountDetailPageSkeleton />;
-  }
-
-  if (!account) {
-    return (
-      <div className="flex flex-col items-center justify-center gap-3 py-16">
-        <p className="text-sm text-zinc-400">口座が見つかりませんでした．</p>
-        <Link href="/accounts">
-          <Button variant="outline" size="sm">
-            口座一覧に戻る
-          </Button>
-        </Link>
-      </div>
-    );
-  }
-
-  // key を account.id にすると口座切替（/accounts/A → /accounts/B）で
-  // 子コンポーネント（銘柄選択状態など）が確実にリセットされる
   return (
     <AccountDetailContent
-      key={account.id}
       account={account}
-      billings={billings ?? []}
+      billings={billings}
       onSubAccountsChanged={refreshAccount}
     />
   );
@@ -447,21 +380,6 @@ function AccountDetailContent({
           </div>
         </div>
       )}
-    </div>
-  );
-}
-
-/**
- * 口座詳細ページのスケルトンローディングである．
- */
-function AccountDetailPageSkeleton() {
-  return (
-    <div className="space-y-6">
-      <Skeleton className="h-10 w-64" />
-      <Skeleton className="h-64 w-full" />
-      <Skeleton className="h-8 w-40" />
-      <Skeleton className="h-48 w-full" />
-      <Skeleton className="h-48 w-full" />
     </div>
   );
 }
