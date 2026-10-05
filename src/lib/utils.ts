@@ -34,6 +34,25 @@ export function toUtcDateOnly(year: number, month: number, day: number): Date {
 }
 
 /**
+ * 年月日を months か月ずらした日付の UTC 00:00 を返す関数である．
+ * ずらした先の月に同じ日がなければ，その月の末日に丸める（3/31 の 1 か月前は 2/28）．
+ * Date.UTC の日の繰り上がりに任せると 3/31 の 1 か月前が 3/3 になるため，日を先に丸める．
+ */
+export function shiftUtcDateOnlyByMonths(
+  year: number,
+  month: number,
+  day: number,
+  months: number,
+): Date {
+  const targetMonthIndex = month - 1 + months;
+  // 翌月の 0 日目は対象月の末日になる．月インデックスが 0〜11 を外れても Date.UTC が年をまたぐ
+  const lastDay = new Date(
+    Date.UTC(year, targetMonthIndex + 1, 0),
+  ).getUTCDate();
+  return new Date(Date.UTC(year, targetMonthIndex, Math.min(day, lastDay)));
+}
+
+/**
  * JST の日付要素 (y,M,d,0,0,0) を，その瞬間の UTC 値を持つ Date に変換する．
  * JST 00:00 = UTC 前日 15:00 になるため，`hour-9` で自動的に日付がロールバックされる．
  */

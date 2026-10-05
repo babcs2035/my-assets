@@ -28,6 +28,7 @@ import {
   formatCurrency,
   formatJSTDate,
   formatSignedCurrency,
+  shiftUtcDateOnlyByMonths,
 } from "@/lib/utils";
 
 /**
@@ -275,8 +276,9 @@ export default async function DashboardPage() {
                 const nowKey = formatJSTDate(new Date());
                 const [ny, nm, nd] = nowKey.split("-").map(Number);
                 const oneWeekAgo = new Date(Date.UTC(ny, nm - 1, nd - 7));
-                const oneMonthAgo = new Date(Date.UTC(ny, nm - 2, nd));
-                const oneYearAgo = new Date(Date.UTC(ny - 1, nm - 1, nd));
+                // 月単位の比較日は末日に丸める（3/31 の 1 カ月前は 2/28，2/29 の 1 年前は 2/28）
+                const oneMonthAgo = shiftUtcDateOnlyByMonths(ny, nm, nd, -1);
+                const oneYearAgo = shiftUtcDateOnlyByMonths(ny, nm, nd, -12);
 
                 // chartData のキーは JST 日付文字列のため，JST で検索する
                 // （サーバーの TZ が JST でない環境でも正しくヒットする）

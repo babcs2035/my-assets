@@ -7,6 +7,7 @@ import {
   formatSignedCurrency,
   nowJST,
   parseJSTDate,
+  shiftUtcDateOnlyByMonths,
   todayJST,
   toUtcDateOnly,
   yesterdayJST,
@@ -23,6 +24,42 @@ describe("toUtcDateOnly", () => {
     // 月末の翌日をクエリの上限に使うため，繰り上がりに依存している
     expect(toUtcDateOnly(2026, 12, 32).toISOString()).toBe(
       "2027-01-01T00:00:00.000Z",
+    );
+  });
+});
+
+describe("shiftUtcDateOnlyByMonths", () => {
+  it("同じ日がある月には，その日の UTC 00:00 を返す", () => {
+    expect(shiftUtcDateOnlyByMonths(2026, 10, 3, -1).toISOString()).toBe(
+      "2026-09-03T00:00:00.000Z",
+    );
+  });
+
+  it("ずらした先の月に同じ日がなければ，その月の末日に丸める", () => {
+    // Date.UTC の繰り上がりに任せると 3/31 の 1 か月前が 3/3 になった (DASH-6)
+    expect(shiftUtcDateOnlyByMonths(2026, 3, 31, -1).toISOString()).toBe(
+      "2026-02-28T00:00:00.000Z",
+    );
+    expect(shiftUtcDateOnlyByMonths(2026, 10, 31, 1).toISOString()).toBe(
+      "2026-11-30T00:00:00.000Z",
+    );
+  });
+
+  it("うるう年の 2 月は 29 日に丸め，2/29 の 1 年前は 2/28 にする", () => {
+    expect(shiftUtcDateOnlyByMonths(2028, 3, 31, -1).toISOString()).toBe(
+      "2028-02-29T00:00:00.000Z",
+    );
+    expect(shiftUtcDateOnlyByMonths(2028, 2, 29, -12).toISOString()).toBe(
+      "2027-02-28T00:00:00.000Z",
+    );
+  });
+
+  it("年をまたいでずらせる", () => {
+    expect(shiftUtcDateOnlyByMonths(2026, 1, 15, -1).toISOString()).toBe(
+      "2025-12-15T00:00:00.000Z",
+    );
+    expect(shiftUtcDateOnlyByMonths(2026, 12, 31, 1).toISOString()).toBe(
+      "2027-01-31T00:00:00.000Z",
     );
   });
 });
