@@ -111,7 +111,7 @@ model CryptoAsset {
   quantity       Float
   price          Float
   valuation      Int
-  dayBeforeRatio Int?
+  dayBeforeRatio Float?
   updatedAt      DateTime   @updatedAt
   subAccount     SubAccount @relation(fields: [subAccountId], references: [id], onDelete: Cascade)
 
