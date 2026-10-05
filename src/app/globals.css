@@ -39,13 +39,6 @@
   --color-input: oklch(0.25 0.015 285);
   --color-ring: oklch(0.62 0.16 250);
 
-  /* ── チャートカラー (ガイドブック: 色数 1〜5 に制限) ── */
-  --color-chart-1: oklch(0.62 0.16 250); /* Blue   - 預金・現金 */
-  --color-chart-2: oklch(0.62 0.18 300); /* Violet - 投資信託 */
-  --color-chart-3: oklch(0.72 0.16 70); /* Amber  - 暗号資産 */
-  --color-chart-4: oklch(0.68 0.16 160); /* Green  - ポイント */
-  --color-chart-5: oklch(0.55 0.18 20); /* Red    - 負債 */
-
   /* ── サイドバー ─────────────────────────────── */
   --color-sidebar: oklch(0.13 0.01 285);
   --color-sidebar-foreground: oklch(0.82 0.01 285);
