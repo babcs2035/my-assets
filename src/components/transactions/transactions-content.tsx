@@ -126,6 +126,8 @@ export function TransactionsContent() {
   // 初期値 false では初回の取得が始まる前に「この月の明細はありません．」が一瞬出る (TX-10)．
   // マウント時の effect で fetchData が必ず走り finally で false に戻るので，true から始める
   const [isLoading, setIsLoading] = useState(true);
+  // 取得に失敗したことを一覧の場所に出し，再試行できるようにする (TX-9)
+  const [loadFailed, setLoadFailed] = useState(false);
   const [, startTransition] = useTransition();
   const [sortKey, setSortKey] = useState<SortKey>("date");
   const [sortDir, setSortDir] = useState<SortDirection>("desc");
@@ -197,8 +199,14 @@ export function TransactionsContent() {
         setTransactions(txResult.transactions);
         setTotalPages(txResult.totalPages);
         setCalendarData(calResult);
+        setLoadFailed(false);
       } catch {
         if (requestId !== requestIdRef.current) return;
+        // 前の月のデータを残すと，新しい年月の見出しの下に古い明細と合計が並ぶ (TX-9)
+        setTransactions([]);
+        setTotalPages(1);
+        setCalendarData({});
+        setLoadFailed(true);
         toast.error("データの取得に失敗しました．");
       } finally {
         if (requestId === requestIdRef.current) setIsLoading(false);
@@ -482,7 +490,16 @@ export function TransactionsContent() {
                 </div>
               </div>
             )}
-            {transactions.length === 0 && !isLoading ? (
+            {loadFailed && !isLoading ? (
+              <div className="flex flex-col items-center justify-center gap-3 py-16">
+                <p className="text-sm text-red-400">
+                  {year}年{month}月の明細を取得できませんでした．
+                </p>
+                <Button variant="outline" size="sm" onClick={fetchData}>
+                  再試行する
+                </Button>
+              </div>
+            ) : transactions.length === 0 && !isLoading ? (
               // データがない場合の表示（読み込み中はオーバーレイで覆われるため表示しない）
               <div className="flex flex-col items-center justify-center py-16">
                 <List className="h-10 w-10 text-zinc-600" />
