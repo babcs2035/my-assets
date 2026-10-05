@@ -39,6 +39,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Dialog,
+  DialogClose,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -406,16 +407,11 @@ export function ProviderSection({
                         <span className="font-medium text-zinc-200 truncate flex-1">
                           {provider.name}
                         </span>
-                        <Badge
-                          variant="outline"
-                          className={
-                            isSyncing
-                              ? "bg-blue-500/10 text-blue-400 border-blue-500/20 shrink-0"
-                              : "bg-emerald-500/10 text-emerald-400 border-emerald-500/20 shrink-0"
-                          }
-                        >
-                          {isSyncing ? "同期中" : "稼働中"}
-                        </Badge>
+                        <SyncStatusBadge
+                          isSyncing={isSyncing}
+                          lastSyncSuccess={provider.lastSyncSuccess}
+                          className="shrink-0"
+                        />
                       </div>
                       <div className="text-sm text-zinc-400 mb-1 truncate">
                         {getProviderTypeLabel(provider.type)}
@@ -486,6 +482,10 @@ export function ProviderSection({
                                 </DialogDescription>
                               </DialogHeader>
                               <DialogFooter>
+                                {/* デスクトップの AlertDialog と同じく，実行せずに閉じる手段を出す (SET-12) */}
+                                <DialogClose asChild>
+                                  <Button variant="outline">キャンセル</Button>
+                                </DialogClose>
                                 <Button
                                   onClick={() =>
                                     handleSyncProvider(provider.id)
@@ -559,42 +559,10 @@ export function ProviderSection({
                       {formatJSTDateTime(provider.lastSyncAt)}
                     </TableCell>
                     <TableCell>
-                      {(() => {
-                        if (isProviderSyncing(provider)) {
-                          return (
-                            <Badge
-                              variant="outline"
-                              className="bg-blue-500/10 text-blue-400 border-blue-500/20 text-xs"
-                            >
-                              <Loader2 className="mr-1 h-3 w-3 animate-spin" />
-                              同期中
-                            </Badge>
-                          );
-                        }
-                        if (provider.lastSyncSuccess === true) {
-                          return (
-                            <Badge
-                              variant="outline"
-                              className="bg-emerald-500/10 text-emerald-400 border-emerald-500/20 text-xs"
-                            >
-                              <CheckCircle2 className="mr-1 h-3 w-3" />
-                              成功
-                            </Badge>
-                          );
-                        }
-                        if (provider.lastSyncSuccess === false) {
-                          return (
-                            <Badge
-                              variant="outline"
-                              className="bg-red-500/10 text-red-400 border-red-500/20 text-xs"
-                            >
-                              <XCircle className="mr-1 h-3 w-3" />
-                              失敗
-                            </Badge>
-                          );
-                        }
-                        return <span className="text-xs text-zinc-400">—</span>;
-                      })()}
+                      <SyncStatusBadge
+                        isSyncing={isProviderSyncing(provider)}
+                        lastSyncSuccess={provider.lastSyncSuccess}
+                      />
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-2">
@@ -697,4 +665,53 @@ export function ProviderSection({
       </CardContent>
     </Card>
   );
+}
+
+/**
+ * プロバイダーの同期状態（同期中／前回の成功・失敗／未同期）を示すバッジである．
+ * モバイルだけ「稼働中」と出して前回の失敗を隠していたため (SET-12)，両方の表示をここで決める．
+ */
+function SyncStatusBadge({
+  isSyncing,
+  lastSyncSuccess,
+  className = "",
+}: {
+  isSyncing: boolean;
+  lastSyncSuccess: Provider["lastSyncSuccess"];
+  className?: string;
+}) {
+  if (isSyncing) {
+    return (
+      <Badge
+        variant="outline"
+        className={`bg-blue-500/10 text-blue-400 border-blue-500/20 text-xs ${className}`}
+      >
+        <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+        同期中
+      </Badge>
+    );
+  }
+  if (lastSyncSuccess === true) {
+    return (
+      <Badge
+        variant="outline"
+        className={`bg-emerald-500/10 text-emerald-400 border-emerald-500/20 text-xs ${className}`}
+      >
+        <CheckCircle2 className="mr-1 h-3 w-3" />
+        成功
+      </Badge>
+    );
+  }
+  if (lastSyncSuccess === false) {
+    return (
+      <Badge
+        variant="outline"
+        className={`bg-red-500/10 text-red-400 border-red-500/20 text-xs ${className}`}
+      >
+        <XCircle className="mr-1 h-3 w-3" />
+        失敗
+      </Badge>
+    );
+  }
+  return <span className={`text-xs text-zinc-400 ${className}`}>—</span>;
 }
