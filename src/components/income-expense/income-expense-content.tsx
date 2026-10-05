@@ -258,16 +258,23 @@ export function IncomeExpenseContent({
               再試行
             </Button>
           </div>
-        ) : isLoading ? (
+        ) : isLoading && !monthlyData ? (
+          // スピナーは初回だけにする．月の切り替えのたびに KPI がスピナーへ替わると高さが変わって
+          // 下のチャートが跳ねるため，2 回目以降は前の値を減光して残す (IE-5)
           <div className="flex items-center justify-center py-8">
             <Loader2 className="h-8 w-8 animate-spin text-zinc-400" />
           </div>
         ) : totalMonthlyIncome === 0 && totalMonthlyExpense === 0 ? (
-          <div className="flex items-center justify-center py-8 text-sm text-zinc-400 border border-dashed border-zinc-800 rounded-md">
+          <div
+            className={`flex items-center justify-center py-8 text-sm text-zinc-400 border border-dashed border-zinc-800 rounded-md transition-opacity ${isLoading ? "opacity-50" : ""}`}
+          >
             この月には取引データがありません
           </div>
         ) : (
-          <div className="grid gap-3 md:grid-cols-3">
+          <div
+            className={`grid gap-3 md:grid-cols-3 transition-opacity ${isLoading ? "opacity-50" : ""}`}
+            aria-busy={isLoading}
+          >
             <Card>
               <CardContent className="pt-3 pb-2">
                 {/* 過去の月を選んでも「当月」と出ていたため，表示中の月を明示する (IE-9) */}
@@ -380,7 +387,7 @@ export function IncomeExpenseContent({
                                 parseCategoryName(name);
                               return (
                                 <div className="rounded-lg border border-zinc-700 bg-zinc-900 p-3 shadow-sm relative z-50 max-w-[280px]">
-                                  <div className="mb-1.5 space-y-0.5">
+                                  <div className="mb-1.5 flex flex-col gap-0.5">
                                     <span className="text-sm font-bold text-zinc-200">
                                       {mainCategory}
                                     </span>
@@ -490,7 +497,7 @@ export function IncomeExpenseContent({
                                 parseCategoryName(name);
                               return (
                                 <div className="rounded-lg border border-zinc-700 bg-zinc-900 p-3 shadow-sm relative z-50 max-w-[280px]">
-                                  <div className="mb-1.5 space-y-0.5">
+                                  <div className="mb-1.5 flex flex-col gap-0.5">
                                     <span className="text-sm font-bold text-zinc-200">
                                       {mainCategory}
                                     </span>
