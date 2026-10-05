@@ -102,7 +102,7 @@ export default async function DashboardPage() {
           {diff > 0 && "+"}
           {diff.toLocaleString("ja-JP")} 円
         </span>
-        <span className="text-zinc-400">前月比</span>
+        <span className="text-zinc-400">前月同期比</span>
       </>
     );
   };

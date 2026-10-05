@@ -3,7 +3,12 @@
 import type { AssetType } from "@prisma/client";
 import logger from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
-import { formatJSTDate, nowJST, toUtcDateOnly } from "@/lib/utils";
+import {
+  formatJSTDate,
+  nowJST,
+  shiftUtcDateOnlyByMonths,
+  toUtcDateOnly,
+} from "@/lib/utils";
 
 /**
  * 資産・負債の詳細データを取得する。
@@ -116,6 +121,7 @@ export async function getCurrentMonthIncomeExpense() {
   const jst = formatJSTDate(now);
   const year = Number(jst.slice(0, 4));
   const month = Number(jst.slice(5, 7));
+  const day = Number(jst.slice(8, 10));
 
   const start = toUtcDateOnly(year, month, 1);
   const nextYear = month === 12 ? year + 1 : year;
@@ -146,13 +152,13 @@ export async function getCurrentMonthIncomeExpense() {
   const totalIncome = incomeResult._sum.amount ?? 0;
   const totalExpense = Math.abs(expenseResult._sum.amount ?? 0);
 
-  // 前月の収支も取得
-  const prevMonth = month === 1 ? 12 : month - 1;
-  const prevYear = month === 1 ? year - 1 : year;
-  const prevStart = toUtcDateOnly(prevYear, prevMonth, 1);
-  const prevNextYear = prevMonth === 12 ? prevYear + 1 : prevYear;
-  const prevNextMonth = prevMonth === 12 ? 1 : prevMonth + 1;
-  const prevEnd = toUtcDateOnly(prevNextYear, prevNextMonth, 1);
+  // 前月の収支は，前月 1 日から前月の同じ日までで集計する．今月は今日までの明細しかないため，
+  // 前月 1 か月分と比べると月初は毎月大きなマイナスになっていた (DASH-1)．
+  // 前月に同じ日がなければ前月末日までにする（3/31 なら 2/1〜2/28）
+  const prevStart = shiftUtcDateOnlyByMonths(year, month, 1, -1);
+  const prevEnd = shiftUtcDateOnlyByMonths(year, month, day, -1);
+  // 前月の同じ日を含めるため，上限はその翌日にする
+  prevEnd.setUTCDate(prevEnd.getUTCDate() + 1);
 
   const [prevIncomeResult, prevExpenseResult] = await Promise.all([
     prisma.transaction.aggregate({
