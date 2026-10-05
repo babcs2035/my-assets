@@ -40,6 +40,18 @@ export function parseYearMonthParam(
 }
 
 /**
+ * URL の日やページ番号のパラメーターを 1 以上の整数に変換する関数である (TX-7)．
+ * 形式が違う場合は null を返す．上限は呼び出し側で月の日数や総ページ数と比べる．
+ */
+export function parsePositiveIntegerParam(
+  value: string | string[] | undefined,
+): number | null {
+  if (typeof value !== "string" || !/^\d+$/.test(value)) return null;
+  const parsed = Number(value);
+  return parsed >= 1 && Number.isSafeInteger(parsed) ? parsed : null;
+}
+
+/**
  * JST の時刻要素を UTC 値を持つ Date に変換するヘルパーである．
  * `Date.UTC(year, month-1, day, hour-9, minute, second)` を計算し，
  * JST の (y,M,d,h,m,s) が表す瞬間の UTC 値を持つ Date を返す．

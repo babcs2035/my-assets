@@ -91,6 +91,19 @@ type FilterOption = Awaited<
 export type SortKey = "date" | "amount";
 export type SortDirection = "asc" | "desc";
 
+/**
+ * ページが URL から読んで渡す表示状態である．再読み込みや戻る操作で同じ表示を開き直す (TX-7)．
+ * 金融機関・子口座の ID は選択肢を取得するまで確かめられないので，そのまま受け取る．
+ */
+export type TransactionsInitialState = {
+  year: number;
+  month: number;
+  day: number | null;
+  page: number;
+  mainAccountId: string;
+  subAccountId: string;
+};
+
 // 「明細一覧」の見出しの id．振替設定の後にフォーカスを移す先として使う (TX-18)
 const LIST_HEADING_ID = "transactions-list-heading";
 
@@ -114,10 +127,19 @@ function SortIcon({
   );
 }
 
-export function TransactionsContent() {
-  const [currentDate, setCurrentDate] = useState<Date>(nowJST());
-  const [selectedDay, setSelectedDay] = useState<number | null>(null);
-  const [page, setPage] = useState(1);
+export function TransactionsContent({
+  initialState,
+}: {
+  initialState: TransactionsInitialState;
+}) {
+  // 月の切り替えと同じく UTC 真夜中で生成する（DB の日付規約と同一）
+  const [currentDate, setCurrentDate] = useState<Date>(
+    () => new Date(Date.UTC(initialState.year, initialState.month - 1, 1)),
+  );
+  const [selectedDay, setSelectedDay] = useState<number | null>(
+    initialState.day,
+  );
+  const [page, setPage] = useState(initialState.page);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [totalPages, setTotalPages] = useState(1);
   const [calendarData, setCalendarData] = useState<
@@ -125,8 +147,12 @@ export function TransactionsContent() {
   >({});
   const [categories, setCategories] = useState<Category[]>([]);
   const [filterOptions, setFilterOptions] = useState<FilterOption[]>([]);
-  const [selectedMainAccountId, setSelectedMainAccountId] = useState("all");
-  const [selectedSubAccountId, setSelectedSubAccountId] = useState("all");
+  const [selectedMainAccountId, setSelectedMainAccountId] = useState(
+    initialState.mainAccountId,
+  );
+  const [selectedSubAccountId, setSelectedSubAccountId] = useState(
+    initialState.subAccountId,
+  );
   // 初期値 false では初回の取得が始まる前に「この月の明細はありません．」が一瞬出る (TX-10)．
   // マウント時の effect で fetchData が必ず走り finally で false に戻るので，true から始める
   const [isLoading, setIsLoading] = useState(true);
@@ -209,6 +235,10 @@ export function TransactionsContent() {
         setTotalPages(txResult.totalPages);
         setCalendarData(calResult);
         setLoadFailed(false);
+        // URL で件数より大きいページ番号を開くと空の一覧になるため，最後のページに寄せる (TX-7)
+        if (page > txResult.totalPages) {
+          setPage(Math.max(txResult.totalPages, 1));
+        }
       } catch {
         if (requestId !== requestIdRef.current) return;
         // 前の月のデータを残すと，新しい年月の見出しの下に古い明細と合計が並ぶ (TX-9)
@@ -258,13 +288,53 @@ export function TransactionsContent() {
   }, []);
 
   useEffect(() => {
+    // 選択肢を取得する前に判定すると，URL から開いた絞り込みを取得前に解除してしまう (TX-7)
+    if (filterOptions.length === 0) return;
+    // URL に残った金融機関が削除済みだと，絞り込みの名前も明細も出ないので解除する
+    if (
+      selectedMainAccountId !== "all" &&
+      !filterOptions.some(ma => ma.id === selectedMainAccountId)
+    ) {
+      setSelectedMainAccountId("all");
+      setPage(1);
+      return;
+    }
     if (selectedSubAccountId === "all") return;
     const validSubAccountIds = new Set(availableSubAccounts.map(sa => sa.id));
     if (!validSubAccountIds.has(selectedSubAccountId)) {
       setSelectedSubAccountId("all");
       setPage(1);
     }
-  }, [availableSubAccounts, selectedSubAccountId]);
+  }, [
+    filterOptions,
+    selectedMainAccountId,
+    availableSubAccounts,
+    selectedSubAccountId,
+  ]);
+
+  // 表示状態を URL に残し，再読み込みや戻る操作で同じ表示を開き直せるようにする (TX-7)．
+  // 状態を変える箇所が多いので，setter ごとではなく状態から組み立てる．
+  // router.replace はサーバーでの描き直しを伴うので，収支ページと同じく履歴の項目を置き換えるだけにする
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    params.set("month", `${year}-${String(month).padStart(2, "0")}`);
+    if (selectedDay === null) params.delete("day");
+    else params.set("day", String(selectedDay));
+    if (page === 1) params.delete("page");
+    else params.set("page", String(page));
+    if (selectedMainAccountId === "all") params.delete("mainAccount");
+    else params.set("mainAccount", selectedMainAccountId);
+    if (selectedSubAccountId === "all") params.delete("subAccount");
+    else params.set("subAccount", selectedSubAccountId);
+    window.history.replaceState(null, "", `?${params.toString()}`);
+  }, [
+    year,
+    month,
+    selectedDay,
+    page,
+    selectedMainAccountId,
+    selectedSubAccountId,
+  ]);
 
   /**
    * 取引のカテゴリーを変更し，必要に応じて自動分類ルールを更新するハンドラである．

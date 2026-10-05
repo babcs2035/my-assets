@@ -9,6 +9,7 @@ import {
   formatSignedCurrency,
   nowJST,
   parseJSTDate,
+  parsePositiveIntegerParam,
   parseYearMonthParam,
   retrieveTodaySyncTimeJST,
   shiftUtcDateOnlyByMonths,
@@ -190,6 +191,27 @@ describe("parseYearMonthParam", () => {
       parseYearMonthParam(["2025-03", "2025-04"], "2024-01-01"),
     ).toBeNull();
     expect(parseYearMonthParam(undefined, "2024-01-01")).toBeNull();
+  });
+});
+
+describe("parsePositiveIntegerParam", () => {
+  it("1 以上の整数の文字列を数値にする", () => {
+    expect(parsePositiveIntegerParam("1")).toBe(1);
+    expect(parsePositiveIntegerParam("31")).toBe(31);
+  });
+
+  it("0・負の数・小数・数字以外・配列・未指定は null にする", () => {
+    expect(parsePositiveIntegerParam("0")).toBeNull();
+    expect(parsePositiveIntegerParam("-1")).toBeNull();
+    expect(parsePositiveIntegerParam("1.5")).toBeNull();
+    expect(parsePositiveIntegerParam("abc")).toBeNull();
+    expect(parsePositiveIntegerParam("")).toBeNull();
+    expect(parsePositiveIntegerParam(["1", "2"])).toBeNull();
+    expect(parsePositiveIntegerParam(undefined)).toBeNull();
+  });
+
+  it("安全に扱えない大きさの整数は null にする", () => {
+    expect(parsePositiveIntegerParam("99999999999999999999")).toBeNull();
   });
 });
 
