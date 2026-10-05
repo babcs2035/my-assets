@@ -365,7 +365,7 @@ function SeriesLegend({
           key={item.key}
           onClick={() => onToggle(item.key)}
           aria-pressed={visibleSeries[item.key]}
-          className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 transition-colors ${
+          className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 transition-colors pointer-coarse:min-h-11 ${
             visibleSeries[item.key]
               ? "border-zinc-700 bg-zinc-800/60 text-zinc-100"
               : "border-zinc-800 bg-zinc-900/30 text-zinc-400"

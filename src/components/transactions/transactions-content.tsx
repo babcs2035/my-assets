@@ -566,7 +566,7 @@ export function TransactionsContent() {
                           <UnmarkTransferButton
                             transactionId={tx.id}
                             transactionDesc={tx.desc}
-                            className="h-9 w-9"
+                            className="h-9 w-9 pointer-coarse:size-11"
                             onDone={fetchData}
                           />
                         </div>
@@ -609,7 +609,7 @@ export function TransactionsContent() {
                           <button
                             type="button"
                             onClick={() => openTransferDialog(tx)}
-                            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-zinc-700 bg-zinc-800 text-zinc-400 transition-colors hover:border-blue-500/50 hover:text-blue-400"
+                            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-zinc-700 bg-zinc-800 text-zinc-400 transition-colors hover:border-blue-500/50 hover:text-blue-400 pointer-coarse:size-11"
                             aria-label="振替設定"
                             title="振替設定"
                           >
@@ -639,7 +639,7 @@ export function TransactionsContent() {
                           <button
                             type="button"
                             onClick={() => handleSort("date")}
-                            className="mx-auto flex cursor-pointer select-none items-center justify-center gap-1 hover:text-zinc-300"
+                            className="mx-auto flex cursor-pointer select-none items-center justify-center gap-1 hover:text-zinc-300 pointer-coarse:min-h-11"
                           >
                             日付
                             <SortIcon
@@ -668,7 +668,7 @@ export function TransactionsContent() {
                           <button
                             type="button"
                             onClick={() => handleSort("amount")}
-                            className="mx-auto flex cursor-pointer select-none items-center justify-end gap-1 hover:text-zinc-300"
+                            className="mx-auto flex cursor-pointer select-none items-center justify-end gap-1 hover:text-zinc-300 pointer-coarse:min-h-11"
                           >
                             金額
                             <SortIcon
@@ -755,7 +755,7 @@ export function TransactionsContent() {
                                 <UnmarkTransferButton
                                   transactionId={tx.id}
                                   transactionDesc={tx.desc}
-                                  className="h-8 w-8"
+                                  className="h-8 w-8 pointer-coarse:size-11"
                                   onDone={fetchData}
                                 />
                               ) : (
@@ -802,7 +802,7 @@ export function TransactionsContent() {
                                 <button
                                   type="button"
                                   onClick={() => openTransferDialog(tx)}
-                                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-zinc-700 bg-zinc-800 text-zinc-400 transition-colors hover:border-blue-500/50 hover:text-blue-400"
+                                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-zinc-700 bg-zinc-800 text-zinc-400 transition-colors hover:border-blue-500/50 hover:text-blue-400 pointer-coarse:size-11"
                                   aria-label="振替設定"
                                   title="振替設定"
                                 >

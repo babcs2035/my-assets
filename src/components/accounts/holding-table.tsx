@@ -106,7 +106,7 @@ export function HoldingTable({
             <button
               type="button"
               onClick={() => handleSort("gainLoss")}
-              className="mx-auto flex cursor-pointer select-none items-center justify-end gap-0.5 hover:text-zinc-100 transition-colors"
+              className="mx-auto flex cursor-pointer select-none items-center justify-end gap-0.5 hover:text-zinc-100 transition-colors pointer-coarse:min-h-11"
             >
               評価損益
               {sortConfig.key === "gainLoss" &&
@@ -130,7 +130,7 @@ export function HoldingTable({
             <button
               type="button"
               onClick={() => handleSort("gainLossRate")}
-              className="mx-auto flex cursor-pointer select-none items-center justify-end gap-0.5 hover:text-zinc-100 transition-colors"
+              className="mx-auto flex cursor-pointer select-none items-center justify-end gap-0.5 hover:text-zinc-100 transition-colors pointer-coarse:min-h-11"
             >
               損益率
               {sortConfig.key === "gainLossRate" &&

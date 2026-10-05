@@ -185,7 +185,7 @@ const AnalysisContent = () => {
               <div className="mt-3 pt-3 border-t border-zinc-800">
                 <button
                   type="button"
-                  className="text-xs text-zinc-400 hover:text-zinc-200 transition-colors flex items-center gap-1"
+                  className="text-xs text-zinc-400 hover:text-zinc-200 transition-colors flex items-center gap-1 pointer-coarse:min-h-11"
                   onClick={() =>
                     setShowPromptId(prev =>
                       prev === "latest" ? null : "latest",
@@ -244,7 +244,7 @@ const AnalysisContent = () => {
                           展開操作と削除操作を兄弟の <button> に分離する */}
                       <button
                         type="button"
-                        className="flex flex-1 min-w-0 items-center justify-between gap-3 text-left cursor-pointer"
+                        className="flex flex-1 min-w-0 items-center justify-between gap-3 text-left cursor-pointer pointer-coarse:min-h-11"
                         onClick={() => handleToggleExpand(result.id)}
                       >
                         <span className="flex items-center gap-3 min-w-0">
@@ -268,7 +268,7 @@ const AnalysisContent = () => {
                       </button>
                       <button
                         type="button"
-                        className="p-2 text-zinc-400 hover:text-red-400 transition-colors cursor-pointer shrink-0"
+                        className="p-2 text-zinc-400 hover:text-red-400 transition-colors cursor-pointer shrink-0 pointer-coarse:p-3.5"
                         aria-label={`分析結果を削除（${formatJSTDateTime(
                           result.analysisDate,
                         )}）`}
@@ -304,7 +304,7 @@ const AnalysisContent = () => {
                       <div className="px-4 pb-4 border-t border-zinc-800 pt-3">
                         <button
                           type="button"
-                          className="text-xs text-zinc-400 hover:text-zinc-200 transition-colors mb-2 flex items-center gap-1"
+                          className="text-xs text-zinc-400 hover:text-zinc-200 transition-colors mb-2 flex items-center gap-1 pointer-coarse:min-h-11"
                           onClick={() => handleTogglePrompt(result.id)}
                         >
                           {showPromptId === result.id ? "▼" : "▶"}

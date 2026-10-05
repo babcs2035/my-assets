@@ -171,7 +171,8 @@ export function AccountList({ accounts }: { accounts: AccountListItem[] }) {
                   </div>
                   <Link
                     href={`/accounts/${account.id}`}
-                    className="p-2 -m-1"
+                    // タッチ端末では余白を広げて 44px にし，同じだけ負のマージンで打ち消してレイアウトを保つ
+                    className="p-2 -m-1 pointer-coarse:p-3.5 pointer-coarse:-m-2.5"
                     aria-label={`${account.label} の詳細を見る`}
                   >
                     <ChevronRight className="h-4 w-4 text-zinc-400 transition-transform hover:translate-x-0.5 hover:text-zinc-400" />
