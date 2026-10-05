@@ -5,6 +5,7 @@ import { unstable_cache } from "next/cache";
 import { forwardFillByDate, listDateKeysBetween } from "@/lib/daily-series";
 import logger from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
+import { DASHBOARD_CACHE_TAGS } from "@/lib/revalidate";
 import {
   formatJSTDate,
   nowJST,
@@ -289,7 +290,7 @@ async function getExpiringPointsInternal() {
 export const getDashboardKPI = unstable_cache(
   getDashboardKPIInternal,
   ["dashboard-kpi"],
-  { revalidate: 300, tags: ["dashboard"] },
+  { revalidate: 300, tags: [DASHBOARD_CACHE_TAGS.kpi] },
 );
 
 /**
@@ -299,7 +300,7 @@ export const getDashboardKPI = unstable_cache(
 export const getAssetHistory = unstable_cache(
   getAssetHistoryInternal,
   ["asset-history"],
-  { revalidate: 300, tags: ["asset-history"] },
+  { revalidate: 300, tags: [DASHBOARD_CACHE_TAGS.assetHistory] },
 );
 
 /**
@@ -309,5 +310,5 @@ export const getAssetHistory = unstable_cache(
 export const getExpiringPoints = unstable_cache(
   getExpiringPointsInternal,
   ["expiring-points"],
-  { revalidate: 300, tags: ["expiring-points"] },
+  { revalidate: 300, tags: [DASHBOARD_CACHE_TAGS.expiringPoints] },
 );

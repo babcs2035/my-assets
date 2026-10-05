@@ -1,7 +1,28 @@
 // Server Actions から再検証するページを名前付きの関数で提供するモジュールである．
 // Server Actions では revalidatePath を直接呼ばず，このモジュールの関数を用いる．
 
-import { revalidatePath } from "next/cache";
+import { revalidatePath, updateTag } from "next/cache";
+
+/**
+ * ダッシュボードのデータを `unstable_cache` で保存するときのタグである．
+ * `src/actions/dashboard.ts` は "use server" で定数を export できないため，破棄する側のこのモジュールに置く
+ */
+export const DASHBOARD_CACHE_TAGS = {
+  kpi: "dashboard",
+  assetHistory: "asset-history",
+  expiringPoints: "expiring-points",
+} as const;
+
+/**
+ * ダッシュボードのキャッシュをすべて破棄する関数である．
+ * revalidatePath はページの再描画だけで `unstable_cache` の中身は残るため，同期直後でも
+ * 最長 300 秒は前の KPI と推移が出ていた (DASH-13)．updateTag は Server Action からしか呼べない
+ */
+function expireDashboardCache(): void {
+  for (const tag of Object.values(DASHBOARD_CACHE_TAGS)) {
+    updateTag(tag);
+  }
+}
 
 /**
  * 再検証対象となるページのパスを一元管理する定数である．
@@ -65,6 +86,7 @@ export function revalidateSettingsAndTransactionPages(): void {
 export function revalidateAccountAndDashboardPages(): void {
   revalidatePath(PAGE_PATHS.accounts);
   revalidatePath(PAGE_PATHS.dashboard);
+  expireDashboardCache();
 }
 
 /**
@@ -75,4 +97,5 @@ export function revalidateAccountAndDashboardPages(): void {
 export function revalidateSettingsAndDashboardPages(): void {
   revalidatePath(PAGE_PATHS.settings);
   revalidatePath(PAGE_PATHS.dashboard);
+  expireDashboardCache();
 }
