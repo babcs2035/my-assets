@@ -21,15 +21,18 @@ const buttonVariants = cva(
           "hover:bg-accent hover:text-accent-foreground dark:hover:bg-accent/50",
         link: "text-primary underline-offset-4 hover:underline",
       },
+      // タッチ端末では指で押せる 44px (WCAG 2.5.5) を確保するため，
+      // pointer-coarse のときだけ広げ，マウス操作では従来の密度を保つ
       size: {
-        default: "h-9 px-4 py-2 has-[>svg]:px-3",
-        xs: "h-6 gap-1 rounded-md px-2 text-xs has-[>svg]:px-1.5 [&_svg:not([class*='size-'])]:size-3",
-        sm: "h-8 rounded-md gap-1.5 px-3 has-[>svg]:px-2.5",
-        lg: "h-10 rounded-md px-6 has-[>svg]:px-4",
-        icon: "size-9",
-        "icon-xs": "size-6 rounded-md [&_svg:not([class*='size-'])]:size-3",
-        "icon-sm": "size-8",
-        "icon-lg": "size-10",
+        default: "h-9 px-4 py-2 has-[>svg]:px-3 pointer-coarse:h-11",
+        xs: "h-6 gap-1 rounded-md px-2 text-xs has-[>svg]:px-1.5 [&_svg:not([class*='size-'])]:size-3 pointer-coarse:h-11",
+        sm: "h-8 rounded-md gap-1.5 px-3 has-[>svg]:px-2.5 pointer-coarse:h-11",
+        lg: "h-10 rounded-md px-6 has-[>svg]:px-4 pointer-coarse:h-11",
+        icon: "size-9 pointer-coarse:size-11",
+        "icon-xs":
+          "size-6 rounded-md [&_svg:not([class*='size-'])]:size-3 pointer-coarse:size-11",
+        "icon-sm": "size-8 pointer-coarse:size-11",
+        "icon-lg": "size-10 pointer-coarse:size-11",
       },
     },
     defaultVariants: {

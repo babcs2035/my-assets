@@ -64,7 +64,9 @@ const SheetContent = React.forwardRef<
       className={cn(sheetVariants({ side }), className)}
       {...props}
     >
-      <SheetPrimitive.Close className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-secondary">
+      {/* タッチ端末ではアイコンだけだと 16px しか押せないため 44px に広げる．
+          位置を top-0.5 right-0.5 に寄せ，アイコンの中心を従来と同じ場所に保つ */}
+      <SheetPrimitive.Close className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-secondary pointer-coarse:right-0.5 pointer-coarse:top-0.5 pointer-coarse:flex pointer-coarse:size-11 pointer-coarse:items-center pointer-coarse:justify-center">
         <X className="h-4 w-4" />
         <span className="sr-only">閉じる</span>
       </SheetPrimitive.Close>
