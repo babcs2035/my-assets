@@ -50,12 +50,17 @@ export function TransferRuleSection({
   const [transferRuleKeyword, setTransferRuleKeyword] = useState("");
   const [transferRuleTargetSubAccountId, setTransferRuleTargetSubAccountId] =
     useState<string>("");
+  const [isAddingTransferRule, setIsAddingTransferRule] = useState(false);
 
   const handleAddTransferRule = async () => {
     // trim しないと空白のみが検証を通過し，全明細を対象にした
     // 振替ペア検出が無関係な明細を大量にマークする
     const keyword = transferRuleKeyword.trim();
-    if (!keyword || !transferRuleTargetSubAccountId) return;
+    // 応答までボタンが押せたままだと，連打で同じ振替ルールが重複して作られる (SET-10)
+    if (!keyword || !transferRuleTargetSubAccountId || isAddingTransferRule) {
+      return;
+    }
+    setIsAddingTransferRule(true);
     try {
       await createTransferRule({
         keyword,
@@ -67,6 +72,8 @@ export function TransferRuleSection({
       onChanged();
     } catch {
       toast.error("振替ルールの追加に失敗しました．");
+    } finally {
+      setIsAddingTransferRule(false);
     }
   };
 
@@ -130,7 +137,9 @@ export function TransferRuleSection({
           <Button
             onClick={handleAddTransferRule}
             disabled={
-              !transferRuleKeyword.trim() || !transferRuleTargetSubAccountId
+              !transferRuleKeyword.trim() ||
+              !transferRuleTargetSubAccountId ||
+              isAddingTransferRule
             }
             className="w-full md:w-auto"
           >

@@ -50,12 +50,15 @@ export function CategoryRuleSection({
 }) {
   const [ruleKeywords, setRuleKeywords] = useState("");
   const [ruleSubCategoryId, setRuleSubCategoryId] = useState<string>("");
+  const [isAddingRule, setIsAddingRule] = useState(false);
 
   const handleAddRule = async () => {
     // trim しないと空白のみが検証を通過し，Prisma の contains 検索で
     // ほぼ全明細にマッチして大量の誤分類が発生する
     const keyword = ruleKeywords.trim();
-    if (!keyword || !ruleSubCategoryId) return;
+    // 応答までボタンが押せたままだと，連打で同じルールが重複して作られる (SET-10)
+    if (!keyword || !ruleSubCategoryId || isAddingRule) return;
+    setIsAddingRule(true);
     try {
       await createCategoryRule({
         keyword,
@@ -68,6 +71,8 @@ export function CategoryRuleSection({
       onChanged();
     } catch {
       toast.error("ルールの追加に失敗しました．");
+    } finally {
+      setIsAddingRule(false);
     }
   };
 
@@ -128,7 +133,9 @@ export function CategoryRuleSection({
           </div>
           <Button
             onClick={handleAddRule}
-            disabled={!ruleKeywords.trim() || !ruleSubCategoryId}
+            disabled={
+              !ruleKeywords.trim() || !ruleSubCategoryId || isAddingRule
+            }
             className="w-full md:w-auto"
           >
             ルール追加

@@ -107,6 +107,7 @@ export function CategorySection({
   const [newCategoryType, setNewCategoryType] = useState<string>("EXPENSE");
   // 追加中のフラグ（ダブルクリックによる二重作成を防ぐ）
   const [isAddingCategory, setIsAddingCategory] = useState(false);
+  const [isAddingSubCategory, setIsAddingSubCategory] = useState(false);
   const [selectedMainCategory, setSelectedMainCategory] = useState<
     string | null
   >(null);
@@ -305,7 +306,9 @@ export function CategorySection({
   const handleAddSubCategory = async () => {
     // trim しないと空白のみが zod min(1) を通過し，空白名のカテゴリーが作成される
     const name = newSubCategoryName.trim();
-    if (!selectedMainCategory || !name) return;
+    // 応答までボタンが押せたままだと，連打で同じサブカテゴリーを二重に作ろうとして一意制約で失敗する (SET-10)
+    if (!selectedMainCategory || !name || isAddingSubCategory) return;
+    setIsAddingSubCategory(true);
     try {
       await createSubCategory({
         mainCategoryId: selectedMainCategory,
@@ -317,6 +320,8 @@ export function CategorySection({
       onChanged();
     } catch {
       toast.error("サブカテゴリーの追加に失敗しました．");
+    } finally {
+      setIsAddingSubCategory(false);
     }
   };
 
@@ -960,7 +965,11 @@ export function CategorySection({
                 />
                 <Button
                   onClick={handleAddSubCategory}
-                  disabled={!selectedMainCategory || !newSubCategoryName.trim()}
+                  disabled={
+                    !selectedMainCategory ||
+                    !newSubCategoryName.trim() ||
+                    isAddingSubCategory
+                  }
                   size="icon"
                   className="shrink-0"
                   aria-label="サブカテゴリーを追加"
