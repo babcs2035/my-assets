@@ -90,10 +90,11 @@ export function TransferRuleSection({
       <CardContent className="space-y-4">
         <div className="flex flex-col gap-4 md:flex-row md:items-end">
           <div className="space-y-2 flex-1 w-full">
-            <Label>キーワード</Label>
+            <Label htmlFor="transfer-rule-keyword">キーワード</Label>
             <div className="relative">
               <Search className="absolute left-2 top-2.5 h-4 w-4 text-zinc-500" />
               <Input
+                id="transfer-rule-keyword"
                 placeholder="明細の摘要に含まれる文字"
                 className="pl-8 text-sm"
                 value={transferRuleKeyword}
@@ -102,12 +103,12 @@ export function TransferRuleSection({
             </div>
           </div>
           <div className="space-y-2 w-full sm:w-auto sm:flex-1 md:w-[250px] shrink-0">
-            <Label>振替先口座</Label>
+            <Label htmlFor="transfer-rule-target">振替先口座</Label>
             <Select
               value={transferRuleTargetSubAccountId}
               onValueChange={setTransferRuleTargetSubAccountId}
             >
-              <SelectTrigger>
+              <SelectTrigger id="transfer-rule-target">
                 <SelectValue placeholder="口座を選択" />
               </SelectTrigger>
               <SelectContent>

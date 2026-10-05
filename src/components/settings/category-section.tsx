@@ -769,7 +769,10 @@ export function CategorySection({
                 value={newCategoryType}
                 onValueChange={setNewCategoryType}
               >
-                <SelectTrigger className="w-[100px]">
+                <SelectTrigger
+                  className="w-[100px]"
+                  aria-label="メインカテゴリーの種類"
+                >
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -802,7 +805,10 @@ export function CategorySection({
                 value={selectedMainCategory ?? ""}
                 onValueChange={setSelectedMainCategory}
               >
-                <SelectTrigger className="w-full sm:w-[180px]">
+                <SelectTrigger
+                  className="w-full sm:w-[180px]"
+                  aria-label="親カテゴリー"
+                >
                   <SelectValue placeholder="親カテゴリー" />
                 </SelectTrigger>
                 <SelectContent>
@@ -818,6 +824,7 @@ export function CategorySection({
               </Select>
               <div className="flex gap-2 flex-1 min-w-0">
                 <Input
+                  aria-label="サブカテゴリー名"
                   placeholder="詳細分類"
                   value={newSubCategoryName}
                   onChange={e => setNewSubCategoryName(e.target.value)}

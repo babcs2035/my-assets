@@ -91,10 +91,11 @@ export function CategoryRuleSection({
       <CardContent className="space-y-4">
         <div className="flex flex-col gap-4 md:flex-row md:items-end">
           <div className="space-y-2 flex-1 w-full">
-            <Label>キーワード</Label>
+            <Label htmlFor="category-rule-keyword">キーワード</Label>
             <div className="relative">
               <Search className="absolute left-2 top-2.5 h-4 w-4 text-zinc-500" />
               <Input
+                id="category-rule-keyword"
                 placeholder="明細の摘要に含まれる文字"
                 className="pl-8 text-sm"
                 value={ruleKeywords}
@@ -103,12 +104,12 @@ export function CategoryRuleSection({
             </div>
           </div>
           <div className="space-y-2 w-full sm:w-auto sm:flex-1 md:w-[250px] shrink-0">
-            <Label>適用カテゴリー</Label>
+            <Label htmlFor="category-rule-subcategory">適用カテゴリー</Label>
             <Select
               value={ruleSubCategoryId}
               onValueChange={setRuleSubCategoryId}
             >
-              <SelectTrigger>
+              <SelectTrigger id="category-rule-subcategory">
                 <SelectValue placeholder="カテゴリーを選択" />
               </SelectTrigger>
               <SelectContent>

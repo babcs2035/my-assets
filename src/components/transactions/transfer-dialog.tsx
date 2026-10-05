@@ -145,7 +145,12 @@ export function TransferDialog({
         <div className="space-y-4">
           {/* 金融機関選択 */}
           <div className="space-y-2">
-            <p className="text-sm font-medium text-zinc-300">振替先金融機関</p>
+            <Label
+              htmlFor="transfer-main-account"
+              className="text-sm font-medium text-zinc-300"
+            >
+              振替先金融機関
+            </Label>
             <Select
               value={selectedMainAccountId}
               onValueChange={val => {
@@ -153,7 +158,7 @@ export function TransferDialog({
                 setSelectedSubAccountId("");
               }}
             >
-              <SelectTrigger className="w-full">
+              <SelectTrigger id="transfer-main-account" className="w-full">
                 <SelectValue placeholder="金融機関を選択" />
               </SelectTrigger>
               <SelectContent>
@@ -169,12 +174,17 @@ export function TransferDialog({
 
           {/* 子口座選択 */}
           <div className="space-y-2">
-            <p className="text-sm font-medium text-zinc-300">振替先子口座</p>
+            <Label
+              htmlFor="transfer-sub-account"
+              className="text-sm font-medium text-zinc-300"
+            >
+              振替先子口座
+            </Label>
             <Select
               value={selectedSubAccountId}
               onValueChange={setSelectedSubAccountId}
             >
-              <SelectTrigger className="w-full">
+              <SelectTrigger id="transfer-sub-account" className="w-full">
                 <SelectValue placeholder="子口座を選択" />
               </SelectTrigger>
               <SelectContent>

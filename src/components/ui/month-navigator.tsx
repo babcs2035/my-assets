@@ -80,7 +80,7 @@ export function MonthNavigator({
           value={String(year)}
           onValueChange={v => onMonthChange(Number(v), month)}
         >
-          <SelectTrigger size="sm" className="h-9 w-24 sm:w-32">
+          <SelectTrigger size="sm" className="h-9 w-24 sm:w-32" aria-label="年">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -95,7 +95,7 @@ export function MonthNavigator({
           value={String(month)}
           onValueChange={v => onMonthChange(year, Number(v))}
         >
-          <SelectTrigger size="sm" className="h-9 w-16 sm:w-20">
+          <SelectTrigger size="sm" className="h-9 w-16 sm:w-20" aria-label="月">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>

@@ -208,7 +208,10 @@ export function AccountSection({
                                     }
                                   }}
                                 >
-                                  <SelectTrigger className="h-8 w-28">
+                                  <SelectTrigger
+                                    className="h-8 w-28"
+                                    aria-label={`${ac.label}のプロバイダー`}
+                                  >
                                     <SelectValue />
                                   </SelectTrigger>
                                   <SelectContent>
@@ -324,7 +327,10 @@ export function AccountSection({
                                         }
                                       }}
                                     >
-                                      <SelectTrigger className="h-8 w-28">
+                                      <SelectTrigger
+                                        className="h-8 w-28"
+                                        aria-label={`${ac.label}のプロバイダー`}
+                                      >
                                         <SelectValue />
                                       </SelectTrigger>
                                       <SelectContent>

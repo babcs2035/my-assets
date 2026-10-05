@@ -583,7 +583,10 @@ export function TransactionsContent() {
                               )
                             }
                           >
-                            <SelectTrigger className="h-9 w-[120px] text-xs">
+                            <SelectTrigger
+                              className="h-9 w-[120px] text-xs"
+                              aria-label={`${tx.desc}のカテゴリー`}
+                            >
                               <SelectValue placeholder="未分類" />
                             </SelectTrigger>
                             <SelectContent>
@@ -771,7 +774,10 @@ export function TransactionsContent() {
                                     )
                                   }
                                 >
-                                  <SelectTrigger className="h-8 w-[150px] text-sm">
+                                  <SelectTrigger
+                                    className="h-8 w-[150px] text-sm"
+                                    aria-label={`${tx.desc}のカテゴリー`}
+                                  >
                                     <SelectValue placeholder="未分類" />
                                   </SelectTrigger>
                                   <SelectContent>
