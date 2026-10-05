@@ -1,7 +1,7 @@
 "use client";
 
 import type { AssetType, SubAccount } from "@prisma/client";
-import { GripVertical } from "lucide-react";
+import { ArrowDown, ArrowUp, GripVertical } from "lucide-react";
 import { useEffect, useState, useTransition } from "react";
 import { toast } from "sonner";
 import {
@@ -9,6 +9,7 @@ import {
   updateSubAccountAssetType,
   updateSubAccountHidden,
 } from "@/actions/accounts";
+import { Button } from "@/components/ui/button";
 import {
   Select,
   SelectContent,
@@ -91,11 +92,9 @@ export function AccountSubAccountManager({
     setDraggedIndex(index);
   };
 
-  const handleDragEnd = () => {
-    if (draggedIndex === null) return;
-    setDraggedIndex(null);
-
-    const orderedIds = items.map(item => item.id);
+  const saveSubAccountOrder = (orderedItems: SubAccountWithRelations[]) => {
+    setItems(orderedItems);
+    const orderedIds = orderedItems.map(item => item.id);
     startTransition(async () => {
       try {
         await reorderSubAccounts(orderedIds);
@@ -106,6 +105,21 @@ export function AccountSubAccountManager({
         setItems(subAccounts);
       }
     });
+  };
+
+  const handleDragEnd = () => {
+    if (draggedIndex === null) return;
+    setDraggedIndex(null);
+    saveSubAccountOrder(items);
+  };
+
+  // HTML5 DnD はタッチでもキーボードでも動かないため，ボタンでも 1 つずつ動かせるようにする (ACC-11)
+  const moveSubAccount = (index: number, offset: -1 | 1) => {
+    const target = index + offset;
+    if (target < 0 || target >= items.length) return;
+    const newItems = [...items];
+    [newItems[index], newItems[target]] = [newItems[target], newItems[index]];
+    saveSubAccountOrder(newItems);
   };
 
   const handleHiddenChange = async (
@@ -169,6 +183,26 @@ export function AccountSubAccountManager({
 
           {/* モバイルではコントロールを 2 行目に折り返す（口座名の表示幅確保） */}
           <div className="flex w-full items-center justify-between gap-3 sm:w-auto sm:justify-end">
+            <div className="flex items-center">
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                onClick={() => moveSubAccount(index, -1)}
+                disabled={isPending || index === 0}
+                aria-label={`${sa.currentName} を上へ移動`}
+              >
+                <ArrowUp className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                onClick={() => moveSubAccount(index, 1)}
+                disabled={isPending || index === items.length - 1}
+                aria-label={`${sa.currentName} を下へ移動`}
+              >
+                <ArrowDown className="h-4 w-4" />
+              </Button>
+            </div>
             <div className="flex items-center gap-2">
               <span className="text-xs text-zinc-400">非表示</span>
               <Switch

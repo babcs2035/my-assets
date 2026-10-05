@@ -1,6 +1,8 @@
 "use client";
 
 import {
+  ArrowDown,
+  ArrowUp,
   ChevronDown,
   ChevronRight,
   Download,
@@ -92,7 +94,7 @@ export function CategorySection({
     setExpenseCategoryItems(categories.filter(cat => cat.type === "EXPENSE"));
     setIncomeCategoryItems(categories.filter(cat => cat.type === "INCOME"));
   }
-  const [, startTransition] = useTransition();
+  const [isReordering, startTransition] = useTransition();
 
   // Category Form State
   const [newCategoryName, setNewCategoryName] = useState("");
@@ -341,20 +343,19 @@ export function CategorySection({
     setDraggedMainIndex(index);
   };
 
-  const handleMainDragEnd = () => {
-    if (draggedMainType === null || draggedMainIndex === null) return;
-
-    const currentType = draggedMainType;
-    const targetItems =
-      currentType === "EXPENSE" ? expenseCategoryItems : incomeCategoryItems;
-    const orderedIds = targetItems.map(item => item.id);
-
-    setDraggedMainType(null);
-    setDraggedMainIndex(null);
-
+  const saveMainCategoryOrder = (
+    type: "INCOME" | "EXPENSE",
+    orderedItems: Category[],
+  ) => {
+    if (type === "EXPENSE") {
+      setExpenseCategoryItems(orderedItems);
+    } else {
+      setIncomeCategoryItems(orderedItems);
+    }
+    const orderedIds = orderedItems.map(item => item.id);
     startTransition(async () => {
       try {
-        await reorderMainCategories(currentType, orderedIds);
+        await reorderMainCategories(type, orderedIds);
         toast.success("並び順を更新しました．");
       } catch {
         toast.error("カテゴリーの並べ替えに失敗しました．");
@@ -363,6 +364,33 @@ export function CategorySection({
         onChanged();
       }
     });
+  };
+
+  const handleMainDragEnd = () => {
+    if (draggedMainType === null || draggedMainIndex === null) return;
+
+    const currentType = draggedMainType;
+    const targetItems =
+      currentType === "EXPENSE" ? expenseCategoryItems : incomeCategoryItems;
+
+    setDraggedMainType(null);
+    setDraggedMainIndex(null);
+    saveMainCategoryOrder(currentType, targetItems);
+  };
+
+  // HTML5 DnD はタッチでもキーボードでも動かないため，ボタンでも 1 つずつ動かせるようにする (SET-8)
+  const moveMainCategory = (
+    type: "INCOME" | "EXPENSE",
+    index: number,
+    offset: -1 | 1,
+  ) => {
+    const items = [
+      ...(type === "EXPENSE" ? expenseCategoryItems : incomeCategoryItems),
+    ];
+    const target = index + offset;
+    if (target < 0 || target >= items.length) return;
+    [items[index], items[target]] = [items[target], items[index]];
+    saveMainCategoryOrder(type, items);
   };
 
   const handleSubDragStart = (
@@ -409,18 +437,24 @@ export function CategorySection({
     setDraggedSubContext({ mainCategoryId, index });
   };
 
-  const handleSubDragEnd = (parentType: "INCOME" | "EXPENSE") => {
-    if (!draggedSubContext) return;
-    const { mainCategoryId } = draggedSubContext;
-
+  const saveSubCategoryOrder = (
+    parentType: "INCOME" | "EXPENSE",
+    mainCategoryId: string,
+    orderedSubItems: Category["subCategories"],
+  ) => {
     const items =
       parentType === "EXPENSE" ? expenseCategoryItems : incomeCategoryItems;
-    const parent = items.find(item => item.id === mainCategoryId);
-    const orderedIds = parent?.subCategories.map(sc => sc.id) ?? [];
-
-    setDraggedSubContext(null);
-    if (orderedIds.length === 0) return;
-
+    const updatedItems = items.map(item =>
+      item.id === mainCategoryId
+        ? { ...item, subCategories: orderedSubItems }
+        : item,
+    );
+    if (parentType === "EXPENSE") {
+      setExpenseCategoryItems(updatedItems);
+    } else {
+      setIncomeCategoryItems(updatedItems);
+    }
+    const orderedIds = orderedSubItems.map(sc => sc.id);
     startTransition(async () => {
       try {
         await reorderSubCategories(mainCategoryId, orderedIds);
@@ -432,6 +466,32 @@ export function CategorySection({
         onChanged();
       }
     });
+  };
+
+  const handleSubDragEnd = (parentType: "INCOME" | "EXPENSE") => {
+    if (!draggedSubContext) return;
+    const { mainCategoryId } = draggedSubContext;
+
+    const items =
+      parentType === "EXPENSE" ? expenseCategoryItems : incomeCategoryItems;
+    const parent = items.find(item => item.id === mainCategoryId);
+
+    setDraggedSubContext(null);
+    if (!parent || parent.subCategories.length === 0) return;
+    saveSubCategoryOrder(parentType, mainCategoryId, parent.subCategories);
+  };
+
+  const moveSubCategory = (
+    parentType: "INCOME" | "EXPENSE",
+    parent: Category,
+    index: number,
+    offset: -1 | 1,
+  ) => {
+    const subItems = [...parent.subCategories];
+    const target = index + offset;
+    if (target < 0 || target >= subItems.length) return;
+    [subItems[index], subItems[target]] = [subItems[target], subItems[index]];
+    saveSubCategoryOrder(parentType, parent.id, subItems);
   };
 
   // --- カテゴリーを収入・支出に分類する ---
@@ -486,6 +546,26 @@ export function CategorySection({
               </Badge>
             </div>
             <div className="flex items-center gap-1 shrink-0">
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                className="text-zinc-400"
+                onClick={() => moveMainCategory(type, index, -1)}
+                disabled={isReordering || index === 0}
+                aria-label={`カテゴリー「${mc.name}」を上へ移動`}
+              >
+                <ArrowUp className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                className="text-zinc-400"
+                onClick={() => moveMainCategory(type, index, 1)}
+                disabled={isReordering || index === cats.length - 1}
+                aria-label={`カテゴリー「${mc.name}」を下へ移動`}
+              >
+                <ArrowDown className="h-4 w-4" />
+              </Button>
               <Dialog
                 open={editingMainCategory?.id === mc.id}
                 onOpenChange={open => {
@@ -593,6 +673,28 @@ export function CategorySection({
                     </span>
                   </div>
                   <div className="flex items-center gap-1 shrink-0 ml-2">
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      className="text-zinc-400"
+                      onClick={() => moveSubCategory(type, mc, scIndex, -1)}
+                      disabled={isReordering || scIndex === 0}
+                      aria-label={`サブカテゴリー「${sc.name}」を上へ移動`}
+                    >
+                      <ArrowUp className="h-3.5 w-3.5" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      className="text-zinc-400"
+                      onClick={() => moveSubCategory(type, mc, scIndex, 1)}
+                      disabled={
+                        isReordering || scIndex === mc.subCategories.length - 1
+                      }
+                      aria-label={`サブカテゴリー「${sc.name}」を下へ移動`}
+                    >
+                      <ArrowDown className="h-3.5 w-3.5" />
+                    </Button>
                     <Dialog
                       open={editingSubCategory?.id === sc.id}
                       onOpenChange={open => {

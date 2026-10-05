@@ -1,11 +1,18 @@
 "use client";
 
-import { ChevronRight, GripVertical, Loader2 } from "lucide-react";
+import {
+  ArrowDown,
+  ArrowUp,
+  ChevronRight,
+  GripVertical,
+  Loader2,
+} from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { reorderMainAccounts } from "@/actions/accounts";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { assetTypeColor, formatCurrency, formatJSTDate } from "@/lib/utils";
 
@@ -69,11 +76,9 @@ export function AccountList({ accounts }: { accounts: AccountListItem[] }) {
     setDraggedIndex(index);
   };
 
-  const handleDragEnd = () => {
-    if (draggedIndex === null) return;
-    setDraggedIndex(null);
-
-    const orderedIds = items.map(item => item.id);
+  const saveAccountOrder = (orderedItems: AccountListItem[]) => {
+    setItems(orderedItems);
+    const orderedIds = orderedItems.map(item => item.id);
     startTransition(async () => {
       try {
         await reorderMainAccounts(orderedIds);
@@ -84,6 +89,21 @@ export function AccountList({ accounts }: { accounts: AccountListItem[] }) {
         setItems(accounts);
       }
     });
+  };
+
+  const handleDragEnd = () => {
+    if (draggedIndex === null) return;
+    setDraggedIndex(null);
+    saveAccountOrder(items);
+  };
+
+  // HTML5 DnD はタッチでもキーボードでも動かないため，ボタンでも 1 つずつ動かせるようにする (ACC-11)
+  const moveAccount = (index: number, offset: -1 | 1) => {
+    const target = index + offset;
+    if (target < 0 || target >= items.length) return;
+    const newItems = [...items];
+    [newItems[index], newItems[target]] = [newItems[target], newItems[index]];
+    saveAccountOrder(newItems);
   };
 
   return (
@@ -128,6 +148,26 @@ export function AccountList({ accounts }: { accounts: AccountListItem[] }) {
                         {account.label}
                       </CardTitle>
                     </div>
+                  </div>
+                  <div className="flex shrink-0 items-center">
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      onClick={() => moveAccount(idx, -1)}
+                      disabled={isPending || idx === 0}
+                      aria-label={`${account.label} を前へ移動`}
+                    >
+                      <ArrowUp className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      onClick={() => moveAccount(idx, 1)}
+                      disabled={isPending || idx === items.length - 1}
+                      aria-label={`${account.label} を後ろへ移動`}
+                    >
+                      <ArrowDown className="h-4 w-4" />
+                    </Button>
                   </div>
                   <Link
                     href={`/accounts/${account.id}`}
