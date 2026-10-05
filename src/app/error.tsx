@@ -12,7 +12,7 @@ import logger from "@/lib/logger";
  * error 詳細はログにのみ残し，画面上には再試行手段だけを表示する
  * （内部状態をユーザーに推測させないための共通表現）。
  */
-export default function GlobalError({
+export default function RouteError({
   error,
   reset,
 }: {
