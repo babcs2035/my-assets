@@ -16,6 +16,7 @@ import remarkGfm from "remark-gfm";
 import { toast } from "sonner";
 import { type AnalysisResult, runAssetAnalysis } from "@/actions/analysis";
 import { PageHeader } from "@/components/page-header";
+import { DeleteConfirmDialog } from "@/components/settings/delete-confirm-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatJSTDateTime } from "@/lib/utils";
@@ -266,20 +267,29 @@ const AnalysisContent = () => {
                           <Loader2 className="h-4 w-4 animate-spin text-blue-500 shrink-0" />
                         )}
                       </button>
-                      <button
-                        type="button"
-                        className="p-2 text-zinc-400 hover:text-red-400 transition-colors cursor-pointer shrink-0 pointer-coarse:p-3.5"
-                        aria-label={`分析結果を削除（${formatJSTDateTime(
-                          result.analysisDate,
-                        )}）`}
-                        onClick={() => void handleDeleteAnalysis(result.id)}
+                      {/* 削除すると戻せないので，押しただけで消さずに確認を挟む (ANA-2) */}
+                      <DeleteConfirmDialog
+                        trigger={
+                          <button
+                            type="button"
+                            disabled={deletingId === result.id}
+                            className="p-2 text-zinc-400 hover:text-red-400 transition-colors cursor-pointer shrink-0 pointer-coarse:p-3.5"
+                            aria-label={`分析結果を削除（${formatJSTDateTime(
+                              result.analysisDate,
+                            )}）`}
+                          >
+                            {deletingId === result.id ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <Trash2 className="h-4 w-4" />
+                            )}
+                          </button>
+                        }
+                        onConfirm={() => void handleDeleteAnalysis(result.id)}
                       >
-                        {deletingId === result.id ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                        ) : (
-                          <Trash2 className="h-4 w-4" />
-                        )}
-                      </button>
+                        {formatJSTDateTime(result.analysisDate)}{" "}
+                        の分析結果を削除します．この操作は取り消せません．
+                      </DeleteConfirmDialog>
                     </div>
 
                     {isOpen && result.status === "COMPLETED" && (
