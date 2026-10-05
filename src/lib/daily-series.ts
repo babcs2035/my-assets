@@ -22,6 +22,16 @@ export function listDateKeysBetween(
 }
 
 /**
+ * 日付（YYYY-MM-DD）を指定した日数だけずらす関数である．UTC の日付として計算する．
+ */
+export function addDaysToDateKey(dateKey: string, days: number): string {
+  const [year, month, day] = dateKey.split("-").map(Number);
+  return new Date(Date.UTC(year, month - 1, day + days))
+    .toISOString()
+    .slice(0, 10);
+}
+
+/**
  * 系列（口座や銘柄）ごとに，記録のない日を直前の記録の値で埋める関数である．
  * 一部の系列だけ記録が欠けた日に，その系列が 0 として合計されて総額が落ち込むのを防ぐ．
  * 最初の記録より前の日は埋めない（後から追加した系列を過去に遡って足さないため）．

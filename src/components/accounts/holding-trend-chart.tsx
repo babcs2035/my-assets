@@ -25,6 +25,11 @@ import {
   filterByUnifiedTimeRange,
   type UnifiedTimeRange,
 } from "@/lib/chart-time-range";
+import {
+  addDaysToDateKey,
+  forwardFillByDate,
+  listDateKeysBetween,
+} from "@/lib/daily-series";
 import { formatCurrency } from "@/lib/utils";
 
 type HoldingHistoryItem = {
@@ -49,12 +54,19 @@ type HoldingWithHistories = {
 
 type Props = {
   holdings: HoldingWithHistories[];
+  // 売却した銘柄の履歴（銘柄ごとの配列）．銘柄の選択肢には出さず，合計にだけ使う
+  soldHoldings?: HoldingHistoryItem[][];
 };
+
+// HoldingHistory.date は JST の日付を UTC 00:00 で保存しているので，先頭 10 文字が JST の日付になる
+function toDateKey(date: Date | string): string {
+  return (typeof date === "string" ? date : date.toISOString()).slice(0, 10);
+}
 
 /**
  * 投資信託の銘柄ごとの時系列チャートコンポーネント
  */
-export function HoldingTrendChart({ holdings }: Props) {
+export function HoldingTrendChart({ holdings, soldHoldings = [] }: Props) {
   const [selectedHoldingId, setSelectedHoldingId] = useState<string>("");
   const [timeRange, setTimeRange] = useState<UnifiedTimeRange>("1Y");
 
@@ -96,45 +108,72 @@ export function HoldingTrendChart({ holdings }: Props) {
   }>;
 
   if (isTotal) {
-    const dateMap = new Map<
-      string,
-      { valuation: number; acquisitionCost: number; gainLoss: number }
-    >();
-    for (const h of holdings) {
-      for (const hist of h.holdingHistories) {
-        const dateStr =
-          typeof hist.date === "string"
-            ? hist.date
-            : hist.date.toISOString().slice(0, 10);
-        const entry = dateMap.get(dateStr) ?? {
-          valuation: 0,
-          acquisitionCost: 0,
-          gainLoss: 0,
-        };
-        entry.valuation += hist.valuation;
-        entry.acquisitionCost += hist.valuation - hist.gainLoss;
-        entry.gainLoss += hist.gainLoss;
-        dateMap.set(dateStr, entry);
+    // 銘柄ごとに直前の値で埋めてから合計する (ACC-9)．記録のある日だけを足すと，
+    // 一部の銘柄だけ記録が欠けた日に合計が落ち込む．売却した銘柄も過去の合計には含める
+    const toPoints = (seriesKey: string, histories: HoldingHistoryItem[]) =>
+      histories.map(hist => ({
+        seriesKey,
+        dateKey: toDateKey(hist.date),
+        value: {
+          valuation: hist.valuation,
+          acquisitionCost: hist.valuation - hist.gainLoss,
+          gainLoss: hist.gainLoss,
+        },
+      }));
+    const historyPoints = [
+      ...holdings.flatMap(h => toPoints(h.id, h.holdingHistories)),
+      ...soldHoldings.flatMap((histories, index) =>
+        toPoints(`sold-${index}`, histories),
+      ),
+    ];
+    // 売却した銘柄は最後の記録の翌日に 0 を置き，売却後も最後の評価額が合計に残り続けないようにする
+    const soldEndPoints = soldHoldings.flatMap((histories, index) => {
+      const dateKeys = histories.map(hist => toDateKey(hist.date)).sort();
+      if (dateKeys.length === 0) return [];
+      return [
+        {
+          seriesKey: `sold-${index}`,
+          dateKey: addDaysToDateKey(dateKeys[dateKeys.length - 1], 1),
+          value: { valuation: 0, acquisitionCost: 0, gainLoss: 0 },
+        },
+      ];
+    });
+
+    const recordedDateKeys = historyPoints.map(p => p.dateKey).sort();
+    const dateKeys =
+      recordedDateKeys.length === 0
+        ? []
+        : listDateKeysBetween(
+            recordedDateKeys[0],
+            recordedDateKeys[recordedDateKeys.length - 1],
+          );
+
+    chartData = forwardFillByDate(
+      [...historyPoints, ...soldEndPoints],
+      dateKeys,
+    ).map(({ dateKey, values }) => {
+      let valuation = 0;
+      let acquisitionCost = 0;
+      let gainLoss = 0;
+      for (const v of values.values()) {
+        valuation += v.valuation;
+        acquisitionCost += v.acquisitionCost;
+        gainLoss += v.gainLoss;
       }
-    }
-    chartData = Array.from(dateMap.entries())
-      .map(([date, v]) => ({
-        date,
-        valuation: v.valuation,
+      return {
+        date: dateKey,
+        valuation,
         unitPrice: null,
-        gainLoss: v.gainLoss,
+        gainLoss,
         gainLossRate:
-          v.acquisitionCost > 0 ? (v.gainLoss / v.acquisitionCost) * 100 : 0,
-        acquisitionCost: v.acquisitionCost,
-      }))
-      .sort((a, b) => a.date.localeCompare(b.date));
+          acquisitionCost > 0 ? (gainLoss / acquisitionCost) * 100 : 0,
+        acquisitionCost,
+      };
+    });
   } else {
     chartData =
       selectedHolding?.holdingHistories.map(h => ({
-        date:
-          typeof h.date === "string"
-            ? h.date
-            : h.date.toISOString().slice(0, 10),
+        date: toDateKey(h.date),
         valuation: h.valuation,
         unitPrice: h.unitPrice,
         gainLoss: h.gainLoss,

@@ -211,6 +211,17 @@ function AccountDetailContent({
     });
   }
 
+  // 売却した銘柄（今の保有にない銘柄）の履歴．銘柄推移の合計にだけ使う (ACC-9)
+  const soldHoldingHistories: HistGroup[][] = [];
+  for (const [subAccountId, grouped] of historiesBySubAccount) {
+    for (const [name, histories] of grouped) {
+      const isHeld = allHoldings.some(
+        h => h.subAccountId === subAccountId && h.name === name,
+      );
+      if (!isHeld) soldHoldingHistories.push(histories);
+    }
+  }
+
   const subAccountChartData = visibleSubAccounts.map(sa => {
     const chartData = getBalanceHistoryData(sa.histories ?? [], sa.balance);
     return { id: sa.id, assetType: sa.assetType, data: chartData };
@@ -288,7 +299,10 @@ function AccountDetailContent({
 
       {/* 投資信託銘柄推移 */}
       {chartHoldings.length > 0 && (
-        <HoldingTrendChart holdings={chartHoldings} />
+        <HoldingTrendChart
+          holdings={chartHoldings}
+          soldHoldings={soldHoldingHistories}
+        />
       )}
 
       {/* 投資信託テーブル */}

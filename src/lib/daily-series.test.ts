@@ -1,5 +1,17 @@
 import { describe, expect, it } from "vitest";
-import { forwardFillByDate, listDateKeysBetween } from "@/lib/daily-series";
+import {
+  addDaysToDateKey,
+  forwardFillByDate,
+  listDateKeysBetween,
+} from "@/lib/daily-series";
+
+describe("addDaysToDateKey", () => {
+  it("月末と年末をまたいでずらす", () => {
+    expect(addDaysToDateKey("2028-02-28", 1)).toBe("2028-02-29");
+    expect(addDaysToDateKey("2026-12-31", 1)).toBe("2027-01-01");
+    expect(addDaysToDateKey("2026-03-01", -1)).toBe("2026-02-28");
+  });
+});
 
 describe("listDateKeysBetween", () => {
   it("月末とうるう日をまたいで 1 日ずつ並べる", () => {
