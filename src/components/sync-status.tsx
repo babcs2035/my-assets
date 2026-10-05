@@ -1,6 +1,12 @@
 "use client";
 
-import { CheckCircle2, Loader2, Minus, XCircle } from "lucide-react";
+import {
+  AlertCircle,
+  CheckCircle2,
+  Loader2,
+  Minus,
+  XCircle,
+} from "lucide-react";
 import { useEffect, useState } from "react";
 import { getLastSyncInfo } from "@/actions/system";
 import { useSidebar } from "@/components/ui/sidebar";
@@ -10,13 +16,20 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { cn, formatJSTDate, formatJSTDateTime, nowJST } from "@/lib/utils";
+import {
+  cn,
+  formatJSTDate,
+  formatJSTDateTime,
+  nowJST,
+  retrieveTodaySyncTimeJST,
+} from "@/lib/utils";
 
 /**
  * 同期状態の型定義である．
  * "aborted" はユーザーが意図的に中止した状態（失敗とは区別して表示する）．
+ * "stale" は今日の自動同期の時刻を過ぎても同期されていない状態である．
  */
-type SyncState = "idle" | "syncing" | "success" | "error" | "aborted";
+type SyncState = "idle" | "syncing" | "success" | "error" | "aborted" | "stale";
 
 /**
  * システムの同期状態を表示するコンポーネントである．
@@ -56,49 +69,29 @@ export function SyncStatus() {
           return;
         }
 
-        const lastDateStr = formatJSTDate(new Date(info.date));
-        const isToday = formatJSTDate(now) === lastDateStr;
+        // 同期中かどうかはサーバーのロック（success === null）だけで判定する．
+        // 以前は 08:00〜08:09 を時刻だけで「実行中」とし，サーバーが止まっていても表示していた (DASH-11)
+        const lastSyncAt = new Date(info.date);
+        const lastDateTimeStr = formatJSTDateTime(lastSyncAt);
 
-        if (isToday) {
-          setStatus(info.success ? "success" : "error");
-          setLastSyncText(
-            formatJSTDateTime(new Date(info.date)) +
-              ` ${info.success ? "完了" : "失敗"}`,
-          );
-        } else {
-          // 現在同期実行中かどうかを判定する (例: 08:00 - 08:10 JST)．
-          const lastDateTimeStr = formatJSTDateTime(new Date(info.date));
-          const hour = parseInt(
-            new Intl.DateTimeFormat("en-US", {
-              hour: "2-digit",
-              hour12: false,
-              timeZone: "Asia/Tokyo",
-            }).format(now),
-            10,
-          );
-          const minute = parseInt(
-            new Intl.DateTimeFormat("en-US", {
-              minute: "2-digit",
-              timeZone: "Asia/Tokyo",
-            }).format(now),
-            10,
-          );
-
-          if (hour === 8 && minute < 10) {
-            setStatus("syncing");
-            setLastSyncText("実行中...");
-          } else if ((hour === 8 && minute >= 10) || hour > 8) {
-            setStatus(info.success ? "idle" : "error");
-            setLastSyncText(
-              `${lastDateTimeStr} ${info.success ? "完了" : "失敗"}`,
-            );
-          } else {
-            setStatus("idle");
-            setLastSyncText(
-              `${lastDateTimeStr} ${info.success ? "完了" : "失敗"}`,
-            );
-          }
+        if (!info.success) {
+          setStatus("error");
+          setLastSyncText(`${lastDateTimeStr} 失敗`);
+          return;
         }
+
+        // 今日の自動同期の時刻を過ぎてもそれ以降の同期がなければ，画面の数字は前日以前のままである．
+        // 灰色の「完了」だと気付けないので，別の状態として示す
+        const todaySyncTime = retrieveTodaySyncTimeJST();
+        if (now >= todaySyncTime && lastSyncAt < todaySyncTime) {
+          setStatus("stale");
+          setLastSyncText(`未同期（前回 ${lastDateTimeStr}）`);
+          return;
+        }
+
+        const isToday = formatJSTDate(now) === formatJSTDate(lastSyncAt);
+        setStatus(isToday ? "success" : "idle");
+        setLastSyncText(`${lastDateTimeStr} 完了`);
       } catch {
         setStatus("error");
         setLastSyncText("エラー");
@@ -163,6 +156,9 @@ export function SyncStatus() {
     if (status === "aborted") {
       return <Minus className="h-4 w-4 text-zinc-400" />;
     }
+    if (status === "stale") {
+      return <AlertCircle className="h-4 w-4 text-amber-500" />;
+    }
     return <CheckCircle2 className="h-4 w-4 text-zinc-500" />;
   };
 
@@ -181,6 +177,9 @@ export function SyncStatus() {
     }
     if (status === "aborted") {
       return "border-zinc-700 bg-zinc-800/50 text-zinc-300";
+    }
+    if (status === "stale") {
+      return "border-amber-500/30 bg-amber-500/10 text-amber-400";
     }
     return "border-zinc-800 bg-zinc-900/50 text-zinc-400";
   };

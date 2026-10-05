@@ -130,6 +130,20 @@ export function yesterdayJST(): Date {
 }
 
 /**
+ * 毎日の自動同期を始める時刻（JST の時）である．
+ * スケジューラと画面の同期状態の表示が同じ境目を使うよう，クライアントからも読める utils に置く
+ */
+export const SYNC_HOUR_JST = 8;
+
+/**
+ * 今日の自動同期の時刻（08:00 JST）の瞬間を返す関数である．
+ * todayJST() は TZ に依存せず JST 00:00 の瞬間を返し，JST には夏時間がないので 8 時間足せばよい
+ */
+export function retrieveTodaySyncTimeJST(): Date {
+  return new Date(todayJST().getTime() + SYNC_HOUR_JST * 60 * 60 * 1000);
+}
+
+/**
  * YYYY-MM-DD 形式の文字列を JST の Date オブジェクトに変換する関数である．
  * 時刻は 00:00:00 JST となる．
  */

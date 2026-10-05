@@ -8,7 +8,7 @@
 // prisma, mf-scraper は runAllProvidersSync 内で動的インポートする．
 
 import type { Logger } from "pino";
-import { todayJST } from "./utils";
+import { retrieveTodaySyncTimeJST } from "./utils";
 
 let logger: Logger | null = null;
 
@@ -20,17 +20,8 @@ async function getLazyLogger(): Promise<Logger> {
   return logger;
 }
 
-const SYNC_HOUR_JST = 8;
 const ONE_HOUR_MS = 60 * 60 * 1000;
 const ONE_DAY_MS = 24 * ONE_HOUR_MS;
-
-/**
- * 今日の 08:00 JST の瞬間を返す関数である．
- * todayJST() は TZ に依存せず JST 00:00 の瞬間を返し，JST には夏時間がないので 8 時間足せばよい
- */
-function retrieveTodaySyncTimeJST(): Date {
-  return new Date(todayJST().getTime() + SYNC_HOUR_JST * ONE_HOUR_MS);
-}
 
 /**
  * 次回の 08:00 JST までのミリ秒を計算する関数である．

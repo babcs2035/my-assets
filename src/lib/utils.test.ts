@@ -9,6 +9,7 @@ import {
   formatSignedCurrency,
   nowJST,
   parseJSTDate,
+  retrieveTodaySyncTimeJST,
   shiftUtcDateOnlyByMonths,
   todayJST,
   toUtcDateOnly,
@@ -129,6 +130,19 @@ describe("現在時刻から JST の日付を求める関数", () => {
     vi.setSystemTime(new Date("2026-10-02T15:30:45.678Z"));
     expect(nowJST().toISOString()).toBe("2026-10-02T15:30:45.000Z");
     expect(formatJSTDate(nowJST())).toBe("2026-10-03");
+  });
+
+  it("今日の自動同期の時刻は，UTC では前日でも JST の今日の 08:00 になる", () => {
+    // JST 10/03 00:30．UTC の日付（10/02）で計算すると 10/02 08:00 JST になってしまう
+    vi.setSystemTime(new Date("2026-10-02T15:30:00Z"));
+    expect(retrieveTodaySyncTimeJST().toISOString()).toBe(
+      "2026-10-02T23:00:00.000Z",
+    );
+    // JST 10/03 08:30．08:00 を過ぎても翌日に進めない
+    vi.setSystemTime(new Date("2026-10-02T23:30:00Z"));
+    expect(retrieveTodaySyncTimeJST().toISOString()).toBe(
+      "2026-10-02T23:00:00.000Z",
+    );
   });
 });
 
