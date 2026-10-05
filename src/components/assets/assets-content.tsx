@@ -158,7 +158,7 @@ export function AssetsContent({ breakdown }: AssetsContentProps) {
                     )}
                     className="h-full w-full"
                   >
-                    <PieChart>
+                    <PieChart aria-label="資産内訳の円グラフ">
                       <Pie
                         data={assetPieData}
                         dataKey="value"
@@ -249,7 +249,7 @@ export function AssetsContent({ breakdown }: AssetsContentProps) {
                     }}
                     className="h-full w-full"
                   >
-                    <PieChart>
+                    <PieChart aria-label="負債内訳の円グラフ">
                       <Pie
                         data={liabilityPieData}
                         dataKey="value"
@@ -433,6 +433,7 @@ export function AssetsContent({ breakdown }: AssetsContentProps) {
               className="h-full w-full"
             >
               <BarChart
+                aria-label="バランスシートの棒グラフ"
                 data={[
                   {
                     name: "総資産",

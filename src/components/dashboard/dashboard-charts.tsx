@@ -159,6 +159,7 @@ export function DashboardAreaChart({ data }: DashboardAreaChartProps) {
       <div className="h-[280px] w-full">
         <ChartContainer config={chartConfig} className="h-full w-full">
           <AreaChart
+            aria-label="資産推移（積み上げ・日次）の面グラフ"
             data={chartData}
             margin={{ top: 10, right: 10, left: 10, bottom: 0 }}
           >

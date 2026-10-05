@@ -211,6 +211,7 @@ export function AccountBalanceChart({
         <CardContent className="h-[250px] w-full p-0 pb-4 pr-4">
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart
+              aria-label={`${selectedSeries.name} の残高推移（日次）の面グラフ`}
               data={chartData}
               margin={{ top: 10, right: 10, left: 30, bottom: 0 }}
             >

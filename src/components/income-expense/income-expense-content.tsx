@@ -347,7 +347,7 @@ export function IncomeExpenseContent({
                         )}
                         className="h-full w-full"
                       >
-                        <PieChart>
+                        <PieChart aria-label="収入内訳の円グラフ">
                           <Pie
                             data={incomePieData}
                             dataKey="value"
@@ -457,7 +457,7 @@ export function IncomeExpenseContent({
                         )}
                         className="h-full w-full"
                       >
-                        <PieChart>
+                        <PieChart aria-label="支出内訳の円グラフ">
                           <Pie
                             data={expensePieData}
                             dataKey="value"
@@ -577,6 +577,7 @@ export function IncomeExpenseContent({
                   className="h-full w-full"
                 >
                   <ComposedChart
+                    aria-label="月別収支推移の棒グラフと折れ線グラフ"
                     data={monthlyTrend}
                     margin={{ top: 10, right: 10, left: 10, bottom: 0 }}
                   >
@@ -728,6 +729,7 @@ export function IncomeExpenseContent({
                 className="h-full w-full"
               >
                 <ComposedChart
+                  aria-label="年間収支推移の棒グラフと折れ線グラフ"
                   data={annualTrendData}
                   margin={{ top: 10, right: 10, left: 10, bottom: 0 }}
                 >

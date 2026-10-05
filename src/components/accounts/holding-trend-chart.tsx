@@ -288,6 +288,7 @@ export function HoldingTrendChart({ holdings, soldHoldings = [] }: Props) {
         <CardContent className="h-[250px] w-full p-0 pb-4 pr-4">
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart
+              aria-label="銘柄推移の面グラフ"
               data={chartDataToShow}
               margin={{ top: 10, right: 10, left: 30, bottom: 0 }}
             >
