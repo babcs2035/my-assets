@@ -558,8 +558,11 @@ export function CategorySection({
                 }
                 onConfirm={() => handleDeleteMainCategory(mc.id)}
               >
-                メインカテゴリー「{mc.name}
-                」を削除します．サブカテゴリーがある場合は削除できません．
+                {/* deleteMainCategory は配下のサブカテゴリーとルールもまとめて消すため，巻き込む件数を押す前に示す */}
+                {`メインカテゴリー「${mc.name}」と配下のサブカテゴリー ${mc.subCategories.length} 件を削除します．`}
+                {mc.subCategories.length > 0 &&
+                  `ルール ${mc.subCategories.reduce((sum, sc) => sum + sc._count.rules, 0)} 件も削除され，明細 ${mc.subCategories.reduce((sum, sc) => sum + sc._count.transactions, 0)} 件は未分類に戻ります．`}
+                この操作は元に戻せません．
               </DeleteConfirmDialog>
             </div>
           </div>
@@ -662,7 +665,8 @@ export function CategorySection({
                       }
                       onConfirm={() => handleDeleteSubCategory(sc.id)}
                     >
-                      サブカテゴリー「{sc.name}」を削除します．
+                      {`サブカテゴリー「${sc.name}」を削除します．ルール ${sc._count.rules} 件も削除され，明細 ${sc._count.transactions} 件は未分類に戻ります．`}
+                      この操作は元に戻せません．
                     </DeleteConfirmDialog>
                   </div>
                 </div>
