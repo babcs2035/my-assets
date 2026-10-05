@@ -171,7 +171,13 @@ function AccountDetailContent({
       name: "合計",
       currentBalance: totalBalance,
       data: totalChartData,
-      assetType: visibleSubAccounts[0]?.assetType,
+      // 先頭の子口座の種類で色を決めると，預金と証券が混ざった口座でも先頭次第で色が変わる．
+      // 種類が 1 つに揃うときだけその色を使い，混在時は defaultAssetType に任せる (ACC-19)
+      assetType: visibleSubAccounts.every(
+        sa => sa.assetType === visibleSubAccounts[0]?.assetType,
+      )
+        ? visibleSubAccounts[0]?.assetType
+        : undefined,
       hasLiabilitySeries: hasLiabilitySubAccount,
     },
     ...visibleSubAccounts.map((sa, index) => ({
