@@ -9,6 +9,10 @@ const mocks = vi.hoisted(() => ({
   create: vi.fn(),
   findMany: vi.fn(),
   deleteMany: vi.fn(),
+  update: vi.fn(),
+  categoryUpdateMany: vi.fn(),
+  ruleDeleteMany: vi.fn(),
+  ruleCreate: vi.fn(),
 }));
 
 // 本物の logger は pino-pretty の worker を起動するので，テストでは使わない
@@ -27,8 +31,16 @@ vi.mock("@/lib/prisma", () => {
   };
   return {
     prisma: {
-      transaction: { findUnique: mocks.findUnique },
+      transaction: {
+        findUnique: mocks.findUnique,
+        update: mocks.update,
+        updateMany: mocks.categoryUpdateMany,
+      },
       transferRule: { deleteMany: vi.fn(), create: vi.fn() },
+      categoryRule: {
+        deleteMany: mocks.ruleDeleteMany,
+        create: mocks.ruleCreate,
+      },
       // 対話型トランザクションはコールバックに txClient を渡し，配列形式はそのまま待つ
       $transaction: vi.fn(async (arg: unknown) =>
         typeof arg === "function"
@@ -48,6 +60,7 @@ vi.mock("@/lib/revalidate", () => ({
 import {
   markTransactionAsTransfer,
   unmarkTransfer,
+  updateTransactionCategory,
 } from "@/actions/transactions";
 
 const SOURCE_ID = "a".repeat(64);
@@ -166,5 +179,67 @@ describe("unmarkTransfer", () => {
     await expect(unmarkTransfer(SOURCE_ID)).rejects.toThrow("取り消せません");
     expect(mocks.deleteMany).not.toHaveBeenCalled();
     expect(mocks.updateMany).not.toHaveBeenCalled();
+  });
+});
+
+// 未分類に戻してもルール適用のトーストが出て，同じ摘要の返金にも支出カテゴリーが付いていた（TX-4）
+describe("updateTransactionCategory", () => {
+  beforeEach(() => {
+    mocks.ruleDeleteMany.mockResolvedValue({ count: 0 });
+    mocks.ruleCreate.mockResolvedValue({});
+    mocks.categoryUpdateMany.mockResolvedValue({ count: 2 });
+  });
+
+  it("支出の明細からルールを作ると，同じ摘要の支出だけに当て，当てた件数を返す", async () => {
+    mocks.update.mockResolvedValue({
+      id: "t1",
+      desc: "コンビニ",
+      amount: -500,
+    });
+
+    const { ruleAppliedCount } = await updateTransactionCategory({
+      transactionId: "t1",
+      subCategoryId: "sub-food",
+      createRule: true,
+    });
+
+    expect(ruleAppliedCount).toBe(2);
+    expect(mocks.categoryUpdateMany.mock.calls[0][0].where).toEqual({
+      desc: "コンビニ",
+      subCategoryId: null,
+      amount: { lt: 0 },
+    });
+  });
+
+  it("収入の明細からルールを作ると，同じ摘要の 0 以上の明細だけに当てる", async () => {
+    mocks.update.mockResolvedValue({ id: "t2", desc: "返金", amount: 500 });
+
+    await updateTransactionCategory({
+      transactionId: "t2",
+      subCategoryId: "sub-refund",
+      createRule: true,
+    });
+
+    expect(mocks.categoryUpdateMany.mock.calls[0][0].where.amount).toEqual({
+      gte: 0,
+    });
+  });
+
+  it("未分類に戻したときはルールを作らず，件数を null で返す", async () => {
+    mocks.update.mockResolvedValue({
+      id: "t1",
+      desc: "コンビニ",
+      amount: -500,
+    });
+
+    const { ruleAppliedCount } = await updateTransactionCategory({
+      transactionId: "t1",
+      subCategoryId: null,
+      createRule: true,
+    });
+
+    expect(ruleAppliedCount).toBeNull();
+    expect(mocks.ruleCreate).not.toHaveBeenCalled();
+    expect(mocks.categoryUpdateMany).not.toHaveBeenCalled();
   });
 });

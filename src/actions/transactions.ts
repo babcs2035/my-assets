@@ -313,6 +313,8 @@ export async function updateTransactionCategory(
     data: { subCategoryId: data.subCategoryId },
   });
 
+  // ルールを作らなかったときは null にし，画面が「他の明細にも適用した」と出さないようにする (TX-4)
+  let ruleAppliedCount: number | null = null;
   if (data.createRule && data.subCategoryId && transaction.desc) {
     logger.info(`➕ Creating auto-category rule for: ${transaction.desc}`);
 
@@ -331,6 +333,9 @@ export async function updateTransactionCategory(
         where: {
           desc: transaction.desc,
           subCategoryId: null,
+          // 選べるカテゴリーは金額の符号で収入と支出に分かれる（0 以上は収入）．
+          // 符号を見ないと，同じ摘要の返金にも支出カテゴリーが付いた (TX-4)
+          amount: transaction.amount >= 0 ? { gte: 0 } : { lt: 0 },
         },
         data: {
           subCategoryId: data.subCategoryId,
@@ -338,10 +343,11 @@ export async function updateTransactionCategory(
       }),
     ]);
     logger.info(`✅ Rule applied to ${result.count} transactions.`);
+    ruleAppliedCount = result.count;
   }
 
   revalidateTransactionsPage();
-  return transaction;
+  return { transaction, ruleAppliedCount };
 }
 
 /**

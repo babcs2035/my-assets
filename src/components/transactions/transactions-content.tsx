@@ -254,18 +254,32 @@ export function TransactionsContent() {
     transactionId: string,
     subCategoryId: string | null,
   ) => {
+    // Select は tx.subCategoryId を表示するため，取り直すまで元の値に戻って見えた (TX-4)．先に表示を変える
+    setTransactions(prev =>
+      prev.map(tx => (tx.id === transactionId ? { ...tx, subCategoryId } : tx)),
+    );
     try {
-      await updateTransactionCategory({
+      const { ruleAppliedCount } = await updateTransactionCategory({
         transactionId,
         subCategoryId,
         createRule: true,
       });
-      toast.success("カテゴリーを更新しました．", {
-        description: "同じ摘要の他の明細にもルールが適用されました．",
-      });
+      toast.success(
+        "カテゴリーを更新しました．",
+        ruleAppliedCount === null
+          ? undefined
+          : {
+              description:
+                ruleAppliedCount > 0
+                  ? `同じ摘要の他の明細 ${ruleAppliedCount} 件にもルールを適用しました．`
+                  : "同じ摘要の明細に使う自動分類ルールを作成しました．",
+            },
+      );
       fetchData();
     } catch {
       toast.error("カテゴリーの更新に失敗しました．");
+      // 先に変えた表示を元に戻す
+      fetchData();
     }
   };
 
