@@ -2,6 +2,7 @@
 
 import {
   ArrowDownUp,
+  ArrowRight,
   ArrowUpDown,
   ChevronDown,
   ChevronUp,
@@ -546,8 +547,11 @@ export function TransactionsContent() {
                             )}
                           </div>
                           {tx.isTransfer && tx.linkedAccount ? (
+                            // 出金元と入金先を並べるだけでは向きが分からなかったため，入金先に矢印を添え，
+                            // 読み上げ用にも振替元・振替先を示す (TX-14)
                             <div className="flex flex-col gap-1 text-xs text-blue-400 mt-0.5">
                               <div className="flex items-center gap-1.5 truncate">
+                                <span className="sr-only">振替元</span>
                                 <span className="truncate">
                                   {tx.amount < 0
                                     ? `${tx.subAccount.mainAccount.label}（${tx.subAccount.currentName}）`
@@ -555,6 +559,11 @@ export function TransactionsContent() {
                                 </span>
                               </div>
                               <div className="flex items-center gap-1.5 truncate">
+                                <ArrowRight
+                                  className="h-3 w-3 shrink-0"
+                                  aria-hidden="true"
+                                />
+                                <span className="sr-only">振替先</span>
                                 <span className="truncate">
                                   {tx.amount < 0
                                     ? `${tx.linkedAccount.mainAccountLabel}（${tx.linkedAccount.subAccountName}）`
@@ -725,6 +734,8 @@ export function TransactionsContent() {
                                   >
                                     振替
                                   </Badge>
+                                  {/* モバイル表示と同じく，入金先に矢印と読み上げ用の振替元・振替先を添える (TX-14) */}
+                                  <span className="sr-only">振替元</span>
                                   <span className="truncate">
                                     {tx.amount < 0
                                       ? `${tx.subAccount.mainAccount.label}（${tx.subAccount.currentName}）`
@@ -732,6 +743,11 @@ export function TransactionsContent() {
                                   </span>
                                 </div>
                                 <div className="flex items-center gap-1.5 truncate ml-[38px]">
+                                  <ArrowRight
+                                    className="h-3 w-3 shrink-0"
+                                    aria-hidden="true"
+                                  />
+                                  <span className="sr-only">振替先</span>
                                   <span className="truncate">
                                     {tx.amount < 0
                                       ? `${tx.linkedAccount.mainAccountLabel}（${tx.linkedAccount.subAccountName}）`
