@@ -159,6 +159,14 @@ export function IncomeExpenseContent({
       }));
   }, [year, trendData]);
 
+  // 進行中の月・年は締まった期間と同じ見た目だと少なく見えて誤解されるため，「（途中）」と添える (IE-2)．
+  // ブラウザの TZ に依存せず JST の年月で判定する
+  const currentPeriodKey = formatJSTDate(nowJST()).slice(0, 7);
+  const isInProgressMonth = (monthKey: string) =>
+    `${year}-${monthKey}` === currentPeriodKey;
+  const isInProgressYear = (yearValue: unknown) =>
+    String(yearValue) === currentPeriodKey.slice(0, 4);
+
   const totalMonthlyIncome = monthlyData?.totalIncome ?? 0;
   const totalMonthlyExpense = monthlyData?.totalExpense ?? 0;
   const monthlyBalance = monthlyData?.balance ?? 0;
@@ -607,6 +615,27 @@ export function IncomeExpenseContent({
                       axisLine={false}
                       // period は "YYYY-MM" なので月はゼロ埋め文字列（"01" 等）
                       tickFormatter={v => `${Number(v)}月`}
+                      // recharts は tickFormatter の文字列の幅で目盛りを間引くため，「（途中）」を同じ行に
+                      // 足すとモバイル幅で隣の月が消える．2 行目に描いて間隔の計算に含めない
+                      height={40}
+                      tick={({ x, y, payload, fill }) => (
+                        <g transform={`translate(${x},${y})`}>
+                          <text
+                            className="recharts-cartesian-axis-tick-value"
+                            textAnchor="middle"
+                            fill={fill}
+                          >
+                            <tspan x={0} dy="0.71em">
+                              {Number(payload.value)}月
+                            </tspan>
+                            {isInProgressMonth(String(payload.value)) && (
+                              <tspan x={0} dy="1.2em">
+                                （途中）
+                              </tspan>
+                            )}
+                          </text>
+                        </g>
+                      )}
                     />
                     <YAxis
                       stroke="#a1a1aa"
@@ -630,7 +659,9 @@ export function IncomeExpenseContent({
                         return (
                           <div className="rounded-lg border border-zinc-700 bg-zinc-900 p-3 shadow-sm relative z-50">
                             <div className="mb-1.5 text-sm text-zinc-400">
-                              {month ? `${Number(month)}月` : ""}
+                              {month
+                                ? `${Number(month)}月${isInProgressMonth(String(month)) ? "（途中）" : ""}`
+                                : ""}
                             </div>
                             <div className="space-y-1.5">
                               {payload.map(item => (
@@ -757,6 +788,9 @@ export function IncomeExpenseContent({
                     stroke="#a1a1aa"
                     tickLine={false}
                     axisLine={false}
+                    tickFormatter={v =>
+                      `${v}${isInProgressYear(v) ? "（途中）" : ""}`
+                    }
                   />
                   <YAxis
                     stroke="#a1a1aa"
@@ -778,7 +812,9 @@ export function IncomeExpenseContent({
                       return (
                         <div className="rounded-lg border border-zinc-700 bg-zinc-900 p-3 shadow-sm relative z-50">
                           <div className="mb-1.5 text-sm text-zinc-400">
-                            {year ? `${year}年` : ""}
+                            {year
+                              ? `${year}年${isInProgressYear(year) ? "（途中）" : ""}`
+                              : ""}
                           </div>
                           <div className="space-y-1.5">
                             {payload.map(item => (
