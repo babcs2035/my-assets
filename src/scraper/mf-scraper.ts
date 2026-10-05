@@ -2390,15 +2390,11 @@ async function saveSingleTransaction(
         desc,
         isTransfer,
       },
-      update: {
-        // ID は subAccountId，date，amount，desc のハッシュなので，更新されうるのは isTransfer だけである．
-        // 日付や金額が変わった取引は別 ID の新しい行になり，古い行は残る（DATA-1）
-        subAccountId,
-        date: toUtcDateOnly(date),
-        amount,
-        desc,
-        isTransfer,
-      },
+      // ID は subAccountId，date，amount，desc のハッシュなので，既存の行で変わりうるのは isTransfer だけである．
+      // それを上書きすると，アプリで振替にした明細（markTransactionAsTransfer や振替ルール）が
+      // 同期のたびに振替でない状態へ戻り，相手側の明細だけが振替として残るため，既存の行は書き換えない．
+      // 日付や金額が変わった取引は別 ID の新しい行になり，古い行は残る（DATA-1）
+      update: {},
     });
     return true;
   } catch (error) {
