@@ -474,6 +474,55 @@ export async function markTransactionAsTransfer(input: TransferMarkInput) {
 }
 
 /**
+ * 手動の振替や振替ルールで振替にした明細を，振替でない状態に戻す関数である．
+ * 同じ transferId を持つ両側を 1 つのトランザクションで戻し，相互リンクの片方だけが残る状態を作らない．
+ * markTransactionAsTransfer が生成した相手側の明細は削除し，同期で取り込んだ明細はフラグとリンクだけを戻す．
+ */
+export async function unmarkTransfer(transactionId: string) {
+  logger.info(`↩️ Unmarking transfer of transaction ${transactionId}`);
+  const source = await prisma.transaction.findUnique({
+    where: { id: transactionId },
+    select: { transferId: true },
+  });
+  if (!source) {
+    throw new Error("明細が見つかりません．");
+  }
+  // スクレイパーが作る振替ペアは transferId を持たず，戻しても次の同期の upsert で振替に戻るため対象にしない
+  if (!source.transferId) {
+    throw new Error("同期で取り込んだ振替は取り消せません．");
+  }
+  const { transferId } = source;
+
+  // 同期で取り込んだ明細の ID は SHA-256 の 16 進（src/lib/hash.ts）で，markTransactionAsTransfer が
+  // 生成する明細の ID は crypto.randomUUID() なので，ID の形でアプリが作った明細を見分ける
+  const generatedIdPattern =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+  await prisma.$transaction(async tx => {
+    const pair = await tx.transaction.findMany({
+      where: { transferId },
+      select: { id: true },
+    });
+    const generatedIds = pair
+      .filter(t => generatedIdPattern.test(t.id))
+      .map(t => t.id);
+    const syncedIds = pair
+      .filter(t => !generatedIdPattern.test(t.id))
+      .map(t => t.id);
+
+    await tx.transaction.deleteMany({ where: { id: { in: generatedIds } } });
+    await tx.transaction.updateMany({
+      where: { id: { in: syncedIds } },
+      data: { isTransfer: false, transferId: null, linkedTransId: null },
+    });
+  });
+
+  logger.info(`✅ Unmarked transfer: ${transferId}`);
+  revalidateTransactionsPage();
+  return { transferId };
+}
+
+/**
  * 振替ルールの一覧を取得する関数である．
  * 各ルールに振替先口座の詳細情報を含める．
  */

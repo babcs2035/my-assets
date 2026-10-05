@@ -27,6 +27,7 @@ import {
 } from "@/actions/transactions";
 import { CalendarGrid } from "@/components/transactions/calendar-grid";
 import { TransferDialog } from "@/components/transactions/transfer-dialog";
+import { UnmarkTransferButton } from "@/components/transactions/unmark-transfer-button";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -545,6 +546,17 @@ export function TransactionsContent() {
                           </div>
                         </div>
                       </div>
+                      {/* 同期で取り込んだ振替 (transferId なし) は次の同期で戻るので，取り消しボタンを出さない */}
+                      {tx.isTransfer && tx.transferId && (
+                        <div className="flex justify-end mt-2">
+                          <UnmarkTransferButton
+                            transactionId={tx.id}
+                            transactionDesc={tx.desc}
+                            className="h-9 w-9"
+                            onDone={fetchData}
+                          />
+                        </div>
+                      )}
                       {/* 振替でない場合のみカテゴリーセレクターと振替設定ボタンを表示する */}
                       {!tx.isTransfer && (
                         <div className="flex items-center justify-between mt-2 gap-2">
@@ -721,9 +733,19 @@ export function TransactionsContent() {
                           </TableCell>
                           <TableCell>
                             {tx.isTransfer ? (
-                              <span className="text-sm text-zinc-500 italic">
-                                —
-                              </span>
+                              // 同期で取り込んだ振替 (transferId なし) は次の同期で戻るので，取り消しボタンを出さない
+                              tx.transferId ? (
+                                <UnmarkTransferButton
+                                  transactionId={tx.id}
+                                  transactionDesc={tx.desc}
+                                  className="h-8 w-8"
+                                  onDone={fetchData}
+                                />
+                              ) : (
+                                <span className="text-sm text-zinc-500 italic">
+                                  —
+                                </span>
+                              )
                             ) : (
                               <div className="flex items-center gap-2">
                                 <Select

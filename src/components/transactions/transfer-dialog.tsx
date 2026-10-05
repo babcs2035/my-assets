@@ -13,6 +13,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -20,6 +21,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 
 /**
  * 口座選択オプションの型定義である．
@@ -56,6 +58,8 @@ export function TransferDialog({
   const [selectedSubAccountId, setSelectedSubAccountId] = useState<string>("");
   const [selectedMainAccountId, setSelectedMainAccountId] =
     useState<string>("");
+  // これまでは常にルールを作っていたので，初期値はオンにして同じ動作を保つ（TX-3）
+  const [createRule, setCreateRule] = useState(true);
 
   // 親コンポーネントがダイアログを閉じてもマウントを維持するため，
   // 開くたびに選択をリセットする（別取引で開いた際に前の選択が
@@ -65,6 +69,7 @@ export function TransferDialog({
     if (open) {
       setSelectedSubAccountId("");
       setSelectedMainAccountId("");
+      setCreateRule(true);
     }
   }, [open]);
 
@@ -104,10 +109,12 @@ export function TransferDialog({
       await markTransactionAsTransfer({
         transactionId,
         targetSubAccountId: selectedSubAccountId,
-        createRule: true,
+        createRule,
       });
       toast.success("振替扱いに設定しました．", {
-        description: `"${transactionDesc}" が振替明細になり，自動で振替ルールが登録されました．`,
+        description: createRule
+          ? `"${transactionDesc}" が振替明細になり，振替ルールを登録しました．`
+          : `"${transactionDesc}" が振替明細になりました．`,
       });
       onOpenChange(false);
       onDone();
@@ -129,7 +136,7 @@ export function TransferDialog({
             振替扱いに設定
           </DialogTitle>
           <DialogDescription>
-            選択した口座へ振替扱いとして明細を追加します．
+            振替先の子口座にある同じ日付・逆符号・同額の明細と結びます．見つからなければ相手側の明細を追加します．
             <br />
             摘要: {transactionDesc}
           </DialogDescription>
@@ -184,6 +191,26 @@ export function TransferDialog({
                 )}
               </SelectContent>
             </Select>
+          </div>
+
+          {/* 振替ルールの作成 */}
+          <div className="flex items-start justify-between gap-3">
+            <div className="space-y-1">
+              <Label
+                htmlFor="transfer-create-rule"
+                className="text-sm font-medium text-zinc-300"
+              >
+                同じ摘要の振替ルールを作成する
+              </Label>
+              <p className="text-xs text-zinc-500">
+                この摘要の既存の振替ルールは，この振替先のルールに置き換わります．
+              </p>
+            </div>
+            <Switch
+              id="transfer-create-rule"
+              checked={createRule}
+              onCheckedChange={setCreateRule}
+            />
           </div>
         </div>
 

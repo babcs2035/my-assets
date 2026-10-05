@@ -7,6 +7,8 @@ const mocks = vi.hoisted(() => ({
   findFirst: vi.fn(),
   updateMany: vi.fn(),
   create: vi.fn(),
+  findMany: vi.fn(),
+  deleteMany: vi.fn(),
 }));
 
 // 本物の logger は pino-pretty の worker を起動するので，テストでは使わない
@@ -19,6 +21,8 @@ vi.mock("@/lib/prisma", () => {
       findFirst: mocks.findFirst,
       updateMany: mocks.updateMany,
       create: mocks.create,
+      findMany: mocks.findMany,
+      deleteMany: mocks.deleteMany,
     },
   };
   return {
@@ -41,7 +45,10 @@ vi.mock("@/lib/revalidate", () => ({
   revalidateTransactionsPage: vi.fn(),
 }));
 
-import { markTransactionAsTransfer } from "@/actions/transactions";
+import {
+  markTransactionAsTransfer,
+  unmarkTransfer,
+} from "@/actions/transactions";
 
 const SOURCE_ID = "a".repeat(64);
 const TARGET_SUB_ACCOUNT_ID = "sub-target";
@@ -127,5 +134,37 @@ describe("markTransactionAsTransfer", () => {
       }),
     ).rejects.toThrow("別の振替に使われました");
     expect(mocks.create).not.toHaveBeenCalled();
+  });
+});
+
+// 振替を取り消す手段がなかった（TX-3）．アプリが作った明細は消し，同期で取り込んだ明細はフラグだけ戻す
+describe("unmarkTransfer", () => {
+  const TRANSFER_ID = "tf_aaaaaaaa_1";
+  const GENERATED_ID = "123e4567-e89b-42d3-a456-426614174000";
+
+  it("生成した UUID の明細を削除し，同期で取り込んだ明細のフラグとリンクを戻す", async () => {
+    mocks.findUnique.mockResolvedValue({ transferId: TRANSFER_ID });
+    mocks.findMany.mockResolvedValue([{ id: SOURCE_ID }, { id: GENERATED_ID }]);
+
+    await unmarkTransfer(SOURCE_ID);
+
+    expect(mocks.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { transferId: TRANSFER_ID } }),
+    );
+    expect(mocks.deleteMany).toHaveBeenCalledWith({
+      where: { id: { in: [GENERATED_ID] } },
+    });
+    expect(mocks.updateMany).toHaveBeenCalledWith({
+      where: { id: { in: [SOURCE_ID] } },
+      data: { isTransfer: false, transferId: null, linkedTransId: null },
+    });
+  });
+
+  it("transferId のない同期の振替は取り消さない", async () => {
+    mocks.findUnique.mockResolvedValue({ transferId: null });
+
+    await expect(unmarkTransfer(SOURCE_ID)).rejects.toThrow("取り消せません");
+    expect(mocks.deleteMany).not.toHaveBeenCalled();
+    expect(mocks.updateMany).not.toHaveBeenCalled();
   });
 });
