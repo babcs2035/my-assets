@@ -116,7 +116,8 @@ export function AssetsContent({ breakdown }: AssetsContentProps) {
           <CardContent className="pt-5 pb-4">
             <p className="text-sm font-medium text-zinc-400 mb-1">総負債</p>
             <div className="text-3xl font-bold text-red-400 font-mono tracking-tight">
-              {formatCurrency(totalLiabilities)}
+              {/* 負債は負の値で持っているが，グラフや内訳と同じく正の額で見せる */}
+              {formatCurrency(Math.abs(totalLiabilities))}
             </div>
           </CardContent>
         </Card>
