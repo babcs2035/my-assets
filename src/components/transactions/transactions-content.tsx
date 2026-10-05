@@ -66,7 +66,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { formatJSTDate, formatSignedCurrency, nowJST } from "@/lib/utils";
+import { formatCurrency, formatJSTDate, nowJST } from "@/lib/utils";
 
 /**
  * 取引明細の型定義である．
@@ -556,7 +556,7 @@ export function TransactionsContent() {
                                   : "text-red-400"
                             }`}
                           >
-                            {formatSignedCurrency(tx.amount)}
+                            {formatCurrency(tx.amount)}
                           </div>
                         </div>
                       </div>
@@ -743,7 +743,7 @@ export function TransactionsContent() {
                                   : "text-red-400"
                             }`}
                           >
-                            {formatSignedCurrency(tx.amount)}
+                            {formatCurrency(tx.amount)}
                           </TableCell>
                           <TableCell>
                             {tx.isTransfer ? (

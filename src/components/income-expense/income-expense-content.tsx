@@ -25,12 +25,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ChartContainer, ChartTooltip } from "@/components/ui/chart";
 import { MonthNavigator } from "@/components/ui/month-navigator";
 import { formatYAxisCurrency } from "@/lib/chart-format";
-import {
-  formatCurrency,
-  formatJSTDate,
-  formatSignedCurrency,
-  nowJST,
-} from "@/lib/utils";
+import { formatCurrency, formatJSTDate, nowJST } from "@/lib/utils";
 
 type TrendData = Awaited<ReturnType<typeof getMonthlyIncomeExpense>>;
 
@@ -295,7 +290,7 @@ export function IncomeExpenseContent({
                 <div
                   className={`text-2xl font-bold font-mono tracking-tight ${monthlyBalance >= 0 ? "text-emerald-400" : "text-red-400"}`}
                 >
-                  {formatSignedCurrency(monthlyBalance)}
+                  {formatCurrency(monthlyBalance)}
                 </div>
               </CardContent>
             </Card>

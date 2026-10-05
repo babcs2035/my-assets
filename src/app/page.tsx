@@ -27,7 +27,6 @@ import logger from "@/lib/logger";
 import {
   formatCurrency,
   formatJSTDate,
-  formatSignedCurrency,
   shiftUtcDateOnlyByMonths,
 } from "@/lib/utils";
 
@@ -121,9 +120,9 @@ export default async function DashboardPage() {
             </p>
             <div
               className="text-2xl sm:text-3xl font-bold text-zinc-50 font-mono tracking-tight"
-              title={formatSignedCurrency(kpi.netWorth)}
+              title={formatCurrency(kpi.netWorth)}
             >
-              {formatSignedCurrency(kpi.netWorth)}
+              {formatCurrency(kpi.netWorth)}
             </div>
             {/* 前日比 – ガイドブック: 比較対象を提供する
                 （前日の履歴が不完全な場合は dailyChange が null になり「—」表示） */}

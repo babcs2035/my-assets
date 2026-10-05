@@ -10,7 +10,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, formatSignedCurrency } from "@/lib/utils";
 
 type Holding = {
   id: string;
@@ -190,8 +190,7 @@ export function HoldingTable({
             <TableCell
               className={`whitespace-nowrap text-right font-mono ${h.gainLoss >= 0 ? "text-emerald-400" : "text-red-400"}`}
             >
-              {h.gainLoss >= 0 && "+"}
-              {formatCurrency(h.gainLoss)}
+              {formatSignedCurrency(h.gainLoss)}
             </TableCell>
             <TableCell
               className={`whitespace-nowrap text-right font-mono ${h.gainLossRate >= 0 ? "text-emerald-400" : "text-red-400"}`}

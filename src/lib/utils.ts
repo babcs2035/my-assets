@@ -184,28 +184,20 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 /**
- * 金額をフォーマットする関数である．
- * 単位付きの円表記（例: ¥1,234,567）を返す．
+ * 金額を円表記（例: ¥1,234,567，-¥1,234）にする関数である．
+ * 負の数をそのまま `toLocaleString` に渡すと `¥-1,234` になるので，絶対値を整形してから記号を ¥ の前に置く．
+ * `Intl.NumberFormat` の `currency: "JPY"` は全角の「￥」を出すので使わない
  */
 export function formatCurrency(amount: number): string {
-  return `¥${amount.toLocaleString("ja-JP")}`;
-}
-
-/**
- * 金額をフォーマットする関数である．
- * 符号付きの円表記（例: ¥-1,234）を返す．
- */
-export function formatSignedCurrency(amount: number): string {
   const sign = amount < 0 ? "-" : "";
   return `${sign}¥${Math.abs(amount).toLocaleString("ja-JP")}`;
 }
 
 /**
- * 数値に対して正負の記号 (+ / -) を付け，カンマ区切りの文字列に変換する関数である．
+ * 増減を表す金額を，0 以上にも + を付けた円表記（例: +¥1,234，-¥1,234）にする関数である．
  */
-export function formatSignedAmount(amount: number): string {
-  const sign = amount >= 0 ? "+" : "";
-  return `${sign}${new Intl.NumberFormat("ja-JP").format(amount)}`;
+export function formatSignedCurrency(amount: number): string {
+  return amount >= 0 ? `+${formatCurrency(amount)}` : formatCurrency(amount);
 }
 
 /**

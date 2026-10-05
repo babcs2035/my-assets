@@ -13,7 +13,8 @@ describe("formatYAxisCurrency", () => {
   });
 
   it("負の値も絶対値で単位を決める", () => {
-    expect(formatYAxisCurrency(-25_000)).toBe("¥-2.5万");
+    expect(formatYAxisCurrency(-25_000)).toBe("-¥2.5万");
+    expect(formatYAxisCurrency(-1_500)).toBe("-¥1,500");
   });
 
   it("1 万未満はカンマ区切りの整数にする", () => {

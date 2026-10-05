@@ -1,10 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   calculateDayBeforeRatio,
+  formatCurrency,
   formatJSTDate,
   formatJSTDateTime,
   formatPercent,
-  formatSignedAmount,
   formatSignedCurrency,
   nowJST,
   parseJSTDate,
@@ -145,14 +145,16 @@ describe("formatJSTDateTime", () => {
 });
 
 describe("符号付きの数値の整形", () => {
-  it("formatSignedCurrency は負の金額の記号を ¥ の前に置く", () => {
-    expect(formatSignedCurrency(-1234)).toBe("-¥1,234");
-    expect(formatSignedCurrency(1234)).toBe("¥1,234");
+  it("formatCurrency は負の金額の記号を ¥ の前に置く", () => {
+    expect(formatCurrency(-1234)).toBe("-¥1,234");
+    expect(formatCurrency(1234567)).toBe("¥1,234,567");
+    expect(formatCurrency(0)).toBe("¥0");
   });
 
-  it("formatSignedAmount は 0 以上に + を付ける", () => {
-    expect(formatSignedAmount(0)).toBe("+0");
-    expect(formatSignedAmount(-1500)).toBe("-1,500");
+  it("formatSignedCurrency は 0 以上に + を付ける", () => {
+    expect(formatSignedCurrency(1234)).toBe("+¥1,234");
+    expect(formatSignedCurrency(0)).toBe("+¥0");
+    expect(formatSignedCurrency(-1500)).toBe("-¥1,500");
   });
 
   it("formatPercent は比率を百分率にする", () => {
