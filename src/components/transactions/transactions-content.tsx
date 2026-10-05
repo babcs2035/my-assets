@@ -123,7 +123,9 @@ export function TransactionsContent() {
   const [filterOptions, setFilterOptions] = useState<FilterOption[]>([]);
   const [selectedMainAccountId, setSelectedMainAccountId] = useState("all");
   const [selectedSubAccountId, setSelectedSubAccountId] = useState("all");
-  const [isLoading, setIsLoading] = useState(false);
+  // 初期値 false では初回の取得が始まる前に「この月の明細はありません．」が一瞬出る (TX-10)．
+  // マウント時の effect で fetchData が必ず走り finally で false に戻るので，true から始める
+  const [isLoading, setIsLoading] = useState(true);
   const [, startTransition] = useTransition();
   const [sortKey, setSortKey] = useState<SortKey>("date");
   const [sortDir, setSortDir] = useState<SortDirection>("desc");
