@@ -131,11 +131,11 @@ export async function getAccountList() {
             billingDate: true,
             subAccount: { select: { currentName: true, mainAccountId: true } },
           },
-          orderBy: { billingDate: "desc" },
+          orderBy: { billingDate: "asc" },
         })
       : [];
 
-  // billingDate の降順を保ったまま分けるので，口座ごとの並びは口座単位で取得した場合と同じになる
+  // billingDate の昇順を保ったまま分けるので，口座ごとの並びは口座単位で取得した場合と同じになる
   const billingsByMainAccount = new Map<string, typeof billings>();
   for (const b of billings) {
     const list = billingsByMainAccount.get(b.subAccount.mainAccountId);
@@ -158,23 +158,13 @@ export async function getAccountList() {
 
     const accountBillings = billingsByMainAccount.get(account.id);
     if (accountBillings) {
-      const latestBySubAccount = new Map<
-        string,
-        { amount: number; billingDate: Date }
-      >();
-      for (const b of accountBillings) {
-        const key = b.subAccount.currentName;
-        if (!latestBySubAccount.has(key)) {
-          latestBySubAccount.set(key, {
-            amount: b.amount,
-            billingDate: b.billingDate,
-          });
-        }
-      }
-
-      const recentBillings = Array.from(latestBySubAccount.entries()).map(
-        ([subAccountName, data]) => ({ subAccountName, ...data }),
-      );
+      // 子口座ごとに最も先の請求 1 件だけを残すと，翌月分があるカードでは今月分が落ち，
+      // 画面の「今月合計」から抜けていた (ACC-3)．今日以降の請求はすべて返す
+      const recentBillings = accountBillings.map(b => ({
+        subAccountName: b.subAccount.currentName,
+        amount: b.amount,
+        billingDate: b.billingDate,
+      }));
       const totalBilling = recentBillings.reduce((sum, b) => sum + b.amount, 0);
       billingSummary = { totalBilling, recentBillings };
     }
