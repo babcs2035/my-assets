@@ -143,7 +143,7 @@ async function DashboardContent() {
               {formatCurrency(kpi.netWorth)}
             </div>
             {/* 前日比 – ガイドブック: 比較対象を提供する
-                （前日の履歴が不完全な場合は dailyChange が null になり「—」表示） */}
+                （直近 7 日に記録のない表示口座がある場合は dailyChange が null になり「—」表示） */}
             <div className="flex items-center text-sm text-muted-foreground mt-2.5 gap-1.5">
               {kpi.dailyChange === null ? (
                 <>

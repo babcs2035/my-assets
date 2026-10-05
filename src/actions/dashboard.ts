@@ -11,7 +11,6 @@ import {
   shiftUtcDateOnlyByMonths,
   todayJST,
   toUtcDateOnly,
-  yesterdayJST,
 } from "@/lib/utils";
 
 // ── Internal (uncached) implementations ──
@@ -44,14 +43,21 @@ async function getDashboardKPIInternal() {
     byAssetType[sa.assetType] = (byAssetType[sa.assetType] ?? 0) + sa.balance;
   }
 
-  const yesterday = yesterdayJST();
   const today = todayJST();
 
-  const yesterdayHistories = await prisma.balanceHistory.findMany({
+  // 前日比の基準は，口座ごとに「今日より前で最新の記録」とする (DASH-4)．
+  // 昨日の 1 日分だけを見ると，1 口座でも同期に失敗した日に前日比全体が「—」になるため．
+  // 推移グラフ（forwardFillByDate）が欠けた日を直前の残高で埋めるのと同じ考え方にそろえる．
+  // 何週間も前の残高との差は前日比と呼べないので，遡るのは 7 日までにする
+  const baselineLookbackDays = 7;
+  const baselineSince = new Date(today);
+  baselineSince.setUTCDate(baselineSince.getUTCDate() - baselineLookbackDays);
+
+  const recentHistories = await prisma.balanceHistory.findMany({
     where: {
       subAccount: { isHidden: false },
       date: {
-        gte: yesterday,
+        gte: baselineSince,
         lt: today,
       },
     },
@@ -64,10 +70,21 @@ async function getDashboardKPIInternal() {
         },
       },
     },
+    orderBy: { date: "asc" },
   });
 
-  // 全表示口座に前日の履歴が存在する場合のみ前日比を計算する．
-  // 履歴が不完全なまま 0 と比較すると「前日比 +¥8,000,000」のような
+  // 日付の昇順に上書きして，口座ごとに最新の記録だけを残す
+  const latestHistoryBySubAccount = new Map<
+    string,
+    (typeof recentHistories)[number]
+  >();
+  for (const h of recentHistories) {
+    latestHistoryBySubAccount.set(h.subAccountId, h);
+  }
+  const yesterdayHistories = [...latestHistoryBySubAccount.values()];
+
+  // 全表示口座に基準の記録が存在する場合のみ前日比を計算する．
+  // 記録のない口座（追加直後など）を 0 と比較すると「前日比 +¥8,000,000」のような
   // 誤った値が表示されるため，不完全時は null を返す（UI は「—」表示）．
   const visibleIds = new Set(subAccounts.map(sa => sa.id));
   const yesterdayIds = new Set(yesterdayHistories.map(h => h.subAccountId));
