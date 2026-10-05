@@ -6,6 +6,7 @@ import {
   Minus,
 } from "lucide-react";
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import { getCurrentMonthIncomeExpense } from "@/actions/assets";
 import {
   getAssetHistory,
@@ -15,6 +16,7 @@ import {
 import { DashboardAreaWrapper } from "@/components/dashboard/dashboard-area-wrapper";
 import { PageHeader } from "@/components/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
   TableBody,
@@ -48,7 +50,24 @@ export const metadata: Metadata = {
   description: "資産全体の概況と推移を表示するダッシュボード",
 };
 
-export default async function DashboardPage() {
+export default function DashboardPage() {
+  return (
+    <div className="space-y-6 animate-fade-in">
+      <PageHeader title="ダッシュボード" icon={LayoutDashboard} />
+
+      {/* layout で children 全体を Suspense に包むと，その内側で呼ぶ notFound() が
+          HTTP 200 になる（口座詳細の soft 404）．データを待つ部分だけをページ内の Suspense に入れる */}
+      <Suspense fallback={<DashboardSkeleton />}>
+        <DashboardContent />
+      </Suspense>
+    </div>
+  );
+}
+
+/**
+ * ダッシュボードの KPI，推移グラフ，資産構成，ポイント期限を取得して描画する．
+ */
+async function DashboardContent() {
   logger.info("🏠 Rendering DashboardPage...");
 
   const [kpi, history, expiringPoints, monthlyIncomeExpense] =
@@ -107,9 +126,7 @@ export default async function DashboardPage() {
   };
 
   return (
-    <div className="space-y-6 animate-fade-in">
-      <PageHeader title="ダッシュボード" icon={LayoutDashboard} />
-
+    <>
       {/* ── KPI 指標エリア ──────────────────────── */}
       {/* 純資産のみ表示（総資産・総負債は削除） */}
       <div className="grid gap-4">
@@ -428,6 +445,25 @@ export default async function DashboardPage() {
           </CardContent>
         </Card>
       )}
-    </div>
+    </>
+  );
+}
+
+/**
+ * ダッシュボードのスケルトンローディングである．
+ * KPI，今月の収支 3 枚，推移グラフ，資産構成の並びに合わせ，表示時のずれを抑える．
+ */
+function DashboardSkeleton() {
+  return (
+    <>
+      <Skeleton className="h-[118px] w-full" />
+      <div className="grid gap-4 md:grid-cols-3">
+        <Skeleton className="h-[118px] w-full" />
+        <Skeleton className="h-[118px] w-full" />
+        <Skeleton className="h-[118px] w-full" />
+      </div>
+      <Skeleton className="h-[400px] w-full" />
+      <Skeleton className="h-[280px] w-full" />
+    </>
   );
 }
