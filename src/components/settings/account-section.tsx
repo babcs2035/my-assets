@@ -168,7 +168,7 @@ export function AccountSection({
                     </span>
                     <Badge
                       variant="outline"
-                      className="text-xs h-5 px-1.5 text-zinc-500 border-zinc-700 shrink-0"
+                      className="text-xs h-5 px-1.5 text-zinc-400 border-zinc-700 shrink-0"
                     >
                       {getProviderTypeLabel(provider.type)}
                     </Badge>
@@ -284,7 +284,7 @@ export function AccountSection({
                                 <TableCell className="py-2 text-sm whitespace-nowrap">
                                   {ac.label}
                                 </TableCell>
-                                <TableCell className="py-2 text-sm text-zinc-500">
+                                <TableCell className="py-2 text-sm text-zinc-400">
                                   <div className="flex flex-wrap gap-1.5">
                                     {ac.subAccounts.map(sub => (
                                       <Badge
@@ -362,7 +362,7 @@ export function AccountSection({
                       </div>
                     </>
                   ) : (
-                    <div className="py-8 text-center text-xs text-zinc-500">
+                    <div className="py-8 text-center text-xs text-zinc-400">
                       このサービスに関連付けられた口座はありません
                     </div>
                   )}
@@ -371,7 +371,7 @@ export function AccountSection({
             );
           })}
           {providers.length === 0 && (
-            <div className="text-center text-zinc-500 py-4">
+            <div className="text-center text-zinc-400 py-4">
               プロバイダーがありません
             </div>
           )}

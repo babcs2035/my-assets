@@ -213,7 +213,7 @@ export function AssetsContent({ breakdown }: AssetsContentProps) {
                         <span className="font-mono text-sm text-zinc-100 font-medium shrink-0 whitespace-nowrap">
                           {formatCurrency(item.value)}
                         </span>
-                        <span className="font-mono text-xs text-zinc-500 shrink-0">
+                        <span className="font-mono text-xs text-zinc-400 shrink-0">
                           {pct}%
                         </span>
                       </div>
@@ -222,7 +222,7 @@ export function AssetsContent({ breakdown }: AssetsContentProps) {
                 </div>
               </div>
             ) : (
-              <p className="text-sm text-zinc-500 text-center py-4">
+              <p className="text-sm text-zinc-400 text-center py-4">
                 資産データがありません
               </p>
             )}
@@ -304,7 +304,7 @@ export function AssetsContent({ breakdown }: AssetsContentProps) {
                         <span className="font-mono text-sm text-zinc-100 font-medium shrink-0 whitespace-nowrap">
                           {formatCurrency(item.value)}
                         </span>
-                        <span className="font-mono text-xs text-zinc-500 shrink-0">
+                        <span className="font-mono text-xs text-zinc-400 shrink-0">
                           {pct}%
                         </span>
                       </div>
@@ -313,7 +313,7 @@ export function AssetsContent({ breakdown }: AssetsContentProps) {
                 </div>
               </div>
             ) : (
-              <p className="text-sm text-zinc-500 text-center py-4">
+              <p className="text-sm text-zinc-400 text-center py-4">
                 負債データがありません
               </p>
             )}
@@ -360,7 +360,7 @@ export function AssetsContent({ breakdown }: AssetsContentProps) {
                         <TableCell className="whitespace-nowrap font-medium text-zinc-200 truncate max-w-[140px]">
                           {a.name}
                           {a.holdings && a.holdings.length > 0 && (
-                            <span className="whitespace-nowrap text-xs text-zinc-500 ml-1">
+                            <span className="whitespace-nowrap text-xs text-zinc-400 ml-1">
                               ({a.holdings.length}銘柄)
                             </span>
                           )}

@@ -182,7 +182,7 @@ export function SyncStatus() {
     if (status === "aborted") {
       return "border-zinc-700 bg-zinc-800/50 text-zinc-300";
     }
-    return "border-zinc-800 bg-zinc-900/50 text-zinc-500";
+    return "border-zinc-800 bg-zinc-900/50 text-zinc-400";
   };
 
   // サイドバーが閉じられている ( collapsed ) 時の表示内容である．

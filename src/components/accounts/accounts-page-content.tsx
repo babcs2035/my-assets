@@ -59,7 +59,7 @@ export function AccountsPageContent() {
   if (accounts.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-16">
-        <p className="text-sm text-zinc-500">まだ口座が登録されていません</p>
+        <p className="text-sm text-zinc-400">まだ口座が登録されていません</p>
         <p className="text-xs text-zinc-400 mt-2">
           設定ページから口座を追加してください
         </p>

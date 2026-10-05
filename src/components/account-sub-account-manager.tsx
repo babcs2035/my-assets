@@ -130,7 +130,7 @@ export function AccountSubAccountManager({
 
   if (items.length === 0) {
     return (
-      <p className="rounded-lg border border-dashed border-zinc-800 px-4 py-6 text-center text-sm text-zinc-500">
+      <p className="rounded-lg border border-dashed border-zinc-800 px-4 py-6 text-center text-sm text-zinc-400">
         子口座が登録されていません
       </p>
     );

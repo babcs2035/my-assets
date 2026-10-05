@@ -113,7 +113,7 @@ export function DashboardAreaChart({ data }: DashboardAreaChartProps) {
     return (
       <div className="flex flex-col gap-3">
         <UnifiedTimeRangeTabs value={timeRange} onChange={setTimeRange} />
-        <div className="flex h-60 w-full items-center justify-center text-sm text-zinc-500 border border-dashed border-zinc-800 rounded-md">
+        <div className="flex h-60 w-full items-center justify-center text-sm text-zinc-400 border border-dashed border-zinc-800 rounded-md">
           {chartData.length === 0
             ? "表示するデータがありません"
             : chartData.length === 1
@@ -369,7 +369,7 @@ function SeriesLegend({
           className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 transition-colors ${
             visibleSeries[item.key]
               ? "border-zinc-700 bg-zinc-800/60 text-zinc-100"
-              : "border-zinc-800 bg-zinc-900/30 text-zinc-500"
+              : "border-zinc-800 bg-zinc-900/30 text-zinc-400"
           }`}
         >
           <span

@@ -67,7 +67,7 @@ export function NewAccountForm({ providers }: { providers: Provider[] }) {
           <h1 className="text-2xl font-bold tracking-tight text-zinc-100">
             口座を追加
           </h1>
-          <p className="text-sm text-zinc-500">
+          <p className="text-sm text-zinc-400">
             登録済みのプロバイダーから口座を追加します
           </p>
         </div>
@@ -94,13 +94,13 @@ export function NewAccountForm({ providers }: { providers: Provider[] }) {
                       </SelectItem>
                     ))
                   ) : (
-                    <div className="p-2 text-sm text-zinc-500 text-center">
+                    <div className="p-2 text-sm text-zinc-400 text-center">
                       設定画面からプロバイダーを登録してください
                     </div>
                   )}
                 </SelectContent>
               </Select>
-              <p className="text-xs text-zinc-500 mt-1">
+              <p className="text-xs text-zinc-400 mt-1">
                 ※ 新しいプロバイダーは設定画面から追加します
               </p>
             </div>
@@ -112,7 +112,7 @@ export function NewAccountForm({ providers }: { providers: Provider[] }) {
                 value={accountLabel}
                 onChange={e => setAccountLabel(e.target.value)}
               />
-              <p className="text-xs text-zinc-500 mt-1">
+              <p className="text-xs text-zinc-400 mt-1">
                 ※ MoneyForward に表示される金融機関名と一致させてください
               </p>
             </div>

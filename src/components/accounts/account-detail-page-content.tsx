@@ -329,7 +329,7 @@ function AccountDetailContent({
                       <p className="text-base font-bold text-zinc-100 truncate">
                         {c.symbol}
                       </p>
-                      <p className="text-xs text-zinc-500 truncate">{c.name}</p>
+                      <p className="text-xs text-zinc-400 truncate">{c.name}</p>
                     </div>
                     {/* dayBeforeRatio が 0 のときも正しく表示するため null 判定を使う
                         （falsy 判定だと 0% が「N/A」+ 赤字バッジになる） */}
@@ -354,7 +354,7 @@ function AccountDetailContent({
                   </div>
                   <div className="mt-2.5 space-y-1">
                     <div className="flex justify-between text-xs">
-                      <span className="text-zinc-500">数量</span>
+                      <span className="text-zinc-400">数量</span>
                       <span className="font-mono text-zinc-300">
                         {/* 暗号資産の数量は小数点多目が必要なため桁数を拡大する */}
                         {c.quantity.toLocaleString("ja-JP", {
@@ -364,7 +364,7 @@ function AccountDetailContent({
                       </span>
                     </div>
                     <div className="flex justify-between text-xs">
-                      <span className="text-zinc-500">レート</span>
+                      <span className="text-zinc-400">レート</span>
                       <span className="font-mono text-zinc-300">
                         {formatCurrency(c.price)}
                       </span>
@@ -403,20 +403,20 @@ function AccountDetailContent({
                   <CardContent>
                     <div className="space-y-1.5">
                       <div className="flex justify-between text-sm">
-                        <span className="text-zinc-500">ポイント数</span>
+                        <span className="text-zinc-400">ポイント数</span>
                         <span className="font-mono text-zinc-100 font-medium">
                           {sa.pointDetail?.points.toLocaleString("ja-JP")}
                         </span>
                       </div>
                       <div className="flex justify-between text-sm">
-                        <span className="text-zinc-500">換算レート</span>
+                        <span className="text-zinc-400">換算レート</span>
                         <span className="font-mono text-zinc-400">
                           ×{sa.pointDetail?.rate}
                         </span>
                       </div>
                       {sa.pointDetail?.expirationDate && (
                         <div className="flex justify-between text-sm">
-                          <span className="text-zinc-500">有効期限</span>
+                          <span className="text-zinc-400">有効期限</span>
                           <span className="text-zinc-300">
                             {formatJSTDate(sa.pointDetail?.expirationDate)}
                           </span>

@@ -202,7 +202,7 @@ export function TransferDialog({
               >
                 同じ摘要の振替ルールを作成する
               </Label>
-              <p className="text-xs text-zinc-500">
+              <p className="text-xs text-zinc-400">
                 この摘要の既存の振替ルールは，この振替先のルールに置き換わります．
               </p>
             </div>

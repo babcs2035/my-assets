@@ -257,7 +257,7 @@ export function IncomeExpenseContent({
             <Loader2 className="h-8 w-8 animate-spin text-zinc-400" />
           </div>
         ) : totalMonthlyIncome === 0 && totalMonthlyExpense === 0 ? (
-          <div className="flex items-center justify-center py-8 text-sm text-zinc-500 border border-dashed border-zinc-800 rounded-md">
+          <div className="flex items-center justify-center py-8 text-sm text-zinc-400 border border-dashed border-zinc-800 rounded-md">
             この月には取引データがありません
           </div>
         ) : (
@@ -412,7 +412,7 @@ export function IncomeExpenseContent({
                               </span>
                               {item.subCategory && (
                                 <>
-                                  <span className="text-zinc-500"> / </span>
+                                  <span className="text-zinc-400"> / </span>
                                   <span className="text-zinc-300">
                                     {item.subCategory}
                                   </span>
@@ -422,7 +422,7 @@ export function IncomeExpenseContent({
                             <span className="font-mono text-sm text-zinc-100 font-medium shrink-0">
                               {formatCurrency(item.value)}
                             </span>
-                            <span className="font-mono text-xs text-zinc-500 shrink-0">
+                            <span className="font-mono text-xs text-zinc-400 shrink-0">
                               {pct}%
                             </span>
                           </div>
@@ -524,7 +524,7 @@ export function IncomeExpenseContent({
                               </span>
                               {item.subCategory && (
                                 <>
-                                  <span className="text-zinc-500"> / </span>
+                                  <span className="text-zinc-400"> / </span>
                                   <span className="text-zinc-300">
                                     {item.subCategory}
                                   </span>
@@ -534,7 +534,7 @@ export function IncomeExpenseContent({
                             <span className="font-mono text-sm text-zinc-100 font-medium shrink-0">
                               {formatCurrency(item.value)}
                             </span>
-                            <span className="font-mono text-xs text-zinc-500 shrink-0">
+                            <span className="font-mono text-xs text-zinc-400 shrink-0">
                               {pct}%
                             </span>
                           </div>

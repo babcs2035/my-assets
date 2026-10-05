@@ -62,7 +62,7 @@ function CustomTooltip({
 export function AssetChart({ data }: { data: AssetHistoryEntry[] }) {
   if (data.length === 0) {
     return (
-      <div className="flex h-[300px] items-center justify-center text-sm text-zinc-500">
+      <div className="flex h-[300px] items-center justify-center text-sm text-zinc-400">
         推移データがありません
       </div>
     );

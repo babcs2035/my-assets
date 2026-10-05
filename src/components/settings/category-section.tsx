@@ -676,7 +676,7 @@ export function CategorySection({
         </Collapsible>
       ))}
       {cats.length === 0 && (
-        <div className="py-4 text-center text-sm text-zinc-500">
+        <div className="py-4 text-center text-sm text-zinc-400">
           カテゴリーがありません
         </div>
       )}

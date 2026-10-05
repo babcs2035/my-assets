@@ -78,7 +78,7 @@ export function HoldingTrendChart({ holdings }: Props) {
             銘柄推移
           </CardTitle>
         </CardHeader>
-        <CardContent className="flex items-center justify-center h-[250px] text-zinc-500">
+        <CardContent className="flex items-center justify-center h-[250px] text-zinc-400">
           銘柄データがありません
         </CardContent>
       </Card>
@@ -160,7 +160,7 @@ export function HoldingTrendChart({ holdings }: Props) {
             銘柄推移
           </CardTitle>
         </CardHeader>
-        <CardContent className="flex items-center justify-center h-[250px] text-zinc-500">
+        <CardContent className="flex items-center justify-center h-[250px] text-zinc-400">
           選択期間のデータがありません
         </CardContent>
       </Card>

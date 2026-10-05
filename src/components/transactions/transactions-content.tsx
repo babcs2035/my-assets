@@ -484,7 +484,7 @@ export function TransactionsContent() {
               // データがない場合の表示（読み込み中はオーバーレイで覆われるため表示しない）
               <div className="flex flex-col items-center justify-center py-16">
                 <List className="h-10 w-10 text-zinc-600" />
-                <p className="mt-3 text-sm text-zinc-500">
+                <p className="mt-3 text-sm text-zinc-400">
                   {selectedMainAccountId !== "all" ||
                   selectedSubAccountId !== "all" ||
                   selectedDay !== null
@@ -727,7 +727,7 @@ export function TransactionsContent() {
                           </TableCell>
                           <TableCell className="max-w-[300px] truncate text-zinc-200">
                             {tx.isTransfer ? (
-                              <span className="text-sm text-zinc-500 italic">
+                              <span className="text-sm text-zinc-400 italic">
                                 —
                               </span>
                             ) : (
@@ -756,7 +756,7 @@ export function TransactionsContent() {
                                   onDone={fetchData}
                                 />
                               ) : (
-                                <span className="text-sm text-zinc-500 italic">
+                                <span className="text-sm text-zinc-400 italic">
                                   —
                                 </span>
                               )
@@ -835,7 +835,7 @@ export function TransactionsContent() {
                       />
                     </PaginationItem>
                     <PaginationItem>
-                      <span className="text-sm text-zinc-500 mx-2">
+                      <span className="text-sm text-zinc-400 mx-2">
                         {page} / {totalPages} ページ
                       </span>
                     </PaginationItem>

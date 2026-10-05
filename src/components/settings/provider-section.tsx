@@ -419,7 +419,7 @@ export function ProviderSection({
                       <div className="text-sm text-zinc-400 mb-1 truncate">
                         {getProviderTypeLabel(provider.type)}
                       </div>
-                      <div className="text-xs text-zinc-500 mb-3 truncate">
+                      <div className="text-xs text-zinc-400 mb-3 truncate">
                         {isSyncing ? (
                           <span className="flex items-center gap-1 text-blue-400">
                             <Loader2 className="h-3 w-3 animate-spin" />
@@ -523,7 +523,7 @@ export function ProviderSection({
               </div>
             ))}
             {providers.length === 0 && (
-              <div className="p-8 text-center text-zinc-500">
+              <div className="p-8 text-center text-zinc-400">
                 プロバイダーがありません
               </div>
             )}
@@ -592,7 +592,7 @@ export function ProviderSection({
                             </Badge>
                           );
                         }
-                        return <span className="text-xs text-zinc-500">—</span>;
+                        return <span className="text-xs text-zinc-400">—</span>;
                       })()}
                     </TableCell>
                     <TableCell className="text-right">
@@ -683,7 +683,7 @@ export function ProviderSection({
                   <TableRow>
                     <TableCell
                       colSpan={5}
-                      className="h-24 text-center text-zinc-500"
+                      className="h-24 text-center text-zinc-400"
                     >
                       プロバイダーがありません
                     </TableCell>

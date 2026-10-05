@@ -96,7 +96,7 @@ export default async function DashboardPage() {
               ? `${upClass} font-medium`
               : diff < 0
                 ? `${downClass} font-medium`
-                : "text-zinc-500"
+                : "text-zinc-400"
           }
         >
           {formatSignedCurrency(diff)}
@@ -147,7 +147,7 @@ export default async function DashboardPage() {
                         ? "text-emerald-500 font-medium"
                         : kpi.dailyChange < 0
                           ? "text-red-500 font-medium"
-                          : "text-zinc-500"
+                          : "text-zinc-400"
                     }
                   >
                     {formatSignedCurrency(kpi.dailyChange)}

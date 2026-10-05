@@ -143,7 +143,7 @@ const AnalysisContent = () => {
               <CardTitle className="text-base font-medium text-zinc-200">
                 最新の分析結果
               </CardTitle>
-              <div className="flex items-center gap-2 text-xs text-zinc-500">
+              <div className="flex items-center gap-2 text-xs text-zinc-400">
                 {latestResult.status === "COMPLETED" ? (
                   <>
                     <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
@@ -176,7 +176,7 @@ const AnalysisContent = () => {
                 {latestResult.error}
               </div>
             ) : (
-              <div className="flex items-center gap-2 text-sm text-zinc-500">
+              <div className="flex items-center gap-2 text-sm text-zinc-400">
                 <Loader2 className="h-4 w-4 animate-spin" />
                 分析を実行してください...
               </div>
@@ -185,7 +185,7 @@ const AnalysisContent = () => {
               <div className="mt-3 pt-3 border-t border-zinc-800">
                 <button
                   type="button"
-                  className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors flex items-center gap-1"
+                  className="text-xs text-zinc-400 hover:text-zinc-200 transition-colors flex items-center gap-1"
                   onClick={() =>
                     setShowPromptId(prev =>
                       prev === "latest" ? null : "latest",
@@ -222,7 +222,7 @@ const AnalysisContent = () => {
               読み込み中...
             </div>
           ) : history.length === 0 ? (
-            <div className="text-sm text-zinc-500 text-center py-8">
+            <div className="text-sm text-zinc-400 text-center py-8">
               分析履歴はありません．「分析を実行」から初めてください．
             </div>
           ) : (
@@ -253,7 +253,7 @@ const AnalysisContent = () => {
                             <span className="text-sm font-medium text-zinc-200">
                               {formatJSTDateTime(result.analysisDate)}
                             </span>
-                            <span className="block text-xs text-zinc-500 truncate">
+                            <span className="block text-xs text-zinc-400 truncate">
                               {result.content.length}文字
                             </span>
                           </span>
@@ -304,7 +304,7 @@ const AnalysisContent = () => {
                       <div className="px-4 pb-4 border-t border-zinc-800 pt-3">
                         <button
                           type="button"
-                          className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors mb-2 flex items-center gap-1"
+                          className="text-xs text-zinc-400 hover:text-zinc-200 transition-colors mb-2 flex items-center gap-1"
                           onClick={() => handleTogglePrompt(result.id)}
                         >
                           {showPromptId === result.id ? "▼" : "▶"}

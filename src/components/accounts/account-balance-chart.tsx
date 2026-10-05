@@ -79,7 +79,7 @@ export function AccountBalanceChart({
             </div>
           </div>
         </CardHeader>
-        <CardContent className="flex items-center justify-center h-[250px] text-zinc-500">
+        <CardContent className="flex items-center justify-center h-[250px] text-zinc-400">
           —
         </CardContent>
       </Card>

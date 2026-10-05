@@ -175,7 +175,7 @@ export function HoldingTable({
               <TableCell
                 className={`whitespace-nowrap text-right font-mono ${
                   h.dayBeforeRatio == null || h.dayBeforeRatio === 0
-                    ? "text-zinc-500"
+                    ? "text-zinc-400"
                     : h.dayBeforeRatio > 0
                       ? "text-emerald-400"
                       : "text-red-400"

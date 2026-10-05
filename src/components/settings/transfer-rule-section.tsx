@@ -172,7 +172,7 @@ export function TransferRuleSection({
               </div>
             ))}
             {transferRules.length === 0 && (
-              <div className="p-8 text-center text-sm text-zinc-500">
+              <div className="p-8 text-center text-sm text-zinc-400">
                 ルールがありません
               </div>
             )}
@@ -228,7 +228,7 @@ export function TransferRuleSection({
                   <TableRow>
                     <TableCell
                       colSpan={3}
-                      className="h-24 text-center text-zinc-500"
+                      className="h-24 text-center text-zinc-400"
                     >
                       ルールがありません
                     </TableCell>
