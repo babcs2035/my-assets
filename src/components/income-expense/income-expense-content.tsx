@@ -631,7 +631,12 @@ export function IncomeExpenseContent({
                                       String(item.name)}
                                   </span>
                                   <span className="font-mono font-bold text-zinc-100">
-                                    {formatCurrency(Number(item.value ?? 0))}
+                                    {formatCurrency(
+                                      // 支出は棒を下向きに描くため負の値で持っているが，金額は正で見せる
+                                      item.dataKey === "expense"
+                                        ? Math.abs(Number(item.value ?? 0))
+                                        : Number(item.value ?? 0),
+                                    )}
                                   </span>
                                 </div>
                               ))}
@@ -772,7 +777,12 @@ export function IncomeExpenseContent({
                                     String(item.name)}
                                 </span>
                                 <span className="font-mono font-bold text-zinc-100">
-                                  {formatCurrency(Number(item.value ?? 0))}
+                                  {formatCurrency(
+                                    // 支出は棒を下向きに描くため負の値で持っているが，金額は正で見せる
+                                    item.dataKey === "expense"
+                                      ? Math.abs(Number(item.value ?? 0))
+                                      : Number(item.value ?? 0),
+                                  )}
                                 </span>
                               </div>
                             ))}
