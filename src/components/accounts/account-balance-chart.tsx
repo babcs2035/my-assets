@@ -155,7 +155,10 @@ export function AccountBalanceChart({
           </div>
           <div className="flex w-full flex-col gap-3 lg:w-auto">
             <Select value={selectedId} onValueChange={setSelectedId}>
-              <SelectTrigger className="w-full lg:w-[320px]">
+              <SelectTrigger
+                className="w-full lg:w-[320px]"
+                aria-label="表示する子口座"
+              >
                 {selectedSeries ? (
                   <span className="flex items-center gap-2">
                     {selectedSeries.id === "total" ? (

@@ -252,7 +252,10 @@ export function HoldingTrendChart({ holdings, soldHoldings = [] }: Props) {
               value={selectedHoldingId}
               onValueChange={setSelectedHoldingId}
             >
-              <SelectTrigger className="w-full lg:w-[320px]">
+              <SelectTrigger
+                className="w-full lg:w-[320px]"
+                aria-label="表示する銘柄"
+              >
                 <SelectValue placeholder="銘柄を選択" />
               </SelectTrigger>
               <SelectContent>

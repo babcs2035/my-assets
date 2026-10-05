@@ -219,7 +219,10 @@ export function AccountSubAccountManager({
                 handleAssetTypeChange(sa.id, val as AssetType)
               }
             >
-              <SelectTrigger className="h-8 w-[120px] text-xs shrink-0 sm:w-[140px]">
+              <SelectTrigger
+                className="h-8 w-[120px] text-xs shrink-0 sm:w-[140px]"
+                aria-label={`${sa.currentName}の資産区分`}
+              >
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
