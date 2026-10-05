@@ -91,13 +91,20 @@ export function DashboardAreaChart({ data }: DashboardAreaChartProps) {
     [data, timeRange],
   );
 
-  const activeSeries = useMemo(() => {
-    if (chartData.length === 0) return [];
-    return areaSeries.filter(item => {
-      if (!visibleSeries[item.key]) return false;
-      return chartData.some(d => Number(d[item.key] ?? 0) !== 0);
-    });
-  }, [chartData, visibleSeries]);
+  // 期間内がすべて 0 の系列は描画しても線が 0 に張り付くだけなので，凡例ごと無効にする．
+  // 以前は凡例がオンのまま空表示になり「表示する項目を選択してください」と出て，押しても何も変わらなかった (DASH-10)
+  const seriesKeysWithData = useMemo(
+    () =>
+      new Set(
+        areaSeries
+          .filter(item => chartData.some(d => Number(d[item.key] ?? 0) !== 0))
+          .map(item => item.key),
+      ),
+    [chartData],
+  );
+  const activeSeries = areaSeries.filter(
+    item => visibleSeries[item.key] && seriesKeysWithData.has(item.key),
+  );
   const hasVisibleSeries = activeSeries.length > 0;
 
   if (!mounted) {
@@ -121,10 +128,13 @@ export function DashboardAreaChart({ data }: DashboardAreaChartProps) {
               ? `選択した期間のデータがありません（最新: ${data[data.length - 1].date}）`
               : chartData.length === 1
                 ? "データが 1 件のみのため，グラフを描画できません"
-                : "表示する項目を選択してください"}
+                : seriesKeysWithData.size === 0
+                  ? "選択した期間の残高はすべて 0 円です"
+                  : "表示する項目を選択してください"}
         </div>
         <SeriesLegend
           visibleSeries={visibleSeries}
+          seriesKeysWithData={seriesKeysWithData}
           onToggle={key =>
             setVisibleSeries(prev => ({ ...prev, [key]: !prev[key] }))
           }
@@ -345,6 +355,7 @@ export function DashboardAreaChart({ data }: DashboardAreaChartProps) {
       {/* ガイドブック: 凡例をグラフ直下に隣接 */}
       <SeriesLegend
         visibleSeries={visibleSeries}
+        seriesKeysWithData={seriesKeysWithData}
         onToggle={key =>
           setVisibleSeries(prev => ({ ...prev, [key]: !prev[key] }))
         }
@@ -358,35 +369,43 @@ export function DashboardAreaChart({ data }: DashboardAreaChartProps) {
  */
 function SeriesLegend({
   visibleSeries,
+  seriesKeysWithData,
   onToggle,
 }: {
   visibleSeries: Record<(typeof areaSeries)[number]["key"], boolean>;
+  seriesKeysWithData: ReadonlySet<(typeof areaSeries)[number]["key"]>;
   onToggle: (key: (typeof areaSeries)[number]["key"]) => void;
 }) {
   return (
     <div className="flex flex-wrap items-center justify-center gap-2 text-sm text-zinc-300">
-      {areaSeries.map(item => (
-        <button
-          type="button"
-          key={item.key}
-          onClick={() => onToggle(item.key)}
-          aria-pressed={visibleSeries[item.key]}
-          className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 transition-colors pointer-coarse:min-h-11 ${
-            visibleSeries[item.key]
-              ? "border-zinc-700 bg-zinc-800/60 text-zinc-100"
-              : "border-zinc-800 bg-zinc-900/30 text-zinc-400"
-          }`}
-        >
-          <span
-            className="h-2.5 w-2.5 rounded-full"
-            style={{
-              backgroundColor: item.color,
-              opacity: visibleSeries[item.key] ? 1 : 0.35,
-            }}
-          />
-          <span className="whitespace-nowrap">{item.label}</span>
-        </button>
-      ))}
+      {areaSeries.map(item => {
+        const hasData = seriesKeysWithData.has(item.key);
+        const isOn = visibleSeries[item.key] && hasData;
+        return (
+          <button
+            type="button"
+            key={item.key}
+            onClick={() => onToggle(item.key)}
+            disabled={!hasData}
+            aria-pressed={isOn}
+            title={hasData ? undefined : "この期間のデータはありません"}
+            className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 transition-colors pointer-coarse:min-h-11 disabled:cursor-not-allowed disabled:line-through ${
+              isOn
+                ? "border-zinc-700 bg-zinc-800/60 text-zinc-100"
+                : "border-zinc-800 bg-zinc-900/30 text-zinc-400"
+            }`}
+          >
+            <span
+              className="h-2.5 w-2.5 rounded-full"
+              style={{
+                backgroundColor: item.color,
+                opacity: isOn ? 1 : 0.35,
+              }}
+            />
+            <span className="whitespace-nowrap">{item.label}</span>
+          </button>
+        );
+      })}
     </div>
   );
 }
