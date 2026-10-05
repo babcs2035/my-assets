@@ -206,25 +206,29 @@ export function CalendarGrid({
                   {cell.day}
                 </span>
 
-                {/* 支出ヒートマップ（金額表示） */}
-                {cell.isCurrentMonth && data && data.expense > 0 && (
-                  <div className="flex w-full flex-col items-end gap-0.5 min-w-0 mt-0.5">
-                    <span
-                      className="font-mono text-[10px] sm:text-sm font-bold truncate w-full text-right text-red-400"
-                      title={`支出: ¥${data.expense.toLocaleString("ja-JP")}`}
-                    >
-                      -{formatCompactAmount(data.expense)}
-                    </span>
-                    {data.income > 0 && (
-                      <span
-                        className="text-emerald-400 text-[10px] sm:text-sm font-mono font-semibold truncate w-full text-right"
-                        title={`収入: ¥${data.income.toLocaleString("ja-JP")}`}
-                      >
-                        +{formatCompactAmount(data.income)}
-                      </span>
-                    )}
-                  </div>
-                )}
+                {/* 金額表示．支出のない日も収入は出す（支出の有無で全体を隠すと，収入だけの日が空欄になった (TX-6)） */}
+                {cell.isCurrentMonth &&
+                  data &&
+                  (data.expense > 0 || data.income > 0) && (
+                    <div className="flex w-full flex-col items-end gap-0.5 min-w-0 mt-0.5">
+                      {data.expense > 0 && (
+                        <span
+                          className="font-mono text-[10px] sm:text-sm font-bold truncate w-full text-right text-red-400"
+                          title={`支出: ¥${data.expense.toLocaleString("ja-JP")}`}
+                        >
+                          -{formatCompactAmount(data.expense)}
+                        </span>
+                      )}
+                      {data.income > 0 && (
+                        <span
+                          className="text-emerald-400 text-[10px] sm:text-sm font-mono font-semibold truncate w-full text-right"
+                          title={`収入: ¥${data.income.toLocaleString("ja-JP")}`}
+                        >
+                          +{formatCompactAmount(data.income)}
+                        </span>
+                      )}
+                    </div>
+                  )}
               </button>
             );
           })}
