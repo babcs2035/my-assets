@@ -19,6 +19,7 @@ import {
   getIncomeExpenseTrend,
   getMonthlyIncomeExpense,
 } from "@/actions/income-expense";
+import { ChartLegendContent } from "@/components/charts/chart-legend-content";
 import { CashflowSankey } from "@/components/income-expense/cashflow-sankey";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -646,6 +647,7 @@ export function IncomeExpenseContent({
                       }}
                     />
                     <Legend
+                      content={ChartLegendContent}
                       formatter={value => {
                         const labels: Record<string, string> = {
                           income: "収入",
@@ -792,6 +794,7 @@ export function IncomeExpenseContent({
                     }}
                   />
                   <Legend
+                    content={ChartLegendContent}
                     formatter={value => {
                       const labels: Record<string, string> = {
                         income: "収入",

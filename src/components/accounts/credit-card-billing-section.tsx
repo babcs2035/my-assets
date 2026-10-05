@@ -10,6 +10,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import { ChartLegendContent } from "@/components/charts/chart-legend-content";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatYAxisCurrency } from "@/lib/chart-format";
 import { formatCurrency, formatJSTDate } from "@/lib/utils";
@@ -140,6 +141,7 @@ export function CreditCardBillingSection({
               }}
             />
             <Legend
+              content={ChartLegendContent}
               formatter={value => value}
               wrapperStyle={{
                 fontSize: "var(--font-size-chart)",

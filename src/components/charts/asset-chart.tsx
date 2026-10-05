@@ -10,6 +10,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import { ChartLegendContent } from "@/components/charts/chart-legend-content";
 import { formatYAxisCurrency, getNiceChartDomain } from "@/lib/chart-format";
 import { assetTypeColor, assetTypeLabel, formatCurrency } from "@/lib/utils";
 
@@ -117,6 +118,7 @@ export function AssetChart({ data }: { data: AssetHistoryEntry[] }) {
         />
         <Tooltip content={<CustomTooltip />} />
         <Legend
+          content={ChartLegendContent}
           verticalAlign="bottom"
           wrapperStyle={{
             paddingTop: "12px",
