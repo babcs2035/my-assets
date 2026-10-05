@@ -131,7 +131,7 @@ export function IncomeExpenseContent({
     } catch {
       if (requestId !== trendRequestIdRef.current) return;
       setTrendData([]);
-      setTrendError("収支データの取得に失敗しました．");
+      setTrendError("月別収支推移の取得に失敗しました．");
     }
   }, [year]);
 
@@ -142,8 +142,6 @@ export function IncomeExpenseContent({
   useEffect(() => {
     void fetchTrend();
   }, [fetchTrend]);
-
-  const fetchError = error ?? trendError;
 
   useEffect(() => {
     void fetchAnnual();
@@ -238,16 +236,15 @@ export function IncomeExpenseContent({
           }}
         />
 
-        {fetchError ? (
+        {/* 推移・年間の失敗はそれぞれの場所に出し，取得できた KPI を隠さない */}
+        {error ? (
           <div className="flex flex-col items-center gap-3 py-8 border border-red-900/40 bg-red-950/20 rounded-lg">
-            <p className="text-sm text-red-400">{fetchError}</p>
+            <p className="text-sm text-red-400">{error}</p>
             <Button
               variant="outline"
               size="sm"
               onClick={() => {
                 void fetchMonthly();
-                void fetchTrend();
-                void fetchAnnual();
               }}
             >
               再試行
@@ -308,19 +305,22 @@ export function IncomeExpenseContent({
             : "transition-opacity"
         }
       >
-        {/* キャッシュフロー可視化（Sankey ダイアグラム・3 カラム構成） */}
-        {monthlyData && monthlyData.expenseByCategory.length > 0 && (
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base font-medium text-zinc-200">
-                キャッシュフロー
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <CashflowSankey data={monthlyData} />
-            </CardContent>
-          </Card>
-        )}
+        {/* キャッシュフロー可視化（Sankey ダイアグラム・3 カラム構成）
+            CashflowSankey は収入と支出の両方がないと何も描画しないため，同じ条件で出し分けて空のカードを出さない */}
+        {monthlyData &&
+          monthlyData.incomeByCategory.length > 0 &&
+          monthlyData.expenseByCategory.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base font-medium text-zinc-200">
+                  キャッシュフロー
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <CashflowSankey data={monthlyData} />
+              </CardContent>
+            </Card>
+          )}
 
         {/* カテゴリ別内訳（円グラフ） */}
         {(incomePieData.length > 0 || expensePieData.length > 0) && (
@@ -550,7 +550,21 @@ export function IncomeExpenseContent({
         )}
 
         {/* 月別収支推移（棒グラフ＋折れ線グラフ） */}
-        {monthlyTrend.length > 0 && (
+        {trendError && (
+          <div className="flex flex-col items-center gap-3 py-8 border border-red-900/40 bg-red-950/20 rounded-lg">
+            <p className="text-sm text-red-400">{trendError}</p>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                void fetchTrend();
+              }}
+            >
+              再試行
+            </Button>
+          </div>
+        )}
+        {!trendError && monthlyTrend.length > 0 && (
           <Card>
             <CardHeader>
               <CardTitle className="text-base font-medium text-zinc-200">
