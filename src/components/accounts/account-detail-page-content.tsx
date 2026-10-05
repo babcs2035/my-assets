@@ -217,7 +217,7 @@ function AccountDetailContent({
         />
       </div>
 
-      {/* クレジットカード請求履歴 */}
+      {/* クレジットカード請求予定 */}
       {billings.length > 0 && <CreditCardBillingSection billings={billings} />}
 
       {/* 子口座一覧 */}

@@ -29,14 +29,15 @@ type BillingRecord = {
   };
 };
 
-// 積み上げ棒のカラーパレット（2 色交互だと 3 枚以上のカードで色が重複するため）
+// 積み上げ棒のカラーパレット（2 色交互だと 3 枚以上のカードで色が重複するため）．
+// 赤〜黄の同系色だと隣り合うカードの境目が見分けられなかったので，色相を離す (ACC-16)
 const BILLING_BAR_COLORS = [
   "#ef4444",
-  "#f97316",
+  "#3b82f6",
   "#f59e0b",
-  "#eab308",
-  "#f43f5e",
-  "#fb7185",
+  "#8b5cf6",
+  "#10b981",
+  "#ec4899",
 ];
 
 /**
@@ -91,8 +92,9 @@ export function CreditCardBillingSection({
   return (
     <Card>
       <CardHeader className="pb-2">
+        {/* getCreditCardBillings は請求日が今日以降のものしか返さないので「履歴」ではなく「予定」と示す (ACC-15) */}
         <CardTitle className="text-base font-medium text-zinc-200">
-          クレジットカード請求履歴
+          クレジットカード請求予定
         </CardTitle>
       </CardHeader>
       <CardContent className="h-[360px] w-full p-0 pb-4 pr-4">
