@@ -71,11 +71,31 @@ export async function createProvider(input: ProviderCreateInput) {
 }
 
 /**
- * 指定されたプロバイダーを削除する関数である．
+ * 指定されたプロバイダーを，配下の口座とそれに属する残高履歴・明細・保有資産・暗号資産・ポイント・振替ルールごと削除する関数である．
+ * 同期中のプロバイダーは削除しない．
  */
 export async function deleteProvider(id: string) {
   logger.info(`🗑️ Deleting provider: ${id}`);
   await prisma.$transaction(async tx => {
+    // 同期が書き込んでいる最中の口座を消すことになるので，同期中は止める（SET-4）．
+    // 画面の「同期中」の表示と同じく，sync-lock の期限内のロックを同期中とみなす
+    const provider = await tx.provider.findUnique({
+      where: { id },
+      select: { lastSyncAt: true, lastSyncSuccess: true },
+    });
+    if (!provider) {
+      throw new Error("プロバイダーが見つかりません．");
+    }
+    if (
+      provider.lastSyncSuccess === null &&
+      provider.lastSyncAt !== null &&
+      provider.lastSyncAt >= syncLockStaleBefore()
+    ) {
+      throw new Error(
+        "同期中のプロバイダーは削除できません．同期の完了か中止を待ってから削除してください．",
+      );
+    }
+
     const mainAccounts = await tx.mainAccount.findMany({
       where: { providerId: id },
       select: { id: true },

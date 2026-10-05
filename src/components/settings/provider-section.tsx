@@ -159,8 +159,13 @@ export function ProviderSection({
       await deleteProvider(id);
       toast.success(`プロバイダー「${name}」を削除しました．`);
       onChanged();
-    } catch {
-      toast.error("プロバイダーの削除に失敗しました．");
+    } catch (err) {
+      // 同期中で止めた場合は，その理由をそのまま伝える
+      toast.error(
+        err instanceof Error
+          ? err.message
+          : "プロバイダーの削除に失敗しました．",
+      );
     }
   };
 
@@ -497,6 +502,7 @@ export function ProviderSection({
                               variant="ghost"
                               size="sm"
                               className="h-8 text-zinc-500 hover:text-red-400"
+                              disabled={isProviderSyncing(provider)}
                             >
                               <Trash2 className="mr-2 h-3.5 w-3.5" />
                               削除
@@ -508,7 +514,7 @@ export function ProviderSection({
                         >
                           プロバイダー「{provider.name}
                           」を削除しますか？
-                          関連する口座データも削除される可能性があります．
+                          配下のすべての口座と，その残高履歴・明細・保有資産・暗号資産・ポイント，それらの口座を振替先にした振替ルールも削除されます．元に戻せません．
                         </DeleteConfirmDialog>
                       </div>
                     </>
@@ -656,6 +662,7 @@ export function ProviderSection({
                               size="icon"
                               className="text-zinc-400 hover:text-red-400"
                               aria-label={`プロバイダー「${provider.name}」を削除`}
+                              disabled={isProviderSyncing(provider)}
                             >
                               <Trash2 className="h-4 w-4" />
                             </Button>
@@ -666,7 +673,7 @@ export function ProviderSection({
                         >
                           プロバイダー「{provider.name}
                           」を削除しますか？
-                          関連する口座データも削除される可能性があります．
+                          配下のすべての口座と，その残高履歴・明細・保有資産・暗号資産・ポイント，それらの口座を振替先にした振替ルールも削除されます．元に戻せません．
                         </DeleteConfirmDialog>
                       </div>
                     </TableCell>

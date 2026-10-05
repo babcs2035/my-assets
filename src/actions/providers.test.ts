@@ -9,15 +9,28 @@ const mocks = vi.hoisted(() => ({
   abortMfScraper: vi.fn(),
   acquireSyncLock: vi.fn(),
   releaseSyncLock: vi.fn(),
+  providerDelete: vi.fn(),
 }));
 
 // 本物の logger は pino-pretty の worker を起動するので，テストでは使わない
 vi.mock("@/lib/logger", () => ({
   default: { info: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
-vi.mock("@/lib/prisma", () => ({
-  prisma: { provider: { findUnique: mocks.findUnique } },
-}));
+vi.mock("@/lib/prisma", () => {
+  // deleteProvider のテストでは配下の口座がない Provider を消すので，口座の取得は空を返す
+  const txClient = {
+    provider: { findUnique: mocks.findUnique, delete: mocks.providerDelete },
+    mainAccount: { findMany: vi.fn(async () => []) },
+  };
+  return {
+    prisma: {
+      provider: { findUnique: mocks.findUnique },
+      $transaction: vi.fn(async (callback: (tx: unknown) => unknown) =>
+        callback(txClient),
+      ),
+    },
+  };
+});
 // revalidatePath は request の外では呼べないので，呼ばれないようにする
 vi.mock("@/lib/revalidate", () => ({
   revalidateSettingsAndDashboardPages: vi.fn(),
@@ -162,5 +175,40 @@ describe("syncProvider", () => {
       ),
     );
     expect(await getManualSyncResult(PROVIDER_ID, lockedAt)).toBe("failed");
+  });
+});
+
+// 同期が書き込んでいる最中の口座を消さないよう，同期中のプロバイダーは削除しない（SET-4）
+describe("deleteProvider", () => {
+  it("期限内のロックがある同期中のプロバイダーは削除しない", async () => {
+    providerRow = { lastSyncAt: new Date(), lastSyncSuccess: null };
+    const { deleteProvider } = await importProviderActions();
+
+    await expect(deleteProvider(PROVIDER_ID)).rejects.toThrow(
+      "同期中のプロバイダーは削除できません",
+    );
+    expect(mocks.providerDelete).not.toHaveBeenCalled();
+  });
+
+  it("同期中でなければ削除する", async () => {
+    const { deleteProvider } = await importProviderActions();
+
+    await deleteProvider(PROVIDER_ID);
+
+    expect(mocks.providerDelete).toHaveBeenCalledWith({
+      where: { id: PROVIDER_ID },
+    });
+  });
+
+  it("期限切れのロックは，落ちた同期の残りとみなして削除する", async () => {
+    providerRow = {
+      lastSyncAt: new Date(Date.now() - 4 * 60 * 60 * 1000),
+      lastSyncSuccess: null,
+    };
+    const { deleteProvider } = await importProviderActions();
+
+    await deleteProvider(PROVIDER_ID);
+
+    expect(mocks.providerDelete).toHaveBeenCalledTimes(1);
   });
 });
