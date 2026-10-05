@@ -26,7 +26,12 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ChartContainer, ChartTooltip } from "@/components/ui/chart";
 import { MonthNavigator } from "@/components/ui/month-navigator";
 import { formatYAxisCurrency } from "@/lib/chart-format";
-import { formatCurrency, formatJSTDate, nowJST } from "@/lib/utils";
+import {
+  formatCurrency,
+  formatJSTDate,
+  INCOME_EXPENSE_AGGREGATION_START_DATE,
+  nowJST,
+} from "@/lib/utils";
 
 type TrendData = Awaited<ReturnType<typeof getMonthlyIncomeExpense>>;
 
@@ -232,6 +237,9 @@ export function IncomeExpenseContent({
         <MonthNavigator
           year={year}
           month={month}
+          // 年間推移・月別推移は集計開始日以降しか数えないため，それより前の月を選べると
+          // KPI だけ出て推移に年がない食い違いになる (IE-8)
+          minDate={INCOME_EXPENSE_AGGREGATION_START_DATE}
           onMonthChange={(newYear, newMonth) => {
             setYear(newYear);
             setMonth(newMonth);

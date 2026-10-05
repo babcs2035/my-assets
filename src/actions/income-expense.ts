@@ -2,14 +2,10 @@
 
 import logger from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
-import { toUtcDateOnly } from "@/lib/utils";
-
-/**
- * 入出金集計（推移・年別）の対象とする明細の開始日である．
- * バックフィル開始日 (BACKFILL_START_DATE: 2023-01-01) とは別に，
- * 集計対象を 2024 年以降に絞るための意図的なデータ起点である．
- */
-const INCOME_EXPENSE_AGGREGATION_START_DATE = "2024-01-01";
+import {
+  INCOME_EXPENSE_AGGREGATION_START_DATE,
+  toUtcDateOnly,
+} from "@/lib/utils";
 
 /**
  * 指定された年月の収入・支出・収支をカテゴリ別を取得する。

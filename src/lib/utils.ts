@@ -9,6 +9,14 @@ import { twMerge } from "tailwind-merge";
 export const BACKFILL_START_DATE = "2023-01-01";
 
 /**
+ * 入出金集計（推移・年別）の対象とする明細の開始日である．
+ * バックフィル開始日とは別に，集計対象を 2024 年以降に絞るための意図的なデータ起点である．
+ * 収支ページの年月ナビゲーターの下限もこれに揃えるため，"use server" の action
+ * （async 関数しか export できない）ではなくここで共有する．
+ */
+export const INCOME_EXPENSE_AGGREGATION_START_DATE = "2024-01-01";
+
+/**
  * JST の時刻要素を UTC 値を持つ Date に変換するヘルパーである．
  * `Date.UTC(year, month-1, day, hour-9, minute, second)` を計算し，
  * JST の (y,M,d,h,m,s) が表す瞬間の UTC 値を持つ Date を返す．

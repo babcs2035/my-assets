@@ -20,6 +20,8 @@ interface MonthNavigatorProps {
   month: number;
   onMonthChange: (year: number, month: number) => void;
   onThisMonth: () => void;
+  // 移動できる最初の月の 1 日 (YYYY-MM-DD)．集計の起点が後ろの画面だけ指定する
+  minDate?: string;
   buttonSize?: "icon" | "icon-sm" | "sm" | "default" | "lg" | null | undefined;
   buttonVariant?:
     | "outline"
@@ -36,17 +38,18 @@ export function MonthNavigator({
   month,
   onMonthChange,
   onThisMonth,
+  minDate = BACKFILL_START_DATE,
   buttonSize = "icon",
   buttonVariant = "outline",
 }: MonthNavigatorProps) {
-  // 移動できるのはバックフィル開始月から JST の今月までに限る．
+  // 移動できるのは minDate の月 (既定はバックフィル開始月) から JST の今月までに限る．
   // 制限がないと，前月で開始年より前に出て年の欄が空になり，データのない未来の月にも進めた (TX-8)．
   // 現在の年月は JST で決める（ローカル TZ の getFullYear では JST 日付境界でずれる）
   const nowKey = formatJSTDate(nowJST());
   const maxYear = Number(nowKey.slice(0, 4));
   const maxMonth = Number(nowKey.slice(5, 7));
-  const minYear = Number(BACKFILL_START_DATE.slice(0, 4));
-  const minMonth = Number(BACKFILL_START_DATE.slice(5, 7));
+  const minYear = Number(minDate.slice(0, 4));
+  const minMonth = Number(minDate.slice(5, 7));
   // 年月を通し番号にして，範囲の判定と月の繰り上がりを 1 つの比較で扱う
   const toMonthIndex = (y: number, m: number) => y * 12 + (m - 1);
   const minIndex = toMonthIndex(minYear, minMonth);
