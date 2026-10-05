@@ -20,7 +20,6 @@ interface MonthNavigatorProps {
   month: number;
   onMonthChange: (year: number, month: number) => void;
   onThisMonth: () => void;
-  maxYear?: number;
   buttonSize?: "icon" | "icon-sm" | "sm" | "default" | "lg" | null | undefined;
   buttonVariant?:
     | "outline"
@@ -37,30 +36,32 @@ export function MonthNavigator({
   month,
   onMonthChange,
   onThisMonth,
-  maxYear,
   buttonSize = "icon",
   buttonVariant = "outline",
 }: MonthNavigatorProps) {
-  // JST 基準の現在年（ローカル TZ の getFullYear では JST 日付境界でずれる）
-  const nowYear = maxYear ?? Number(formatJSTDate(nowJST()).slice(0, 4));
-  // 年の下限はバックフィル開始年のみ（+2 の長式は現在年+1 を選択肢に含める既存挙動）
+  // 移動できるのはバックフィル開始月から JST の今月までに限る．
+  // 制限がないと，前月で開始年より前に出て年の欄が空になり，データのない未来の月にも進めた (TX-8)．
+  // 現在の年月は JST で決める（ローカル TZ の getFullYear では JST 日付境界でずれる）
+  const nowKey = formatJSTDate(nowJST());
+  const maxYear = Number(nowKey.slice(0, 4));
+  const maxMonth = Number(nowKey.slice(5, 7));
   const minYear = Number(BACKFILL_START_DATE.slice(0, 4));
+  const minMonth = Number(BACKFILL_START_DATE.slice(5, 7));
+  // 年月を通し番号にして，範囲の判定と月の繰り上がりを 1 つの比較で扱う
+  const toMonthIndex = (y: number, m: number) => y * 12 + (m - 1);
+  const minIndex = toMonthIndex(minYear, minMonth);
+  const maxIndex = toMonthIndex(maxYear, maxMonth);
+  const currentIndex = toMonthIndex(year, month);
   const yearOptions = Array.from(
-    { length: nowYear - minYear + 2 },
+    { length: maxYear - minYear + 1 },
     (_, i) => minYear + i,
   );
 
-  const changeMonth = (direction: -1 | 1) => {
-    let newYear = year;
-    let newMonth = month + direction;
-    if (newMonth < 1) {
-      newMonth = 12;
-      newYear--;
-    } else if (newMonth > 12) {
-      newMonth = 1;
-      newYear++;
-    }
-    onMonthChange(newYear, newMonth);
+  // 範囲の外になる年月は端の月に寄せてから親に渡す
+  // （例: 2025 年 12 月から年だけ今年に変えると，今月より先になる）
+  const changeToClampedMonth = (y: number, m: number) => {
+    const index = Math.min(Math.max(toMonthIndex(y, m), minIndex), maxIndex);
+    onMonthChange(Math.floor(index / 12), (index % 12) + 1);
   };
 
   return (
@@ -70,7 +71,8 @@ export function MonthNavigator({
         variant={buttonVariant}
         size={buttonSize}
         className="h-8 w-8"
-        onClick={() => changeMonth(-1)}
+        onClick={() => changeToClampedMonth(year, month - 1)}
+        disabled={currentIndex <= minIndex}
         aria-label="前月"
       >
         <ChevronLeft className="h-4 w-4" />
@@ -78,7 +80,7 @@ export function MonthNavigator({
       <div className="flex items-center gap-2">
         <Select
           value={String(year)}
-          onValueChange={v => onMonthChange(Number(v), month)}
+          onValueChange={v => changeToClampedMonth(Number(v), month)}
         >
           <SelectTrigger size="sm" className="h-9 w-24 sm:w-32" aria-label="年">
             <SelectValue />
@@ -93,14 +95,21 @@ export function MonthNavigator({
         </Select>
         <Select
           value={String(month)}
-          onValueChange={v => onMonthChange(year, Number(v))}
+          onValueChange={v => changeToClampedMonth(year, Number(v))}
         >
           <SelectTrigger size="sm" className="h-9 w-16 sm:w-20" aria-label="月">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
             {Array.from({ length: 12 }, (_, i) => i + 1).map(m => (
-              <SelectItem key={m} value={String(m)}>
+              <SelectItem
+                key={m}
+                value={String(m)}
+                disabled={
+                  toMonthIndex(year, m) < minIndex ||
+                  toMonthIndex(year, m) > maxIndex
+                }
+              >
                 {m}月
               </SelectItem>
             ))}
@@ -112,7 +121,8 @@ export function MonthNavigator({
         variant={buttonVariant}
         size={buttonSize}
         className="h-8 w-8"
-        onClick={() => changeMonth(1)}
+        onClick={() => changeToClampedMonth(year, month + 1)}
+        disabled={currentIndex >= maxIndex}
         aria-label="次月"
       >
         <ChevronRight className="h-4 w-4" />
