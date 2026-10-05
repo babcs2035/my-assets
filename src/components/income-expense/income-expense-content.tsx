@@ -270,8 +270,9 @@ export function IncomeExpenseContent({
           <div className="grid gap-3 md:grid-cols-3">
             <Card>
               <CardContent className="pt-3 pb-2">
+                {/* 過去の月を選んでも「当月」と出ていたため，表示中の月を明示する (IE-9) */}
                 <p className="text-xs font-medium text-zinc-400 mb-0.5">
-                  当月収入
+                  {Number(month)}月の収入
                 </p>
                 <div className="text-2xl font-bold text-emerald-400 font-mono tracking-tight">
                   {formatCurrency(totalMonthlyIncome)}
@@ -281,7 +282,7 @@ export function IncomeExpenseContent({
             <Card>
               <CardContent className="pt-3 pb-2">
                 <p className="text-xs font-medium text-zinc-400 mb-0.5">
-                  当月支出
+                  {Number(month)}月の支出
                 </p>
                 <div className="text-2xl font-bold text-red-400 font-mono tracking-tight">
                   {formatCurrency(totalMonthlyExpense)}
@@ -291,7 +292,7 @@ export function IncomeExpenseContent({
             <Card>
               <CardContent className="pt-3 pb-2">
                 <p className="text-xs font-medium text-zinc-400 mb-0.5">
-                  当月収支
+                  {Number(month)}月の収支
                 </p>
                 <div
                   className={`text-2xl font-bold font-mono tracking-tight ${monthlyBalance >= 0 ? "text-emerald-400" : "text-red-400"}`}
