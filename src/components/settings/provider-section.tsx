@@ -298,7 +298,8 @@ export function ProviderSection({
       <CardContent className="relative space-y-4">
         {isLoading && (
           <div className="absolute inset-0 z-10 flex items-center justify-center rounded-lg backdrop-blur-sm">
-            <div className="flex flex-col items-center gap-2">
+            {/* スピナーだけでは読み込み中であることが読み上げで伝わらない (UI-7) */}
+            <div role="status" className="flex flex-col items-center gap-2">
               <Loader2 className="h-8 w-8 animate-spin text-primary" />
               <span className="text-sm text-muted-foreground">
                 読み込み中...
