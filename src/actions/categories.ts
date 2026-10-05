@@ -406,7 +406,7 @@ export async function exportCategories() {
 /**
  * カテゴリー・ルールデータを JSON からインポートする関数である．
  * 既存の MainCategory，SubCategoryItem，CategoryRule を全削除後，インポートデータで上書きする．
- * Transaction の subCategoryId は保持される．
+ * 明細の分類は，種別・メインカテゴリー名・サブカテゴリー名が同じサブカテゴリーがインポート後にもあれば付け直し，なければ未分類になる．
  */
 export async function importCategories(data: unknown) {
   const parsed = categoryImportSchema.parse(data);
@@ -419,6 +419,18 @@ export async function importCategories(data: unknown) {
   // 同名の重複があり unique 制約に違反）削除は確定したまま作成だけロールバックし，
   // 全カテゴリー・ルールが失われるため，原子性を保つ．
   await prisma.$transaction(async tx => {
+    // 以前は削除で明細の分類がすべて外れ，エクスポートにも明細の分類は含まれないので戻せなかった（SET-5）．
+    // サブカテゴリーの ID は作り直すと変わるので，名前の組で控えておき，作り直した後に付け直す
+    const categoryKey = (type: string, mainName: string, subName: string) =>
+      `${type}\u0000${mainName}\u0000${subName}`;
+    const previousSubCategories = await tx.subCategoryItem.findMany({
+      select: {
+        name: true,
+        mainCategory: { select: { name: true, type: true } },
+        transactions: { select: { id: true } },
+      },
+    });
+
     // 既存データを全削除（Transaction は保持）
     // Transaction.subCategory の外部キーは ON DELETE SET NULL だが，
     // deleteMainCategory / deleteSubCategory と同じく参照を先に明示的に null 化する．
@@ -457,6 +469,33 @@ export async function importCategories(data: unknown) {
       });
     });
     await Promise.all(createPromises);
+
+    const createdSubCategories = await tx.subCategoryItem.findMany({
+      select: {
+        id: true,
+        name: true,
+        mainCategory: { select: { name: true, type: true } },
+      },
+    });
+    const createdIdByKey = new Map(
+      createdSubCategories.map(sc => [
+        categoryKey(sc.mainCategory.type, sc.mainCategory.name, sc.name),
+        sc.id,
+      ]),
+    );
+    let restoredCount = 0;
+    for (const sc of previousSubCategories) {
+      const newId = createdIdByKey.get(
+        categoryKey(sc.mainCategory.type, sc.mainCategory.name, sc.name),
+      );
+      if (!newId || sc.transactions.length === 0) continue;
+      const { count } = await tx.transaction.updateMany({
+        where: { id: { in: sc.transactions.map(t => t.id) } },
+        data: { subCategoryId: newId },
+      });
+      restoredCount += count;
+    }
+    logger.info(`Restored categories of ${restoredCount} transactions.`);
   });
 
   revalidateSettingsAndTransactionPages();

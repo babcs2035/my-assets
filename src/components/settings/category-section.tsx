@@ -738,8 +738,8 @@ export function CategorySection({
               <AlertDialogHeader>
                 <AlertDialogTitle>インポートの確認</AlertDialogTitle>
                 <AlertDialogDescription>
-                  インポートすると，既存のカテゴリー・ルールがすべて削除され，
-                  すべての明細のカテゴリー関連付けが解除されます．
+                  インポートすると，既存のカテゴリー・ルールはすべてファイルの内容に置き換わります．
+                  明細の分類は，種別・メインカテゴリー名・サブカテゴリー名が同じサブカテゴリーがファイルにあれば引き継ぎ，なければ未分類になります．
                   <br />
                   引き続きインポートしますか？
                 </AlertDialogDescription>
