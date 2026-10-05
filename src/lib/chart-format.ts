@@ -20,10 +20,13 @@ export function formatYAxisCurrency(value: number): string {
 }
 
 export function getNiceChartDomain(values: number[]): [number, number] {
-  if (values.length === 0) return [0, 1];
+  // NaN が 1 つでも混じると Math.min / Math.max が NaN を返し，軸の範囲が [NaN, NaN] になって
+  // グラフ全体が描けなくなる．欠けた値は範囲の計算から外す
+  const finiteValues = values.filter(Number.isFinite);
+  if (finiteValues.length === 0) return [0, 1];
 
-  const min = Math.min(...values);
-  const max = Math.max(...values);
+  const min = Math.min(...finiteValues);
+  const max = Math.max(...finiteValues);
 
   if (min === max) {
     const base = min === 0 ? 1 : Math.max(Math.abs(min) * 0.05, 1);

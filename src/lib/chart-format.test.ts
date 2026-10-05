@@ -49,6 +49,13 @@ describe("getNiceChartDomain", () => {
     expect(getNiceChartDomain([0, 100])).toEqual([-8, 108]);
     expect(getNiceChartDomain([0, 5])).toEqual([-1, 6]);
   });
+
+  it("NaN や Infinity は範囲の計算から外す", () => {
+    expect(getNiceChartDomain([0, Number.NaN, 100])).toEqual([-8, 108]);
+    expect(getNiceChartDomain([Number.NaN, Number.POSITIVE_INFINITY])).toEqual([
+      0, 1,
+    ]);
+  });
 });
 
 describe("getNiceAxisTicks", () => {
