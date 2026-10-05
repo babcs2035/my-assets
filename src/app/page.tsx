@@ -13,7 +13,7 @@ import {
   getDashboardKPI,
   getExpiringPoints,
 } from "@/actions/dashboard";
-import { DashboardAreaWrapper } from "@/components/dashboard/dashboard-area-wrapper";
+import { DashboardAreaChart } from "@/components/dashboard/dashboard-charts";
 import { PageHeader } from "@/components/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -254,7 +254,7 @@ async function DashboardContent() {
             </CardTitle>
           </CardHeader>
           <CardContent className="pl-0 sm:pl-2">
-            <DashboardAreaWrapper data={chartData} />
+            <DashboardAreaChart data={chartData} />
           </CardContent>
         </Card>
       </div>
