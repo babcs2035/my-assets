@@ -356,7 +356,7 @@ export function AssetsContent({ breakdown }: AssetsContentProps) {
                       金融機関
                     </TableHead>
                     <TableHead className="whitespace-nowrap">
-                      カテゴリ
+                      カテゴリー
                     </TableHead>
                     <TableHead className="whitespace-nowrap text-right">
                       金額

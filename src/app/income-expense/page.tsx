@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
  */
 export const metadata: Metadata = {
   title: "収支 | My Assets",
-  description: "月ごとの収入・支出・収支の推移とカテゴリ別内訳を表示する",
+  description: "月ごとの収入・支出・収支の推移とカテゴリー別内訳を表示する",
 };
 
 /**

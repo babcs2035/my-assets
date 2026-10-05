@@ -702,7 +702,7 @@ export function CategorySection({
                 onConfirm={() => handleDeleteMainCategory(mc.id)}
               >
                 {/* deleteMainCategory は配下のサブカテゴリーとルールもまとめて消すため，巻き込む件数を押す前に示す */}
-                {`メインカテゴリー「${mc.name}」と配下のサブカテゴリー ${mc.subCategories.length} 件を削除します．`}
+                {`メインカテゴリー「${mc.name}」と配下のサブカテゴリー ${mc.subCategories.length} 件を削除しますか？`}
                 {mc.subCategories.length > 0 &&
                   `ルール ${mc.subCategories.reduce((sum, sc) => sum + sc._count.rules, 0)} 件も削除され，明細 ${mc.subCategories.reduce((sum, sc) => sum + sc._count.transactions, 0)} 件は未分類に戻ります．`}
                 この操作は元に戻せません．
@@ -783,7 +783,7 @@ export function CategorySection({
                         </DialogHeader>
                         <div className="space-y-3">
                           <Label htmlFor="edit-sub-category-name">
-                            カテゴリー名
+                            サブカテゴリー名
                           </Label>
                           <Input
                             id="edit-sub-category-name"
@@ -831,7 +831,7 @@ export function CategorySection({
                       }
                       onConfirm={() => handleDeleteSubCategory(sc.id)}
                     >
-                      {`サブカテゴリー「${sc.name}」を削除します．ルール ${sc._count.rules} 件も削除され，明細 ${sc._count.transactions} 件は未分類に戻ります．`}
+                      {`サブカテゴリー「${sc.name}」を削除しますか？ルール ${sc._count.rules} 件も削除され，明細 ${sc._count.transactions} 件は未分類に戻ります．`}
                       この操作は元に戻せません．
                     </DeleteConfirmDialog>
                   </div>

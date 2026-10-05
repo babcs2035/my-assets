@@ -127,12 +127,12 @@ export function AccountSection({
                       label,
                       providerId: newAccountProviderId,
                     });
-                    toast.success("口座を作成しました");
+                    toast.success("口座を作成しました．");
                     setNewAccountLabel("");
                     setNewAccountProviderId("");
                     onChanged();
                   } catch {
-                    toast.error("口座の作成に失敗しました");
+                    toast.error("口座の作成に失敗しました．");
                   } finally {
                     setIsCreatingAccount(false);
                   }
@@ -198,12 +198,12 @@ export function AccountSection({
                                         providerId: newId,
                                       });
                                       toast.success(
-                                        "プロバイダーを更新しました",
+                                        "プロバイダーを更新しました．",
                                       );
                                       onChanged();
                                     } catch {
                                       toast.error(
-                                        "プロバイダーの更新に失敗しました",
+                                        "プロバイダーの更新に失敗しました．",
                                       );
                                     }
                                   }}
@@ -317,12 +317,12 @@ export function AccountSection({
                                             providerId: newId,
                                           });
                                           toast.success(
-                                            "プロバイダーを更新しました",
+                                            "プロバイダーを更新しました．",
                                           );
                                           onChanged();
                                         } catch {
                                           toast.error(
-                                            "プロバイダーの更新に失敗しました",
+                                            "プロバイダーの更新に失敗しました．",
                                           );
                                         }
                                       }}

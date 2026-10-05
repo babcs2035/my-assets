@@ -307,7 +307,7 @@ const AnalysisContent = () => {
                         onConfirm={() => void handleDeleteAnalysis(result.id)}
                       >
                         {formatJSTDateTime(result.analysisDate)}{" "}
-                        の分析結果を削除します．この操作は取り消せません．
+                        の分析結果を削除しますか？この操作は取り消せません．
                       </DeleteConfirmDialog>
                     </div>
 

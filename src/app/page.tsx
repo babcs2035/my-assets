@@ -270,7 +270,7 @@ async function DashboardContent() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="whitespace-nowrap">カテゴリ</TableHead>
+                <TableHead className="whitespace-nowrap">カテゴリー</TableHead>
                 <TableHead className="whitespace-nowrap text-right">
                   金額
                 </TableHead>
