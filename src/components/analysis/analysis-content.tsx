@@ -43,10 +43,11 @@ const AnalysisContent = () => {
       const { getAnalysisResults } = await import("@/actions/analysis");
       const results = await getAnalysisResults(20);
 
+      // 最新の結果は上のカードに本文ごと出すので，履歴の 1 件目は自動で開かない．
+      // 開くと同じ本文が 2 回並ぶ (ANA-1)
       if (results.length > 0) {
         setLatestResult(results[0] as AnalysisResult);
         setHistory(results as AnalysisResult[]);
-        setExpandedId((results[0] as AnalysisResult).id);
       } else {
         setLatestResult(null);
         setHistory([]);
