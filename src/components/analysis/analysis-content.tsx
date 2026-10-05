@@ -11,7 +11,7 @@ import {
   XCircle,
 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
-import ReactMarkdown from "react-markdown";
+import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { toast } from "sonner";
 import { type AnalysisResult, runAssetAnalysis } from "@/actions/analysis";
@@ -20,6 +20,15 @@ import { DeleteConfirmDialog } from "@/components/settings/delete-confirm-dialog
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatJSTDateTime } from "@/lib/utils";
+
+// LLM は列の多い表を出すことがあり，そのままだと狭い画面でカードからはみ出すため，表だけ横スクロールの枠で包む (ANA-5)
+const markdownComponents: Components = {
+  table: ({ node: _node, ...props }) => (
+    <div className="overflow-x-auto">
+      <table {...props} />
+    </div>
+  ),
+};
 
 /**
  * 分析ページのメインコンテンツコンポーネントである．
@@ -169,7 +178,10 @@ const AnalysisContent = () => {
           <CardContent>
             {latestResult.status === "COMPLETED" && latestResult.content ? (
               <div className="prose prose-sm prose-invert max-w-none prose-headings:text-zinc-200 prose-h2:text-base prose-h3:text-sm prose-strong:text-zinc-100 prose-code:text-zinc-300 prose-code:bg-zinc-800 prose-code:rounded prose-code:px-1 prose-pre:bg-zinc-900 prose-a:text-blue-400">
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                <ReactMarkdown
+                  remarkPlugins={[remarkGfm]}
+                  components={markdownComponents}
+                >
                   {latestResult.content}
                 </ReactMarkdown>
               </div>
@@ -178,9 +190,10 @@ const AnalysisContent = () => {
                 {latestResult.error}
               </div>
             ) : (
-              <div className="flex items-center gap-2 text-sm text-zinc-400">
-                <Loader2 className="h-4 w-4 animate-spin" />
-                分析を実行してください...
+              // PENDING は一覧から除外しているので，ここに来るのは本文もエラーもない結果だけである．
+              // 以前はスピナーを出していたため，実行中と誤解されて再読み込みまで回り続けて見えた (ANA-3)
+              <div className="text-sm text-zinc-400">
+                この分析には本文がありません．「分析を実行」で再実行してください．
               </div>
             )}
             {latestResult.prompt && (
@@ -188,6 +201,7 @@ const AnalysisContent = () => {
                 <button
                   type="button"
                   className="text-xs text-zinc-400 hover:text-zinc-200 transition-colors flex items-center gap-1 pointer-coarse:min-h-11"
+                  aria-expanded={showPromptId === "latest"}
                   onClick={() =>
                     setShowPromptId(prev =>
                       prev === "latest" ? null : "latest",
@@ -247,6 +261,7 @@ const AnalysisContent = () => {
                       <button
                         type="button"
                         className="flex flex-1 min-w-0 items-center justify-between gap-3 text-left cursor-pointer pointer-coarse:min-h-11"
+                        aria-expanded={isOpen}
                         onClick={() => handleToggleExpand(result.id)}
                       >
                         <span className="flex items-center gap-3 min-w-0">
@@ -255,8 +270,11 @@ const AnalysisContent = () => {
                             <span className="text-sm font-medium text-zinc-200">
                               {formatJSTDateTime(result.analysisDate)}
                             </span>
+                            {/* 失敗した分析は本文が空なので，文字数ではなく失敗と出す (ANA-5) */}
                             <span className="block text-xs text-zinc-400 truncate">
-                              {result.content.length}文字
+                              {result.status === "FAILED"
+                                ? "失敗（開くと理由を表示）"
+                                : `${result.content.length}文字`}
                             </span>
                           </span>
                         </span>
@@ -296,7 +314,10 @@ const AnalysisContent = () => {
                     {isOpen && result.status === "COMPLETED" && (
                       <div className="px-4 pb-4 border-t border-zinc-800 pt-3">
                         <div className="prose prose-sm prose-invert max-w-none prose-headings:text-zinc-200 prose-h2:text-base prose-h3:text-sm prose-strong:text-zinc-100 prose-code:text-zinc-300 prose-code:bg-zinc-800 prose-code:rounded prose-code:px-1 prose-pre:bg-zinc-900 prose-a:text-blue-400">
-                          <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                          <ReactMarkdown
+                            remarkPlugins={[remarkGfm]}
+                            components={markdownComponents}
+                          >
                             {result.content}
                           </ReactMarkdown>
                         </div>
@@ -316,6 +337,7 @@ const AnalysisContent = () => {
                         <button
                           type="button"
                           className="text-xs text-zinc-400 hover:text-zinc-200 transition-colors mb-2 flex items-center gap-1 pointer-coarse:min-h-11"
+                          aria-expanded={showPromptId === result.id}
                           onClick={() => handleTogglePrompt(result.id)}
                         >
                           {showPromptId === result.id ? "▼" : "▶"}
