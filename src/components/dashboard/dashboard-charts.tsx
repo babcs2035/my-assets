@@ -10,7 +10,11 @@ import {
   ChartContainer,
   ChartTooltip,
 } from "@/components/ui/chart";
-import { formatYAxisCurrency, getNiceChartDomain } from "@/lib/chart-format";
+import {
+  formatYAxisCurrency,
+  getNiceAxisTicks,
+  getNiceChartDomain,
+} from "@/lib/chart-format";
 import {
   filterByUnifiedTimeRange,
   type UnifiedTimeRange,
@@ -148,6 +152,7 @@ export function DashboardAreaChart({ data }: DashboardAreaChartProps) {
       minVal = Math.floor(minLiability * 1.2);
     }
   }
+  const yTicks = getNiceAxisTicks(minVal, maxVal);
 
   return (
     <div className="flex flex-col gap-3">
@@ -245,8 +250,8 @@ export function DashboardAreaChart({ data }: DashboardAreaChartProps) {
               tickLine={false}
               axisLine={false}
               tickFormatter={value => formatYAxisCurrency(Number(value))}
-              domain={[minVal, maxVal]}
-              tickCount={6}
+              domain={[yTicks[0], yTicks[yTicks.length - 1]]}
+              ticks={yTicks}
               width={56}
             />
             <ChartTooltip

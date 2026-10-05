@@ -32,3 +32,44 @@ export function getNiceChartDomain(values: number[]): [number, number] {
   const padding = Math.max(range * 0.08, 1);
   return [min - padding, max + padding];
 }
+
+/**
+ * min から max までを覆う Y 軸の目盛りを，1・2・5×10ⁿ の刻みで返す関数である．
+ * recharts 3 は domain を固定すると下限から刻んで上限を足すため，下限が半端な値だと
+ * 目盛りがすべて半端になる（¥-29.1万 など）．両端も刻みの倍数に広げ，ticks として渡す (DASH-2)
+ */
+export function getNiceAxisTicks(
+  min: number,
+  max: number,
+  targetCount = 6,
+): number[] {
+  if (!Number.isFinite(min) || !Number.isFinite(max) || min >= max) {
+    return [min, max];
+  }
+
+  const rawStep = (max - min) / Math.max(targetCount - 1, 1);
+  const magnitude = 10 ** Math.floor(Math.log10(rawStep));
+  const normalized = rawStep / magnitude;
+  // 切り上げると 5.2 が 10 になって刻みが倍になり余白が増えるため，D3 の ticks と同じく
+  // 1・2・5・10 の幾何平均（√2，√10，√50）を境に最も近い値へ丸める
+  const niceFactor =
+    normalized >= Math.sqrt(50)
+      ? 10
+      : normalized >= Math.sqrt(10)
+        ? 5
+        : normalized >= Math.sqrt(2)
+          ? 2
+          : 1;
+  const step = niceFactor * magnitude;
+
+  const ticks: number[] = [];
+  for (
+    let index = Math.floor(min / step);
+    index <= Math.ceil(max / step);
+    index++
+  ) {
+    // 小数の刻みで 0.30000000000000004 のような誤差が出ないよう，有効桁で丸める（-0 も 0 になる）
+    ticks.push(Number((index * step).toPrecision(12)));
+  }
+  return ticks;
+}
