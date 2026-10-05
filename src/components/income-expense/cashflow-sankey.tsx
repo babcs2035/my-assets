@@ -37,6 +37,14 @@ const expenseColorPalette = [
   "#6b7280",
 ];
 
+// 集計ノードの色．どちらのパレットにもない淡い色にして，カテゴリーのノードと見分けられるようにする (IE-7)．
+// 赤字と黒字は意味が伝わるよう色相だけ残す
+const AGGREGATE_NODE_COLORS = {
+  ratio: "#d4d4d8",
+  deficit: "#fca5a5",
+  surplus: "#6ee7b7",
+} as const;
+
 // 1 ノードあたりの高さ (nodeThickness 20 + nodeSpacing 20)
 const SANKEY_NODE_PITCH = 40;
 // サンキー図の最小高さ
@@ -206,6 +214,25 @@ export function CashflowSankey({ data }: CashflowSankeyProps) {
     Math.max(incomeColumnCount, expenseColumnCount) * SANKEY_NODE_PITCH + 40,
   );
 
+  // チャート本体とツールチップの点で同じ色を出す必要があるため，ノードの色は 1 か所で決める．
+  // カテゴリーの色は income-expense-content.tsx の円グラフと揃えるため，種類ごとの並び順で引く
+  const nodeColor = (id: string): string => {
+    if (id === "ratio" || id === "deficit" || id === "surplus") {
+      return AGGREGATE_NODE_COLORS[id];
+    }
+    if (id.startsWith("income-")) {
+      const incomeNodes = nodes.filter(n => n.id.startsWith("income-"));
+      const idx = incomeNodes.findIndex(n => n.id === id);
+      return incomeColorPalette[idx % incomeColorPalette.length];
+    }
+    if (id.startsWith("expense-")) {
+      const expenseNodes = nodes.filter(n => n.id.startsWith("expense-"));
+      const idx = expenseNodes.findIndex(n => n.id === id);
+      return expenseColorPalette[idx % expenseColorPalette.length];
+    }
+    return "#6b7280";
+  };
+
   return (
     // 左右 120px のラベルマージンは固定のため，モバイル（375px）では描画域が
     // 不足する。最小幅を確保した内側コンテナを横スクロール可能にして対処する
@@ -218,31 +245,7 @@ export function CashflowSankey({ data }: CashflowSankeyProps) {
           data={{ nodes, links }}
           margin={{ top: 10, right: 120, bottom: 10, left: 120 }}
           align="justify"
-          colors={node => {
-            // 赤字/収支ノード
-            if (node.id === "deficit") return "#ef4444";
-            if (node.id === "surplus") return "#10b981";
-            // ratioノード
-            if (node.id === "ratio") {
-              const balance = data.totalIncome - data.totalExpense;
-              return balance >= 0 ? "#3b82f6" : "#f97316";
-            }
-            // 収入カテゴリ（インデックスは income ノードのみで計算）
-            if (node.id.startsWith("income-")) {
-              const incomeNodes = nodes.filter(n => n.id.startsWith("income-"));
-              const idx = incomeNodes.findIndex(n => n.id === node.id);
-              return incomeColorPalette[idx % incomeColorPalette.length];
-            }
-            // 支出カテゴリ（インデックスは expense ノードのみで計算）
-            if (node.id.startsWith("expense-")) {
-              const expenseNodes = nodes.filter(n =>
-                n.id.startsWith("expense-"),
-              );
-              const idx = expenseNodes.findIndex(n => n.id === node.id);
-              return expenseColorPalette[idx % expenseColorPalette.length];
-            }
-            return "#6b7280";
-          }}
+          colors={node => nodeColor(node.id)}
           nodeOpacity={1}
           nodeHoverOpacity={1}
           nodeThickness={20}
@@ -291,24 +294,7 @@ export function CashflowSankey({ data }: CashflowSankeyProps) {
             );
             if (aggregate) displayName = aggregate;
 
-            // カラー取得
-            let dotColor = "#6b7280";
-            if (node.id === "deficit") dotColor = "#ef4444";
-            else if (node.id === "surplus") dotColor = "#10b981";
-            else if (node.id === "ratio") {
-              const balance = data.totalIncome - data.totalExpense;
-              dotColor = balance >= 0 ? "#3b82f6" : "#f97316";
-            } else if (node.id.startsWith("income-")) {
-              const incomeNodes = nodes.filter(n => n.id.startsWith("income-"));
-              const idx = incomeNodes.findIndex(n => n.id === node.id);
-              dotColor = incomeColorPalette[idx % incomeColorPalette.length];
-            } else if (node.id.startsWith("expense-")) {
-              const expenseNodes = nodes.filter(n =>
-                n.id.startsWith("expense-"),
-              );
-              const idx = expenseNodes.findIndex(n => n.id === node.id);
-              dotColor = expenseColorPalette[idx % expenseColorPalette.length];
-            }
+            const dotColor = nodeColor(node.id);
 
             return (
               <div className="rounded-lg border border-zinc-700 bg-zinc-900 p-3 shadow-sm relative z-50 max-w-[280px]">
