@@ -23,7 +23,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { formatYAxisCurrency } from "@/lib/chart-format";
-import { assetTypeLabel, formatCurrency } from "@/lib/utils";
+import { assetTypeColor, assetTypeLabel, formatCurrency } from "@/lib/utils";
 
 type Breakdown = Awaited<
   ReturnType<typeof import("@/actions/assets").getAssetBreakdown>
@@ -32,14 +32,6 @@ type Breakdown = Awaited<
 interface AssetsContentProps {
   breakdown: Breakdown;
 }
-
-const assetColors = {
-  CASH: "#3b82f6",
-  INVESTMENT: "#8b5cf6",
-  CRYPTO: "#f59e0b",
-  POINT: "#10b981",
-  LIABILITY: "#ef4444",
-};
 
 export function AssetsContent({ breakdown }: AssetsContentProps) {
   const { assets, liabilities, totalAssets, totalLiabilities, netWorth } =
@@ -85,7 +77,7 @@ export function AssetsContent({ breakdown }: AssetsContentProps) {
                   ? "ポイント"
                   : type,
         value,
-        fill: assetColors[type as keyof typeof assetColors] ?? "#6b7280",
+        fill: assetTypeColor(type),
       }))
       .sort((a, b) => b.value - a.value);
   }, [assetTypeTotals]);
@@ -103,7 +95,7 @@ export function AssetsContent({ breakdown }: AssetsContentProps) {
         id: l.id,
         name: l.name,
         value: Math.abs(l.amount),
-        fill: assetColors.LIABILITY,
+        fill: assetTypeColor("LIABILITY"),
       }))
       .sort((a, b) => b.value - a.value);
   }, [liabilities]);
@@ -261,7 +253,7 @@ export function AssetsContent({ breakdown }: AssetsContentProps) {
                     config={{
                       liability: {
                         label: "負債",
-                        color: assetColors.LIABILITY,
+                        color: assetTypeColor("LIABILITY"),
                       },
                     }}
                     className="h-full w-full"
@@ -399,13 +391,15 @@ export function AssetsContent({ breakdown }: AssetsContentProps) {
                           <span
                             className="inline-flex items-center gap-1 rounded-md border border-zinc-700 bg-zinc-800/60 px-2 py-0.5 text-[11px]"
                             style={{
-                              borderColor: `${assetColors[a.type]}40`,
-                              backgroundColor: `${assetColors[a.type]}15`,
+                              borderColor: `${assetTypeColor(a.type)}40`,
+                              backgroundColor: `${assetTypeColor(a.type)}15`,
                             }}
                           >
                             <span
                               className="h-1.5 w-1.5 rounded-full shrink-0"
-                              style={{ backgroundColor: assetColors[a.type] }}
+                              style={{
+                                backgroundColor: assetTypeColor(a.type),
+                              }}
                             />
                             {assetTypeLabel(a.type)}
                           </span>

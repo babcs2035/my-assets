@@ -19,18 +19,21 @@ import {
   filterByUnifiedTimeRange,
   type UnifiedTimeRange,
 } from "@/lib/chart-time-range";
-import { formatCurrency } from "@/lib/utils";
+import { assetTypeColor, formatCurrency } from "@/lib/utils";
 
 /**
- * ガイドブック準拠のカラーパレット (1〜5色)
- * Blue / Violet / Amber / Emerald の4色体系
+ * 資産推移の系列である．色は口座・資産ページと揃えるため assetTypeColor から取る
  */
 const areaSeries = [
-  { key: "CASH", label: "預金・現金", color: "#3b82f6" },
-  { key: "INVESTMENT", label: "投資信託・証券", color: "#8b5cf6" },
-  { key: "CRYPTO", label: "暗号資産", color: "#f59e0b" },
-  { key: "POINT", label: "ポイント", color: "#10b981" },
-  { key: "LIABILITY", label: "負債", color: "#ef4444" },
+  { key: "CASH", label: "預金・現金", color: assetTypeColor("CASH") },
+  {
+    key: "INVESTMENT",
+    label: "投資信託・証券",
+    color: assetTypeColor("INVESTMENT"),
+  },
+  { key: "CRYPTO", label: "暗号資産", color: assetTypeColor("CRYPTO") },
+  { key: "POINT", label: "ポイント", color: assetTypeColor("POINT") },
+  { key: "LIABILITY", label: "負債", color: assetTypeColor("LIABILITY") },
 ] as const;
 
 /**

@@ -28,6 +28,7 @@ import {
 import { addDaysToDateKey } from "@/lib/daily-series";
 import logger from "@/lib/logger";
 import {
+  assetTypeColor,
   formatChangeRate,
   formatCurrency,
   formatJSTDate,
@@ -91,10 +92,10 @@ async function DashboardContent() {
       : "前日";
 
   const assetOnlySeries = [
-    { key: "CASH", label: "預金・現金", color: "#3b82f6" },
-    { key: "INVESTMENT", label: "投資信託・証券", color: "#8b5cf6" },
-    { key: "CRYPTO", label: "暗号資産", color: "#f59e0b" },
-    { key: "POINT", label: "ポイント", color: "#10b981" },
+    { key: "CASH", label: "預金・現金" },
+    { key: "INVESTMENT", label: "投資信託・証券" },
+    { key: "CRYPTO", label: "暗号資産" },
+    { key: "POINT", label: "ポイント" },
   ] as const;
 
   // 演算子の優先度で `+` は `??` より高いため，各項を括弧で囲む必要がある
@@ -369,7 +370,7 @@ async function DashboardContent() {
                         <div className="flex items-center gap-1.5">
                           <span
                             className="h-2.5 w-2.5 rounded-full shrink-0"
-                            style={{ backgroundColor: s.color }}
+                            style={{ backgroundColor: assetTypeColor(s.key) }}
                           />
                           <span className="whitespace-nowrap text-sm text-zinc-200 truncate">
                             {s.label}
