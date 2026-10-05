@@ -73,6 +73,10 @@
     @apply bg-background text-foreground antialiased;
     -webkit-tap-highlight-color: transparent;
     font-feature-settings: "palt";
+    /* viewportFit: cover ではノッチの下まで描画されるため，横向きで左右が欠けないよう内側に寄せる．
+       position: fixed の要素（Sheet，トースト）には効かないので，それぞれで余白を足す */
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
   }
 
   /* ── ガラス風カード (チャートツールチップ用) ── */

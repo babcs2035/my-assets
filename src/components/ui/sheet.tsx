@@ -65,8 +65,9 @@ const SheetContent = React.forwardRef<
       {...props}
     >
       {/* タッチ端末ではアイコンだけだと 16px しか押せないため 44px に広げる．
-          位置を top-0.5 right-0.5 に寄せ，アイコンの中心を従来と同じ場所に保つ */}
-      <SheetPrimitive.Close className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-secondary pointer-coarse:right-0.5 pointer-coarse:top-0.5 pointer-coarse:flex pointer-coarse:size-11 pointer-coarse:items-center pointer-coarse:justify-center">
+          位置を top-0.5 right-0.5 に寄せ，アイコンの中心を従来と同じ場所に保つ．
+          iOS ではステータスバーの下に入って押せなくなるため，上端の safe-area 分だけ下げる */}
+      <SheetPrimitive.Close className="absolute right-4 top-[calc(1rem+env(safe-area-inset-top))] rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-secondary pointer-coarse:right-0.5 pointer-coarse:top-[calc(0.125rem+env(safe-area-inset-top))] pointer-coarse:flex pointer-coarse:size-11 pointer-coarse:items-center pointer-coarse:justify-center">
         <X className="h-4 w-4" />
         <span className="sr-only">閉じる</span>
       </SheetPrimitive.Close>

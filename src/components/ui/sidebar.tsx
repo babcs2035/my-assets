@@ -116,9 +116,11 @@ export function Sidebar({
   if (isMobile) {
     return (
       <Sheet open={openMobile} onOpenChange={setOpenMobile}>
+        {/* Sheet は position: fixed で body の safe-area の余白が効かないため，
+            ステータスバー・ノッチ・ホームインジケーターの分を自分で空ける */}
         <SheetContent
           side="left"
-          className="w-[280px] p-0 bg-zinc-950 text-zinc-50 border-r border-zinc-800"
+          className="w-[calc(280px+env(safe-area-inset-left))] p-0 pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] bg-zinc-950 text-zinc-50 border-r border-zinc-800"
         >
           <SheetTitle className="sr-only">メニュー</SheetTitle>
           <div className="flex h-full flex-col">{children}</div>
@@ -128,10 +130,11 @@ export function Sidebar({
   }
 
   // Desktop: Sticky Sidebar
+  // iPad の PWA ではステータスバーとホームインジケーターに重なるため，上下の safe-area 分を空ける
   return (
     <aside
       className={cn(
-        "group sticky top-0 z-30 hidden h-svh flex-col border-r border-zinc-800 bg-zinc-950 text-zinc-50 transition-[width] duration-300 ease-in-out md:flex",
+        "group sticky top-0 z-30 hidden h-svh flex-col border-r border-zinc-800 bg-zinc-950 pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] text-zinc-50 transition-[width] duration-300 ease-in-out md:flex",
         expanded ? "w-48" : "w-[60px]", // 192px vs 60px
         className,
       )}

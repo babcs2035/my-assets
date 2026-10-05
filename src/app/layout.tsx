@@ -76,19 +76,22 @@ export default function RootLayout({
             <AppSidebar />
 
             <SidebarInset>
-              {/* モバイル表示用のヘッダー部分 */}
-              <header className="sticky top-0 z-10 flex h-12 shrink-0 items-center gap-2 bg-background px-3 md:hidden border-b border-border/40 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+              {/* モバイル表示用のヘッダー部分．
+                  viewportFit: cover と black-translucent ではステータスバーの下まで描画されるため，
+                  上端の safe-area 分だけ余白を取り，その分だけ高さも増やす */}
+              <header className="sticky top-0 z-10 flex h-[calc(3rem+env(safe-area-inset-top))] shrink-0 items-center gap-2 bg-background px-3 pt-[env(safe-area-inset-top)] md:hidden border-b border-border/40 backdrop-blur supports-[backdrop-filter]:bg-background/60">
                 <SidebarTrigger className="-ml-1 h-10 w-10" />
                 <Separator orientation="vertical" className="mr-2 h-4" />
                 <div className="font-semibold text-sm">My Assets</div>
               </header>
 
               {/* メインコンテンツエリア（スキップリンクの目的地。
-                  sticky ヘッダー 48px 分だけ下方にずらすため scroll-mt-14） */}
+                  sticky ヘッダー 48px と上端の safe-area の分だけ下方にずらす）．
+                  下端はホームインジケーター，md 以上の上端はヘッダーがないためステータスバーと重ならないよう safe-area を足す */}
               <div
                 id="main-content"
                 tabIndex={-1}
-                className="flex flex-1 flex-col gap-4 p-4 pt-2 md:p-8 scroll-mt-14 outline-none"
+                className="flex flex-1 flex-col gap-4 p-4 pt-2 pb-[calc(1rem+env(safe-area-inset-bottom))] md:p-8 md:pt-[calc(2rem+env(safe-area-inset-top))] md:pb-[calc(2rem+env(safe-area-inset-bottom))] scroll-mt-[calc(3.5rem+env(safe-area-inset-top))] outline-none"
               >
                 {/* children を Suspense で包まない．包むとストリーミングが先に始まり，
                     ページ内の notFound() が HTTP 200 になる（口座詳細の soft 404）．
