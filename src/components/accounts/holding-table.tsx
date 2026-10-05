@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronDown, ChevronUp } from "lucide-react";
+import { ChevronDown, ChevronsUpDown, ChevronUp } from "lucide-react";
 import { useMemo, useState } from "react";
 import {
   Table,
@@ -32,14 +32,66 @@ type HoldingTableProps = {
 
 type SortKey = "valuation" | "gainLoss" | "gainLossRate";
 
+type SortConfig = {
+  key: SortKey | null;
+  direction: "asc" | "desc";
+};
+
+/**
+ * 並べ替えできる列の見出しである．
+ * 並べ替えていない列にもアイコンを出さないと，押せる列だと気付けない (ACC-18)
+ */
+function SortableHead({
+  label,
+  sortKey,
+  sortConfig,
+  onSort,
+}: {
+  label: string;
+  sortKey: SortKey;
+  sortConfig: SortConfig;
+  onSort: (key: SortKey) => void;
+}) {
+  const isActive = sortConfig.key === sortKey;
+  return (
+    <TableHead
+      className="whitespace-nowrap text-right"
+      aria-sort={
+        isActive
+          ? sortConfig.direction === "asc"
+            ? "ascending"
+            : "descending"
+          : undefined
+      }
+    >
+      <button
+        type="button"
+        onClick={() => onSort(sortKey)}
+        className="ml-auto flex cursor-pointer select-none items-center justify-end gap-0.5 hover:text-zinc-100 transition-colors pointer-coarse:min-h-11"
+      >
+        {label}
+        {isActive ? (
+          sortConfig.direction === "desc" ? (
+            <ChevronDown className="h-3 w-3" />
+          ) : (
+            <ChevronUp className="h-3 w-3" />
+          )
+        ) : (
+          <ChevronsUpDown className="h-3 w-3 text-zinc-500" aria-hidden />
+        )}
+      </button>
+    </TableHead>
+  );
+}
+
 export function HoldingTable({
   holdings,
   showDetails = false,
 }: HoldingTableProps) {
-  const [sortConfig, setSortConfig] = useState<{
-    key: SortKey | null;
-    direction: "asc" | "desc";
-  }>({ key: null, direction: "desc" });
+  const [sortConfig, setSortConfig] = useState<SortConfig>({
+    key: null,
+    direction: "desc",
+  });
 
   const sortedHoldings = useMemo(() => {
     if (!sortConfig.key) return holdings;
@@ -72,9 +124,7 @@ export function HoldingTable({
     <Table>
       <TableHeader>
         <TableRow>
-          <TableHead className="whitespace-nowrap min-w-[240px]">
-            銘柄名
-          </TableHead>
+          <TableHead className="whitespace-nowrap">銘柄名</TableHead>
           <TableHead className="whitespace-nowrap w-[100px]">口座</TableHead>
           <TableHead className="whitespace-nowrap text-right">保有数</TableHead>
           {showDetails && (
@@ -87,67 +137,39 @@ export function HoldingTable({
               </TableHead>
             </>
           )}
-          <TableHead className="whitespace-nowrap text-right">評価額</TableHead>
+          <SortableHead
+            label="評価額"
+            sortKey="valuation"
+            sortConfig={sortConfig}
+            onSort={handleSort}
+          />
           {showDetails && (
             <TableHead className="whitespace-nowrap text-right">
               前日比
             </TableHead>
           )}
-          <TableHead
-            className="whitespace-nowrap text-right"
-            aria-sort={
-              sortConfig.key === "gainLoss"
-                ? sortConfig.direction === "asc"
-                  ? "ascending"
-                  : "descending"
-                : undefined
-            }
-          >
-            <button
-              type="button"
-              onClick={() => handleSort("gainLoss")}
-              className="mx-auto flex cursor-pointer select-none items-center justify-end gap-0.5 hover:text-zinc-100 transition-colors pointer-coarse:min-h-11"
-            >
-              評価損益
-              {sortConfig.key === "gainLoss" &&
-                (sortConfig.direction === "desc" ? (
-                  <ChevronDown className="h-3 w-3" />
-                ) : (
-                  <ChevronUp className="h-3 w-3" />
-                ))}
-            </button>
-          </TableHead>
-          <TableHead
-            className="whitespace-nowrap text-right"
-            aria-sort={
-              sortConfig.key === "gainLossRate"
-                ? sortConfig.direction === "asc"
-                  ? "ascending"
-                  : "descending"
-                : undefined
-            }
-          >
-            <button
-              type="button"
-              onClick={() => handleSort("gainLossRate")}
-              className="mx-auto flex cursor-pointer select-none items-center justify-end gap-0.5 hover:text-zinc-100 transition-colors pointer-coarse:min-h-11"
-            >
-              損益率
-              {sortConfig.key === "gainLossRate" &&
-                (sortConfig.direction === "desc" ? (
-                  <ChevronDown className="h-3 w-3" />
-                ) : (
-                  <ChevronUp className="h-3 w-3" />
-                ))}
-            </button>
-          </TableHead>
+          <SortableHead
+            label="評価損益"
+            sortKey="gainLoss"
+            sortConfig={sortConfig}
+            onSort={handleSort}
+          />
+          <SortableHead
+            label="損益率"
+            sortKey="gainLossRate"
+            sortConfig={sortConfig}
+            onSort={handleSort}
+          />
         </TableRow>
       </TableHeader>
       <TableBody>
         {sortedHoldings.map(h => (
           <TableRow key={h.id}>
-            <TableCell className="whitespace-nowrap font-medium text-zinc-200">
-              {h.name}
+            {/* 銘柄名は長いものが多く，列に min-width を付けると狭い画面で表が大きく横にはみ出すため，省略して全文は title で見せる (ACC-17) */}
+            <TableCell className="font-medium text-zinc-200">
+              <span className="block max-w-[220px] truncate" title={h.name}>
+                {h.name}
+              </span>
             </TableCell>
             <TableCell className="whitespace-nowrap text-zinc-400 text-sm">
               {h.account}
@@ -192,11 +214,20 @@ export function HoldingTable({
             >
               {formatSignedCurrency(h.gainLoss)}
             </TableCell>
+            {/* 取得価額が 0 の銘柄 (ポイント運用や株式分割の端数など) は損益率を計算できず，
+                MoneyForward は 0 を返す．緑の「+0.00%」だと損益ゼロに見えるので「—」を出す (ACC-14) */}
             <TableCell
-              className={`whitespace-nowrap text-right font-mono ${h.gainLossRate >= 0 ? "text-emerald-400" : "text-red-400"}`}
+              className={`whitespace-nowrap text-right font-mono ${
+                h.acquisitionCost === 0
+                  ? "text-zinc-400"
+                  : h.gainLossRate >= 0
+                    ? "text-emerald-400"
+                    : "text-red-400"
+              }`}
             >
-              {h.gainLossRate >= 0 && "+"}
-              {h.gainLossRate.toFixed(2)}%
+              {h.acquisitionCost === 0
+                ? "—"
+                : `${h.gainLossRate >= 0 ? "+" : ""}${h.gainLossRate.toFixed(2)}%`}
             </TableCell>
           </TableRow>
         ))}
