@@ -159,7 +159,8 @@ export function CategoryRuleSection({
                         variant="ghost"
                         size="icon"
                         className="text-zinc-500 hover:text-red-400 shrink-0"
-                        aria-label="ルール削除"
+                        // 全行が同じ名前だと，読み上げでどのルールを消すボタンか区別できない (SET-13)
+                        aria-label={`キーワード「${rule.keyword}」の自動分類ルールを削除`}
                       >
                         <Trash2 className="h-4 w-4" />
                       </Button>
@@ -214,7 +215,7 @@ export function CategoryRuleSection({
                             variant="ghost"
                             size="icon"
                             className="text-zinc-500 hover:text-red-400"
-                            aria-label="ルール削除"
+                            aria-label={`キーワード「${rule.keyword}」の自動分類ルールを削除`}
                           >
                             <Trash2 className="h-4 w-4" />
                           </Button>
