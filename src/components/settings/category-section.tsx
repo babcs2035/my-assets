@@ -159,6 +159,12 @@ export function CategorySection({
     // trim しないと空白のみが zod min(1) を通過し，空白名のカテゴリーが作成される
     const name = newCategoryName.trim();
     if (!name || isAddingCategory) return;
+    // 本番の Server Action は throw したエラーの本文を返さず，一意制約の失敗も「失敗しました」としか
+    // 出せない．一覧は手元にあるので，送る前に重複を確かめて理由を示す (SET-11)
+    if (categories.some(c => c.type === newCategoryType && c.name === name)) {
+      toast.error(`「${name}」はすでにあります．`);
+      return;
+    }
     setIsAddingCategory(true);
     try {
       await createMainCategory({
@@ -199,6 +205,16 @@ export function CategorySection({
       toast.error("カテゴリー名は空にできません．");
       return;
     }
+    // 一意制約は種類ごとなので，同じ種類の別のカテゴリーとだけ比べる (SET-11)
+    const targetType = categories.find(c => c.id === id)?.type;
+    if (
+      categories.some(
+        c => c.id !== id && c.type === targetType && c.name === trimmed,
+      )
+    ) {
+      toast.error(`「${trimmed}」はすでにあります．`);
+      return;
+    }
     isRenamingRef.current = true;
     setIsRenaming(true);
     try {
@@ -232,6 +248,14 @@ export function CategorySection({
     const trimmed = name.trim();
     if (!trimmed) {
       toast.error("サブカテゴリー名は空にできません．");
+      return;
+    }
+    // 一意制約は親カテゴリーごとなので，同じ親の別のサブカテゴリーとだけ比べる (SET-11)
+    const parent = categories.find(c =>
+      c.subCategories.some(sc => sc.id === id),
+    );
+    if (parent?.subCategories.some(sc => sc.id !== id && sc.name === trimmed)) {
+      toast.error(`「${trimmed}」はこの親カテゴリーにすでにあります．`);
       return;
     }
     isRenamingRef.current = true;
@@ -308,6 +332,15 @@ export function CategorySection({
     const name = newSubCategoryName.trim();
     // 応答までボタンが押せたままだと，連打で同じサブカテゴリーを二重に作ろうとして一意制約で失敗する (SET-10)
     if (!selectedMainCategory || !name || isAddingSubCategory) return;
+    // 送る前に重複を確かめて理由を示す (SET-11)
+    if (
+      categories
+        .find(c => c.id === selectedMainCategory)
+        ?.subCategories.some(sc => sc.name === name)
+    ) {
+      toast.error(`「${name}」はこの親カテゴリーにすでにあります．`);
+      return;
+    }
     setIsAddingSubCategory(true);
     try {
       await createSubCategory({
