@@ -24,7 +24,10 @@ export type MainAccountCreateInput = z.infer<typeof mainAccountCreateSchema>;
  * メインカテゴリー (MainCategory) 作成時のバリデーションスキーマである．
  */
 export const mainCategoryCreateSchema = z.object({
-  name: z.string().min(1, "カテゴリー名は必須です"),
+  // 名前とキーワードは trim してから min(1) を見る．trim がクライアントだけだと，
+  // action を直接呼んだときに空白だけの名前や，contains で全明細に当たるキーワードが通る (SET-11)．
+  // 上限は provider・口座の schema と同じ 255 にそろえる
+  name: z.string().trim().min(1, "カテゴリー名は必須です").max(255),
   type: z.enum(["INCOME", "EXPENSE"]).default("EXPENSE"),
 });
 export type MainCategoryCreateInput = z.infer<typeof mainCategoryCreateSchema>;
@@ -33,7 +36,7 @@ export type MainCategoryCreateInput = z.infer<typeof mainCategoryCreateSchema>;
  * メインカテゴリー (MainCategory) 更新時のバリデーションスキーマである．
  */
 export const mainCategoryUpdateSchema = z.object({
-  name: z.string().min(1, "カテゴリー名は必須です"),
+  name: z.string().trim().min(1, "カテゴリー名は必須です").max(255),
 });
 export type MainCategoryUpdateInput = z.infer<typeof mainCategoryUpdateSchema>;
 
@@ -41,7 +44,7 @@ export type MainCategoryUpdateInput = z.infer<typeof mainCategoryUpdateSchema>;
  * サブカテゴリー (SubCategoryItem) 作成時のバリデーションスキーマである．
  */
 export const subCategoryCreateSchema = z.object({
-  name: z.string().min(1, "サブカテゴリー名は必須です"),
+  name: z.string().trim().min(1, "サブカテゴリー名は必須です").max(255),
   mainCategoryId: z.string().min(1, "メインカテゴリーは必須です"),
 });
 export type SubCategoryCreateInput = z.infer<typeof subCategoryCreateSchema>;
@@ -50,7 +53,7 @@ export type SubCategoryCreateInput = z.infer<typeof subCategoryCreateSchema>;
  * サブカテゴリー (SubCategoryItem) 更新時のバリデーションスキーマである．
  */
 export const subCategoryUpdateSchema = z.object({
-  name: z.string().min(1, "サブカテゴリー名は必須です"),
+  name: z.string().trim().min(1, "サブカテゴリー名は必須です").max(255),
 });
 export type SubCategoryUpdateInput = z.infer<typeof subCategoryUpdateSchema>;
 
@@ -58,7 +61,7 @@ export type SubCategoryUpdateInput = z.infer<typeof subCategoryUpdateSchema>;
  * カテゴリールール (CategoryRule) 作成時のバリデーションスキーマである．
  */
 export const categoryRuleCreateSchema = z.object({
-  keyword: z.string().min(1, "キーワードは必須です"),
+  keyword: z.string().trim().min(1, "キーワードは必須です").max(255),
   subCategoryId: z.string().min(1, "サブカテゴリーは必須です"),
   priority: z.number().int().default(0),
 });
@@ -91,7 +94,7 @@ export type TransferMarkInput = z.infer<typeof transferMarkSchema>;
  * 振替ルール (TransferRule) 作成時のバリデーションスキーマである．
  */
 export const transferRuleCreateSchema = z.object({
-  keyword: z.string().min(1, "キーワードは必須です"),
+  keyword: z.string().trim().min(1, "キーワードは必須です").max(255),
   targetSubAccountId: z.string().min(1, "振替先口座は必須です"),
 });
 export type TransferRuleCreateInput = z.infer<typeof transferRuleCreateSchema>;
@@ -100,7 +103,7 @@ export type TransferRuleCreateInput = z.infer<typeof transferRuleCreateSchema>;
  * 振替ルール (TransferRule) 更新時のバリデーションスキーマである．
  */
 export const transferRuleUpdateSchema = z.object({
-  keyword: z.string().min(1, "キーワードは必須です").optional(),
+  keyword: z.string().trim().min(1, "キーワードは必須です").max(255).optional(),
   targetSubAccountId: z.string().optional(),
 });
 export type TransferRuleUpdateInput = z.infer<typeof transferRuleUpdateSchema>;
@@ -120,7 +123,7 @@ export type MainAccountUpdateInput = z.infer<typeof mainAccountUpdateSchema>;
  */
 export const categoryRuleUpdateSchema = z.object({
   // 空文字だと contains: "" が未分類の明細すべてに当たる
-  keyword: z.string().min(1, "キーワードは必須です").optional(),
+  keyword: z.string().trim().min(1, "キーワードは必須です").max(255).optional(),
   priority: z.number().int().optional(),
   subCategoryId: z.string().optional(),
 });

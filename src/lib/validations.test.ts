@@ -5,6 +5,8 @@ import {
   categoryRuleUpdateSchema,
   mainAccountUpdateSchema,
   mainCategoryCreateSchema,
+  subCategoryUpdateSchema,
+  transferRuleCreateSchema,
   transferRuleUpdateSchema,
 } from "@/lib/validations";
 
@@ -40,6 +42,45 @@ describe("更新用のスキーマ", () => {
     expect(mainAccountUpdateSchema.safeParse({ mfUrlId: null }).success).toBe(
       true,
     );
+  });
+});
+
+describe("名前とキーワードの trim と長さ", () => {
+  // action を直接呼んでも，空白だけの名前やキーワードが保存されないようにする (SET-11)
+  it("空白だけの名前とキーワードを弾く", () => {
+    expect(mainCategoryCreateSchema.safeParse({ name: "  " }).success).toBe(
+      false,
+    );
+    expect(subCategoryUpdateSchema.safeParse({ name: "　" }).success).toBe(
+      false,
+    );
+    expect(
+      transferRuleCreateSchema.safeParse({
+        keyword: " ",
+        targetSubAccountId: "sa1",
+      }).success,
+    ).toBe(false);
+  });
+
+  it("前後の空白を除いた値を返す", () => {
+    expect(mainCategoryCreateSchema.parse({ name: " 食費 " }).name).toBe(
+      "食費",
+    );
+    expect(
+      categoryRuleCreateSchema.parse({
+        keyword: " コンビニ ",
+        subCategoryId: "s1",
+      }).keyword,
+    ).toBe("コンビニ");
+  });
+
+  it("256 文字以上を弾く", () => {
+    expect(
+      mainCategoryCreateSchema.safeParse({ name: "あ".repeat(255) }).success,
+    ).toBe(true);
+    expect(
+      mainCategoryCreateSchema.safeParse({ name: "あ".repeat(256) }).success,
+    ).toBe(false);
   });
 });
 
