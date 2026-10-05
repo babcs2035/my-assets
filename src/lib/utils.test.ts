@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  calculateDayBeforeRatio,
   formatJSTDate,
   formatJSTDateTime,
   formatPercent,
@@ -25,6 +26,20 @@ describe("toUtcDateOnly", () => {
     expect(toUtcDateOnly(2026, 12, 32).toISOString()).toBe(
       "2027-01-01T00:00:00.000Z",
     );
+  });
+});
+
+describe("calculateDayBeforeRatio", () => {
+  it("前回の価格との差を，小数第 2 位までの百分率で返す", () => {
+    expect(calculateDayBeforeRatio(10123, 10000)).toBe(1.23);
+    expect(calculateDayBeforeRatio(9950, 10000)).toBe(-0.5);
+    expect(calculateDayBeforeRatio(10000, 10000)).toBe(0);
+  });
+
+  it("前回の価格がない，または 0 以下なら null を返す", () => {
+    expect(calculateDayBeforeRatio(10000, undefined)).toBeNull();
+    expect(calculateDayBeforeRatio(10000, null)).toBeNull();
+    expect(calculateDayBeforeRatio(10000, 0)).toBeNull();
   });
 });
 

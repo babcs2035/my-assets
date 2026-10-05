@@ -188,7 +188,7 @@ export async function runAssetAnalysis() {
         ? holdings
             .map(
               h =>
-                `【${h.name}】（${h.subAccount.mainAccount.label} / ${h.subAccount.currentName}）\n  保有数: ${h.quantity}, 単価: ${formatCurrency(h.unitPrice)}, 評価額: ${formatCurrency(h.valuation)}, 平均取得単価: ${formatCurrency(h.avgCostBasis)}, 利益: ${formatCurrency(h.gainLoss)} (${h.gainLossRate >= 0 ? "+" : ""}${h.gainLossRate}%), 前日比: ${h.dayBeforeRatio >= 0 ? "+" : ""}${h.dayBeforeRatio}%`,
+                `【${h.name}】（${h.subAccount.mainAccount.label} / ${h.subAccount.currentName}）\n  保有数: ${h.quantity}, 単価: ${formatCurrency(h.unitPrice)}, 評価額: ${formatCurrency(h.valuation)}, 平均取得単価: ${formatCurrency(h.avgCostBasis)}, 利益: ${formatCurrency(h.gainLoss)} (${h.gainLossRate >= 0 ? "+" : ""}${h.gainLossRate}%), 前日比: ${h.dayBeforeRatio == null ? "不明" : `${h.dayBeforeRatio >= 0 ? "+" : ""}${h.dayBeforeRatio}%`}`,
             )
             .join("\n\n")
         : "・未投資";

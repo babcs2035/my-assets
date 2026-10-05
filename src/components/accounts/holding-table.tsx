@@ -173,10 +173,17 @@ export function HoldingTable({
             </TableCell>
             {showDetails && (
               <TableCell
-                className={`whitespace-nowrap text-right font-mono ${h.dayBeforeRatio != null && h.dayBeforeRatio >= 0 ? "text-emerald-400" : "text-zinc-500"}`}
+                className={`whitespace-nowrap text-right font-mono ${
+                  h.dayBeforeRatio == null || h.dayBeforeRatio === 0
+                    ? "text-zinc-500"
+                    : h.dayBeforeRatio > 0
+                      ? "text-emerald-400"
+                      : "text-red-400"
+                }`}
               >
+                {/* 前回の履歴がない銘柄は null になる．0 と区別して「—」を出す */}
                 {h.dayBeforeRatio != null
-                  ? `${h.dayBeforeRatio >= 0 ? "+" : ""}${h.dayBeforeRatio.toLocaleString("ja-JP")}%`
+                  ? `${h.dayBeforeRatio > 0 ? "+" : ""}${h.dayBeforeRatio.toFixed(2)}%`
                   : "—"}
               </TableCell>
             )}

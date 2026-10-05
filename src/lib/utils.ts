@@ -34,6 +34,20 @@ export function toUtcDateOnly(year: number, month: number, day: number): Date {
 }
 
 /**
+ * 基準価額の前回比を，小数第 2 位までの百分率で返す関数である．
+ * 比べる価格がない，または 0 以下のときは割合を出せないため null を返す．
+ */
+export function calculateDayBeforeRatio(
+  currentPrice: number,
+  previousPrice: number | null | undefined,
+): number | null {
+  if (previousPrice == null || previousPrice <= 0) return null;
+  return (
+    Math.round(((currentPrice - previousPrice) / previousPrice) * 10000) / 100
+  );
+}
+
+/**
  * 年月日を months か月ずらした日付の UTC 00:00 を返す関数である．
  * ずらした先の月に同じ日がなければ，その月の末日に丸める（3/31 の 1 か月前は 2/28）．
  * Date.UTC の日の繰り上がりに任せると 3/31 の 1 か月前が 3/3 になるため，日を先に丸める．

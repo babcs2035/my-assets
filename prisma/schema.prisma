@@ -74,7 +74,7 @@ model Holding {
   avgCostBasis   Int
   unitPrice      Int
   valuation      Int
-  dayBeforeRatio Int
+  dayBeforeRatio Float?
   gainLoss       Int
   gainLossRate   Float
   updatedAt      DateTime   @updatedAt

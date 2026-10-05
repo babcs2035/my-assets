@@ -9,7 +9,12 @@ import logger from "../lib/logger";
 import { getItemField, getItemOtp } from "../lib/onepassword";
 import { prisma } from "../lib/prisma";
 import { acquireSyncLock, releaseSyncLock } from "../lib/sync-lock";
-import { BACKFILL_START_DATE, formatJSTDate, todayJST } from "../lib/utils";
+import {
+  BACKFILL_START_DATE,
+  calculateDayBeforeRatio,
+  formatJSTDate,
+  todayJST,
+} from "../lib/utils";
 
 // エントリポイント（直接実行）のみ自動スクレイピングを許可
 const isEntry =
@@ -529,6 +534,19 @@ async function saveHoldingsFromAccountPage(
 
     try {
       await prisma.$transaction(async tx => {
+        // MoneyForward の API には前日比がないため，今日より前で最新の履歴の基準価額と比べて求める．
+        // 作成時に 0 を入れたきり更新していなかったため，前日比が常に +0% だった (ACC-1)．
+        // 基準価額は土日祝に動かないので，昨日ではなく直近の履歴と比べる
+        const previousHistory = await tx.holdingHistory.findFirst({
+          where: { subAccountId, name: holdingName, date: { lt: today } },
+          orderBy: { date: "desc" },
+          select: { unitPrice: true },
+        });
+        const dayBeforeRatio = calculateDayBeforeRatio(
+          unitPrice,
+          previousHistory?.unitPrice,
+        );
+
         await tx.holding.upsert({
           where: {
             subAccountId_name: {
@@ -545,7 +563,7 @@ async function saveHoldingsFromAccountPage(
             valuation,
             gainLoss: profit,
             gainLossRate,
-            dayBeforeRatio: 0,
+            dayBeforeRatio,
           },
           update: {
             quantity: qty,
@@ -554,6 +572,7 @@ async function saveHoldingsFromAccountPage(
             valuation,
             gainLoss: profit,
             gainLossRate,
+            dayBeforeRatio,
             updatedAt: new Date(),
           },
         });
