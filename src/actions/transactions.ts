@@ -346,7 +346,7 @@ export async function updateTransactionCategory(
 
 /**
  * 指定された取引明細を振替扱いに設定する関数である．
- * 出金側の明細を更新し，振替先口座に受信側の明細を自動生成する．
+ * 振替先口座に同じ日付・逆符号・同額の振替でない明細があればそれと結び，なければ相手側の明細を生成する．
  * 振替先口座の残高は更新しない（入出金明細上のペアとしてのみ管理）．
  */
 export async function markTransactionAsTransfer(input: TransferMarkInput) {
@@ -380,15 +380,27 @@ export async function markTransactionAsTransfer(input: TransferMarkInput) {
     throw new Error("同じ口座には振替できません．");
   }
 
-  // 出金側: amount < 0 ならそのまま，amount > 0 なら符号を反転
-  const sourceAmount = source.amount > 0 ? -source.amount : source.amount;
+  // 元の明細の符号は変えず，相手側を逆符号にする．以前は入金明細でも相手側を正の金額で作っており，
+  // 両側が正の振替になって一覧の重複排除（isTransfer かつ amount > 0 を除く）で両方消えていた（TX-1）
+  const targetAmount = -source.amount;
 
   const transferId = `tf_${source.id.slice(0, 8)}_${Date.now()}`;
 
-  // 受信側IDを先に生成し，両側をトランザクションとして一括更新
-  const targetId = crypto.randomUUID();
-
   await prisma.$transaction(async tx => {
+    // 振替先も同期対象なら相手側の明細は既にあるので，振替ルールの適用と同じ条件で探して結ぶ．
+    // 探さずに作ると，同期で取り込んだ入金と生成した明細の両方が残り，二重に数えられる（TX-2）
+    const existingTarget = await tx.transaction.findFirst({
+      where: {
+        subAccountId: data.targetSubAccountId,
+        date: source.date,
+        amount: targetAmount,
+        isTransfer: false,
+      },
+      select: { id: true },
+      orderBy: { id: "asc" },
+    });
+    const targetId = existingTarget?.id ?? crypto.randomUUID();
+
     // 出金側を原子に「確保」する．isTransfer=false を条件に updateMany し，
     // 並行呼び出しが既にマークした場合 count=0 になるのでロールバックして
     // 受信側明細の重複生成を防ぐ（単独の update ではチェックと更新が分離され
@@ -405,13 +417,30 @@ export async function markTransactionAsTransfer(input: TransferMarkInput) {
       throw new Error("既に振替扱いの明細です．");
     }
 
-    // 受信側明細を生成
+    if (existingTarget) {
+      // 探してから確保するまでに別の振替に使われた場合も，同じ理由で updateMany の件数で検出する
+      const claimedTarget = await tx.transaction.updateMany({
+        where: { id: existingTarget.id, isTransfer: false },
+        data: {
+          isTransfer: true,
+          transferId,
+          linkedTransId: source.id,
+        },
+      });
+      if (claimedTarget.count === 0) {
+        throw new Error(
+          "振替先の明細が別の振替に使われました．もう一度お試しください．",
+        );
+      }
+      return;
+    }
+
     await tx.transaction.create({
       data: {
         id: targetId,
         subAccountId: data.targetSubAccountId,
         date: source.date,
-        amount: Math.abs(sourceAmount),
+        amount: targetAmount,
         desc: source.desc,
         isTransfer: true,
         transferId,
