@@ -91,6 +91,9 @@ type FilterOption = Awaited<
 export type SortKey = "date" | "amount";
 export type SortDirection = "asc" | "desc";
 
+// 「明細一覧」の見出しの id．振替設定の後にフォーカスを移す先として使う (TX-18)
+const LIST_HEADING_ID = "transactions-list-heading";
+
 // 描画関数の中で定義すると毎回別のコンポーネントとして扱われ作り直されるため，最上位に置く
 function SortIcon({
   columnKey,
@@ -140,6 +143,11 @@ export function TransactionsContent() {
     desc: string;
     sourceSubAccountId: string | null;
   } | null>(null);
+  // 振替設定が済んだ明細の ID．取り直しが終わったらその行の取り消しボタンにフォーカスを移す．
+  // 押した「振替設定」ボタンは取り直しで消え，そのままではフォーカスが body に落ちる (TX-18)
+  const pendingFocusTxIdRef = useRef<string | null>(null);
+  // 振替設定ダイアログを開いたボタン．キャンセルで閉じたときにフォーカスを戻す (TX-18)
+  const transferOpenerRef = useRef<HTMLElement | null>(null);
 
   // JST 基準で年月を導出する（ローカル TZ の getFullYear/getMonth では
   // JST 日付境界で前後 1 日ずれる）
@@ -318,7 +326,9 @@ export function TransactionsContent() {
   /**
    * 振替設定ダイアログを開くハンドラである．
    */
-  const openTransferDialog = (tx: Transaction) => {
+  const openTransferDialog = (tx: Transaction, opener: HTMLElement) => {
+    // Safari はクリックしたボタンにフォーカスを移さないため，activeElement ではなく押した要素を覚える
+    transferOpenerRef.current = opener;
     setTransferTargetTx({
       id: tx.id,
       desc: tx.desc,
@@ -326,6 +336,31 @@ export function TransactionsContent() {
     });
     setTransferDialogOpen(true);
   };
+
+  /**
+   * 振替設定が済んだときのハンドラである．
+   * フォーカスを移す明細を覚えてから一覧を取り直す．
+   */
+  const handleTransferDone = () => {
+    pendingFocusTxIdRef.current = transferTargetTx?.id ?? null;
+    fetchData();
+  };
+
+  // 取り直しが終わったら，振替にした明細の取り消しボタンにフォーカスを移す．
+  // モバイルとデスクトップの両方に描画されるので，表示されている方を選ぶ．
+  // 入金を振替にした行のように一覧から消えた場合は，一覧の見出しに移す (TX-18)
+  useEffect(() => {
+    if (isLoading) return;
+    const txId = pendingFocusTxIdRef.current;
+    if (txId === null) return;
+    pendingFocusTxIdRef.current = null;
+    const button = Array.from(
+      document.querySelectorAll<HTMLElement>(
+        `[data-unmark-transfer-id="${CSS.escape(txId)}"]`,
+      ),
+    ).find(el => el.offsetParent !== null);
+    (button ?? document.getElementById(LIST_HEADING_ID))?.focus();
+  }, [isLoading]);
 
   return (
     <div className="space-y-6">
@@ -395,7 +430,12 @@ export function TransactionsContent() {
         {/* 明細一覧表示エリア */}
         <Card className="relative">
           <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
+            <CardTitle
+              id={LIST_HEADING_ID}
+              // 振替設定の後にフォーカスを受けられるようにする (TX-18)
+              tabIndex={-1}
+              className="flex items-center gap-2 text-base focus:outline-none"
+            >
               明細一覧
             </CardTitle>
             <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-[1fr_auto]">
@@ -643,7 +683,9 @@ export function TransactionsContent() {
                           </Select>
                           <button
                             type="button"
-                            onClick={() => openTransferDialog(tx)}
+                            onClick={e =>
+                              openTransferDialog(tx, e.currentTarget)
+                            }
                             className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-zinc-700 bg-zinc-800 text-zinc-400 transition-colors hover:border-blue-500/50 hover:text-blue-400 pointer-coarse:size-11"
                             aria-label="振替設定"
                             title="振替設定"
@@ -848,7 +890,9 @@ export function TransactionsContent() {
                                 </Select>
                                 <button
                                   type="button"
-                                  onClick={() => openTransferDialog(tx)}
+                                  onClick={e =>
+                                    openTransferDialog(tx, e.currentTarget)
+                                  }
                                   className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-zinc-700 bg-zinc-800 text-zinc-400 transition-colors hover:border-blue-500/50 hover:text-blue-400 pointer-coarse:size-11"
                                   aria-label="振替設定"
                                   title="振替設定"
@@ -927,7 +971,8 @@ export function TransactionsContent() {
           transactionDesc={transferTargetTx.desc}
           sourceSubAccountId={transferTargetTx.sourceSubAccountId}
           filterOptions={filterOptions}
-          onDone={fetchData}
+          returnFocusRef={transferOpenerRef}
+          onDone={handleTransferDone}
         />
       )}
     </div>

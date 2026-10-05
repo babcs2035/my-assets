@@ -62,6 +62,8 @@ export function UnmarkTransferButton({
           )}
           aria-label="振替を取り消す"
           title="振替を取り消す"
+          // 振替設定の後に，この明細のボタンへフォーカスを移すための目印 (TX-18)
+          data-unmark-transfer-id={transactionId}
         >
           {isPending ? (
             <Loader2 className="h-3.5 w-3.5 animate-spin" />

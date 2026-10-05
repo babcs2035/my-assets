@@ -1,7 +1,7 @@
 "use client";
 
 import { ArrowDownUp, Loader2 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { type RefObject, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { markTransactionAsTransfer } from "@/actions/transactions";
 import { Button } from "@/components/ui/button";
@@ -43,6 +43,7 @@ export function TransferDialog({
   transactionDesc,
   sourceSubAccountId,
   filterOptions,
+  returnFocusRef,
   onDone,
 }: {
   open: boolean;
@@ -52,6 +53,8 @@ export function TransferDialog({
   // 出金元明細自身のサブ口座（振替先候補から除外する）
   sourceSubAccountId: string | null;
   filterOptions: FilterOption[];
+  // ダイアログを開いたボタン．DialogTrigger を使っていないため，閉じたときの戻り先を受け取る (TX-18)
+  returnFocusRef: RefObject<HTMLElement | null>;
   onDone: () => void;
 }) {
   const [isPending, setIsPending] = useState(false);
@@ -60,6 +63,9 @@ export function TransferDialog({
     useState<string>("");
   // これまでは常にルールを作っていたので，初期値はオンにして同じ動作を保つ（TX-3）
   const [createRule, setCreateRule] = useState(true);
+  // 振替設定が成功して閉じたかどうか．成功すると押したボタンは取り直しで消えるので，
+  // 閉じたときにそこへは戻さず，親に移し先を任せる (TX-18)
+  const succeededRef = useRef(false);
 
   // 親コンポーネントがダイアログを閉じてもマウントを維持するため，
   // 開くたびに選択をリセットする（別取引で開いた際に前の選択が
@@ -67,6 +73,7 @@ export function TransferDialog({
   // たびに取引も切り替わる
   useEffect(() => {
     if (open) {
+      succeededRef.current = false;
       setSelectedSubAccountId("");
       setSelectedMainAccountId("");
       setCreateRule(true);
@@ -116,6 +123,7 @@ export function TransferDialog({
           ? `"${transactionDesc}" が振替明細になり，振替ルールを登録しました．`
           : `"${transactionDesc}" が振替明細になりました．`,
       });
+      succeededRef.current = true;
       onOpenChange(false);
       onDone();
     } catch (err) {
@@ -129,7 +137,15 @@ export function TransferDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent
+        className="sm:max-w-md"
+        onCloseAutoFocus={event => {
+          // Radix は DialogTrigger にしかフォーカスを戻さず，ここでは使っていないので，
+          // そのままでは閉じ方に関係なく body に落ちる (TX-18)
+          event.preventDefault();
+          if (!succeededRef.current) returnFocusRef.current?.focus();
+        }}
+      >
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <ArrowDownUp className="h-4 w-4" />
