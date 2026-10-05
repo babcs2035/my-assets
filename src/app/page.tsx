@@ -25,6 +25,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { addDaysToDateKey } from "@/lib/daily-series";
 import logger from "@/lib/logger";
 import {
   formatChangeRate,
@@ -80,6 +81,14 @@ async function DashboardContent() {
     ]);
 
   const chartData = history;
+
+  // 前日比の基準が昨日でない（同期が止まっていた）ときは，数日分の変化を 1 日分と
+  // 読み違えないよう「前日」ではなく基準日（MM/DD）を見出しにする (DASH-4)
+  const yesterdayKey = addDaysToDateKey(formatJSTDate(new Date()), -1);
+  const baselineLabel =
+    kpi.baselineDateKey && kpi.baselineDateKey !== yesterdayKey
+      ? kpi.baselineDateKey.slice(5).replace("-", "/")
+      : "前日";
 
   const assetOnlySeries = [
     { key: "CASH", label: "預金・現金", color: "#3b82f6" },
@@ -170,7 +179,7 @@ async function DashboardContent() {
                   >
                     {formatSignedCurrency(kpi.dailyChange)}
                   </span>
-                  <span className="text-zinc-400">前日比</span>
+                  <span className="text-zinc-400">{baselineLabel}比</span>
                 </>
               )}
             </div>
@@ -269,7 +278,7 @@ async function DashboardContent() {
                   比率
                 </TableHead>
                 <TableHead className="whitespace-nowrap text-right">
-                  前日
+                  {baselineLabel}
                 </TableHead>
                 <TableHead className="whitespace-nowrap text-right">
                   1週間

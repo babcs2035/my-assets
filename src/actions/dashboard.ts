@@ -63,6 +63,7 @@ async function getDashboardKPIInternal() {
     },
     select: {
       balance: true,
+      date: true,
       subAccountId: true,
       subAccount: {
         select: {
@@ -99,6 +100,15 @@ async function getDashboardKPIInternal() {
     ? netWorth - yesterdayTotal
     : null;
 
+  // 基準が昨日でないと数日分の変化を「前日比」と読み違えるため，UI で基準日を示せるよう返す．
+  // 口座ごとに基準日が異なりうるので，最も古い日を採る（その日以降の変化をすべて含むため）．
+  // unstable_cache を通すので Date ではなく JST の YYYY-MM-DD で返す
+  const baselineDateKey = hasCompleteYesterdayHistory
+    ? yesterdayHistories
+        .map(h => formatJSTDate(h.date))
+        .reduce((oldest, key) => (key < oldest ? key : oldest))
+    : null;
+
   const yesterdayByType: Record<string, number> = {};
   for (const h of yesterdayHistories) {
     yesterdayByType[h.subAccount.assetType] =
@@ -110,6 +120,7 @@ async function getDashboardKPIInternal() {
     totalLiabilities,
     netWorth,
     dailyChange,
+    baselineDateKey,
     byAssetType: byAssetType as Record<AssetType, number>,
     yesterdayByType: hasCompleteYesterdayHistory
       ? (yesterdayByType as Record<AssetType, number>)
