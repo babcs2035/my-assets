@@ -2,6 +2,7 @@
 
 import type { AssetType } from "@prisma/client";
 import { unstable_cache } from "next/cache";
+import { forwardFillByDate, listDateKeysBetween } from "@/lib/daily-series";
 import logger from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
 import {
@@ -149,34 +150,44 @@ async function getAssetHistoryInternal(days?: number) {
     orderBy: { date: "asc" },
   });
 
-  const grouped: Record<string, Record<string, number>> = {};
-
-  for (const h of histories) {
-    const dateKey = formatJSTDate(h.date);
-    if (!grouped[dateKey]) {
-      grouped[dateKey] = {
-        CASH: 0,
-        INVESTMENT: 0,
-        CRYPTO: 0,
-        POINT: 0,
-        LIABILITY: 0,
-      };
-    }
-    const assetType = assetTypeMap.get(h.subAccountId) ?? "CASH";
-    grouped[dateKey][assetType] += h.balance;
-  }
-
-  const todayKey = formatJSTDate(today);
-  grouped[todayKey] = {
+  const createEmptyTotals = (): Record<AssetType, number> => ({
     CASH: 0,
     INVESTMENT: 0,
     CRYPTO: 0,
     POINT: 0,
     LIABILITY: 0,
-  };
-  for (const sa of subAccounts) {
-    grouped[todayKey][sa.assetType] += sa.balance;
+  });
+
+  // 口座ごとに直前の残高で埋めてから合計する (DASH-3)．記録のある日だけを集計すると，
+  // どの口座にも記録がない日は X 軸から抜け，一部の口座だけ欠けた日はその口座が 0 として
+  // 合計されて総額が落ち込むため
+  const todayKey = formatJSTDate(today);
+  const points = histories.map(h => ({
+    seriesKey: h.subAccountId,
+    dateKey: formatJSTDate(h.date),
+    value: h.balance,
+  }));
+  const startKey = points[0]?.dateKey ?? todayKey;
+  const filledDays = forwardFillByDate(
+    points,
+    listDateKeysBetween(startKey, todayKey),
+  );
+
+  const grouped: Record<string, Record<AssetType, number>> = {};
+  for (const { dateKey, values } of filledDays) {
+    const totals = createEmptyTotals();
+    for (const [subAccountId, balance] of values) {
+      totals[assetTypeMap.get(subAccountId) ?? "CASH"] += balance;
+    }
+    grouped[dateKey] = totals;
   }
+
+  // 今日はその日の同期の前でも最新の値を出すため，口座の現在の残高で上書きする
+  const todayTotals = createEmptyTotals();
+  for (const sa of subAccounts) {
+    todayTotals[sa.assetType] += sa.balance;
+  }
+  grouped[todayKey] = todayTotals;
 
   return Object.entries(grouped)
     .map(([date, values]) => ({
