@@ -338,7 +338,8 @@ ${recentTransactions || "・なし"}
 
     const llamaUrl = process.env.LLAMA_SERVER_URL;
     if (!llamaUrl) {
-      const error = "LLAMA_SERVER_URL が設定されていません。";
+      const error =
+        "分析サーバーの URL (LLAMA_SERVER_URL) が設定されていません．";
       logger.error(`[Analysis] ${error}`);
       await prisma.assetAnalysis.create({
         data: {
@@ -379,7 +380,8 @@ ${recentTransactions || "・なし"}
 
     if (!response.ok) {
       const errorText = await response.text();
-      const error = `llama-server エラー (HTTP ${response.status}): ${errorText.slice(0, 200)}`;
+      // 応答本文は DB に残すと画面とトーストにそのまま出るため，ログにだけ残す (ANA-4)
+      const error = `分析サーバーがエラーを返しました (HTTP ${response.status})．しばらくしてから再実行してください．`;
       logger.error(
         { status: response.status, body: errorText },
         "[Analysis] llama-server returned error.",
@@ -407,7 +409,8 @@ ${recentTransactions || "・なし"}
     try {
       responseBody = JSON.parse(rawText);
     } catch {
-      const error = `llama-server から無効な JSON が返されました: ${rawText.slice(0, 200)}`;
+      const error =
+        "分析サーバーの応答を読み取れませんでした．詳細はサーバーログを確認してください．";
       logger.error(
         { rawText: rawText.slice(0, 500) },
         "[Analysis] Invalid JSON response from llama-server.",
@@ -456,7 +459,8 @@ ${recentTransactions || "・なし"}
         { responseBody: JSON.stringify(responseBody).slice(0, 500) },
         "[Analysis] Empty content in response.",
       );
-      const error = `llama-server から空のコンテンツが返されました。レスポンス: ${JSON.stringify(responseBody).slice(0, 300)}`;
+      const error =
+        "分析サーバーから本文が返されませんでした．詳細はサーバーログを確認してください．";
       await prisma.assetAnalysis.create({
         data: {
           content: "",
@@ -485,24 +489,26 @@ ${recentTransactions || "・なし"}
     logger.info("[Analysis] Analysis completed and saved.");
     return { success: true, content: analysisContent };
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
     logger.error(
       { err: error },
       "[Analysis] Unexpected error during analysis.",
     );
+    // 例外のメッセージには Prisma のクエリや接続先が含まれうるため，画面には出さずログで追う (ANA-4)
+    const userMessage =
+      "分析中に予期しないエラーが発生しました．詳細はサーバーログを確認してください．";
 
     await prisma.assetAnalysis.create({
       data: {
         content: "",
         prompt: null,
         status: "FAILED",
-        error: `分析中にエラーが発生しました: ${errorMessage}`,
+        error: userMessage,
         providers: null,
         analysisDate: getAnalysisDate(),
       },
     });
 
-    return { success: false, error: errorMessage };
+    return { success: false, error: userMessage };
   }
 }
 
@@ -533,11 +539,13 @@ export async function deleteAnalysisResult(id: string) {
     });
     return { success: true };
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
     logger.error(
       { err: error, id },
       "[Analysis] Failed to delete analysis result.",
     );
-    return { success: false, error: errorMessage };
+    return {
+      success: false,
+      error: "すでに削除されたか，データベースに接続できません．",
+    };
   }
 }
