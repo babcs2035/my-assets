@@ -57,16 +57,21 @@ export function AssetsContent({ breakdown }: AssetsContentProps) {
     [assets],
   );
 
-  // 資産の pie chart データ
-  const assetPieData = useMemo(() => {
-    const typeMap = new Map<string, number>();
+  // 区分ごとの合計．円グラフと，円グラフから除外した区分の注記の両方で使う
+  const assetTypeTotals = useMemo(() => {
+    const typeMap = new Map<(typeof assets)[number]["type"], number>();
     for (const a of assets) {
       typeMap.set(a.type, (typeMap.get(a.type) ?? 0) + a.amount);
     }
+    return typeMap;
+  }, [assets]);
+
+  // 資産の pie chart データ
+  const assetPieData = useMemo(() => {
     // recharts の Pie は負の値を描画できないため，合計が負のタイプを除外する
     // （マイナス残高自体は資産詳細テーブルに表示され続ける）
     // 金額降順にソートして返す（レンダリング中の in-place sort を避けるため）
-    return Array.from(typeMap.entries())
+    return Array.from(assetTypeTotals.entries())
       .filter(([, value]) => value > 0)
       .map(([type, value]) => ({
         name:
@@ -83,7 +88,13 @@ export function AssetsContent({ breakdown }: AssetsContentProps) {
         fill: assetColors[type as keyof typeof assetColors] ?? "#6b7280",
       }))
       .sort((a, b) => b.value - a.value);
-  }, [assets]);
+  }, [assetTypeTotals]);
+
+  // 円グラフの割合はプラスの区分だけの合計で割るため，マイナスの区分があると表の割合（総資産で割る）と一致しない．
+  // 分母を総資産に揃えると扇の大きさと % がずれるので，除外した区分を注記して食い違いの理由を示す (AST-2)
+  const negativeAssetTypeLabels = Array.from(assetTypeTotals.entries())
+    .filter(([, value]) => value < 0)
+    .map(([type]) => assetTypeLabel(type));
 
   // 負債の pie chart データ（絶対値で扱う）
   const liabilityPieData = useMemo(() => {
@@ -193,6 +204,12 @@ export function AssetsContent({ breakdown }: AssetsContentProps) {
                   </ChartContainer>
                 </div>
                 <div className="flex-1 space-y-1.5 overflow-y-auto max-h-[180px]">
+                  {negativeAssetTypeLabels.length > 0 && (
+                    <p className="text-xs text-zinc-400">
+                      マイナス残高の{negativeAssetTypeLabels.join("・")}
+                      は円グラフに含めていません．割合は円グラフ内の比率です
+                    </p>
+                  )}
                   {assetPieData.map(item => {
                     const pct =
                       totalAssetValue > 0
@@ -357,16 +374,26 @@ export function AssetsContent({ breakdown }: AssetsContentProps) {
                         : "0";
                     return (
                       <TableRow key={a.id}>
-                        <TableCell className="whitespace-nowrap font-medium text-zinc-200 truncate max-w-[140px]">
-                          {a.name}
-                          {a.holdings && a.holdings.length > 0 && (
-                            <span className="whitespace-nowrap text-xs text-zinc-400 ml-1">
-                              ({a.holdings.length}銘柄)
+                        {/* 自動レイアウトの表では td の max-width が効かず truncate が働かないため，中の要素で幅を絞る (AST-3) */}
+                        <TableCell className="font-medium text-zinc-200">
+                          <div className="flex max-w-[200px] items-center gap-1">
+                            <span className="truncate" title={a.name}>
+                              {a.name}
                             </span>
-                          )}
+                            {a.holdings && a.holdings.length > 0 && (
+                              <span className="shrink-0 whitespace-nowrap text-xs text-zinc-400">
+                                ({a.holdings.length}銘柄)
+                              </span>
+                            )}
+                          </div>
                         </TableCell>
-                        <TableCell className="whitespace-nowrap text-zinc-400 text-sm truncate max-w-[140px]">
-                          {a.account}
+                        <TableCell className="text-zinc-400 text-sm">
+                          <span
+                            className="block max-w-[140px] truncate"
+                            title={a.account}
+                          >
+                            {a.account}
+                          </span>
                         </TableCell>
                         <TableCell className="whitespace-nowrap">
                           <span
@@ -445,10 +472,12 @@ export function AssetsContent({ breakdown }: AssetsContentProps) {
                       totalLiabilities < 0
                         ? Math.abs(totalLiabilities)
                         : undefined,
-                    netWorth: netWorth > 0 ? netWorth : undefined,
+                    netWorth: netWorth !== 0 ? netWorth : undefined,
                   },
                 ]}
                 margin={{ top: 10, right: 10, left: 10, bottom: 0 }}
+                // 債務超過で純資産が負のとき，負債の上に積まず 0 より下に描くため符号ごとに積み上げる (AST-4)
+                stackOffset="sign"
               >
                 <CartesianGrid
                   strokeDasharray="3 3"
@@ -469,8 +498,9 @@ export function AssetsContent({ breakdown }: AssetsContentProps) {
                   tickFormatter={value => formatYAxisCurrency(Number(value))}
                   width={70}
                   // 上限を totalAssets に固定すると棒が枠に接するうえ，
-                  // 純資産が負のとき負債棒がクリップされるため auto を使う
-                  domain={[0, "auto"]}
+                  // 純資産が負のとき負債棒がクリップされるため auto を使う．
+                  // 下限は通常 0 で，負の純資産があるときだけそこまで広げる
+                  domain={[(dataMin: number) => Math.min(0, dataMin), "auto"]}
                 />
                 <ChartTooltip
                   wrapperStyle={{ zIndex: 100 }}
@@ -514,12 +544,18 @@ export function AssetsContent({ breakdown }: AssetsContentProps) {
                   radius={[4, 4, 0, 0]}
                 />
                 {/* 右 bar: 純資産（下段） + 総負債（その上）．角丸は積み上げの頂上にだけ付ける */}
-                {netWorth > 0 && (
+                {netWorth !== 0 && (
                   <Bar
                     dataKey="netWorth"
                     stackId="assets"
                     fill="var(--color-netWorth)"
-                    radius={totalLiabilities < 0 ? [0, 0, 0, 0] : [4, 4, 0, 0]}
+                    radius={
+                      netWorth < 0
+                        ? [0, 0, 4, 4]
+                        : totalLiabilities < 0
+                          ? [0, 0, 0, 0]
+                          : [4, 4, 0, 0]
+                    }
                   />
                 )}
                 {totalLiabilities < 0 && (
