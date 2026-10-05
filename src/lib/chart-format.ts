@@ -6,11 +6,13 @@ export function formatYAxisCurrency(value: number): string {
   const withTrimmedDecimal = (num: number) =>
     num.toFixed(1).replace(/\.0$/, "");
 
-  if (abs >= 100000000) {
+  // 単位は丸めた後の値で決める．丸める前で決めると 99,999,999 が「¥10000万」，
+  // 9,999.5 が「¥10,000」になり，上の単位に繰り上がらない
+  if (Number((abs / 10000).toFixed(1)) >= 10000) {
     return `${sign}¥${withTrimmedDecimal(abs / 100000000)}億`;
   }
 
-  if (abs >= 10000) {
+  if (Math.round(abs) >= 10000) {
     return `${sign}¥${withTrimmedDecimal(abs / 10000)}万`;
   }
 

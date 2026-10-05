@@ -25,6 +25,14 @@ describe("formatYAxisCurrency", () => {
     expect(formatYAxisCurrency(9_999)).toBe("¥9,999");
     expect(formatYAxisCurrency(12.6)).toBe("¥13");
   });
+
+  it("丸めて上の単位に届く値は，上の単位で表す", () => {
+    expect(formatYAxisCurrency(99_999_999)).toBe("¥1億");
+    expect(formatYAxisCurrency(99_999_500)).toBe("¥1億");
+    expect(formatYAxisCurrency(99_994_999)).toBe("¥9999.5万");
+    expect(formatYAxisCurrency(-99_999_999)).toBe("-¥1億");
+    expect(formatYAxisCurrency(9_999.5)).toBe("¥1万");
+  });
 });
 
 describe("getNiceChartDomain", () => {
