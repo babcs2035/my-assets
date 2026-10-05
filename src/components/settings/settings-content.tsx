@@ -11,6 +11,8 @@ import { CategoryRuleSection } from "@/components/settings/category-rule-section
 import { CategorySection } from "@/components/settings/category-section";
 import { ProviderSection } from "@/components/settings/provider-section";
 import { TransferRuleSection } from "@/components/settings/transfer-rule-section";
+import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 
 // Types
 type Provider = Awaited<ReturnType<typeof getProviders>>[number];
@@ -26,6 +28,10 @@ export function SettingsContent() {
   const [rules, setRules] = useState<CategoryRule[]>([]);
   // 初期値 true で初回 fetch 中の空状態フラッシュを防ぐ
   const [isLoading, setIsLoading] = useState(true);
+  // 初回の取得が終わるまでは各セクションを描画しない．空の一覧から伸びるとレイアウトがずれ (SET-2)，
+  // 取得に失敗すると「〜がありません」と誤って表示され，再試行の手段もなかった (SET-3)
+  const [hasLoaded, setHasLoaded] = useState(false);
+  const [loadFailed, setLoadFailed] = useState(false);
   const [, startTransition] = useTransition();
 
   // Transfer Rule State
@@ -56,8 +62,11 @@ export function SettingsContent() {
         setCategories(c);
         setRules(r);
         setTransferRules(t);
+        setHasLoaded(true);
+        setLoadFailed(false);
       } catch {
         if (requestId !== requestIdRef.current) return;
+        setLoadFailed(true);
         toast.error("設定データのフェッチに失敗しました．");
       } finally {
         if (requestId === requestIdRef.current) setIsLoading(false);
@@ -68,6 +77,22 @@ export function SettingsContent() {
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  if (!hasLoaded) {
+    if (loadFailed && !isLoading) {
+      return (
+        <div className="flex flex-col items-center justify-center gap-3 py-16">
+          <p className="text-sm text-red-400">
+            設定データを取得できませんでした．
+          </p>
+          <Button variant="outline" size="sm" onClick={fetchData}>
+            再試行する
+          </Button>
+        </div>
+      );
+    }
+    return <SettingsSkeleton />;
+  }
 
   return (
     <div className="space-y-8">
@@ -98,6 +123,20 @@ export function SettingsContent() {
           onChanged={fetchData}
         />
       </div>
+    </div>
+  );
+}
+
+/**
+ * 設定ページのスケルトンローディングである．
+ * 初回の取得が終わるまで，5 つのセクションの代わりに表示する．
+ */
+function SettingsSkeleton() {
+  return (
+    <div className="grid gap-8">
+      {Array.from({ length: 5 }).map((_, i) => (
+        <Skeleton key={i} className="h-[300px] w-full" />
+      ))}
     </div>
   );
 }
