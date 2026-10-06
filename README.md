@@ -21,7 +21,7 @@
 | :--- | :--- |
 | フレームワーク | Next.js 16 (App Router), React 19 |
 | 言語 | TypeScript |
-| UI | Tailwind CSS 4, Radix UI, shadcn/ui, Tremor, Recharts, Lucide React |
+| UI | Tailwind CSS 4, Radix UI, shadcn/ui, Recharts, Lucide React |
 | データベース | PostgreSQL 16, Prisma 7 |
 | スクレイピング | Playwright |
 | CI/CD | GitHub Actions |
