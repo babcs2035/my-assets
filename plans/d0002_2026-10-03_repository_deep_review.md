@@ -82,6 +82,14 @@
   - Prisma 側の説明は見つからなかった（2026-10-03）．provenance 付きの 7.10.x が出たら上げる．`Dockerfile` の `prisma@7.9.1` も合わせる．
   - 再確認（2026-10-03）: 7.x の最新は依然 `7.10.0` で，`npm view prisma@7.10.0 dist.attestations` は空のままである．`@prisma/client` と `@prisma/adapter-pg` の 7.10.0 には provenance がある．状況は変わっていないので上げない．
   - Next.js は `16.3.8` が `latest` のままで，延期された Critical 1 件と High 1 件の修正版はまだ出ていない．
+  - 再確認（2026-10-06）: Next.js の `latest` は `16.3.8`，Prisma の 7.x の最新は `7.10.0` で `dist.attestations` は空のまま．どちらも状況は変わっていない．
+
+### DEP-5（Moderate，対応済み）: `postcss-selector-parser@6.0.10` に CPU を使い果たす脆弱性がある
+
+- **事実**: 2026-10-06 の `pnpm audit` で GHSA-rj75-hqrm-r3gf（平坦なセレクターの解析が二次の計算量になる）が 1 件出た．修正は `>=7.1.6` で，6 系の最新 `6.1.4` も脆弱な範囲に入る．
+- **経路**: `@tailwindcss/typography@0.5.20`（最新）が `postcss-selector-parser` を `6.0.10` に固定している．ほかに依存しているパッケージはない．
+- **対応**: `586fee8` で `pnpm-workspace.yaml` の `overrides` に `postcss-selector-parser: "^7.1.6"` を足した．7.0.0 の破壊的変更は「走査中の挿入を安全にする」だけで，typography はセレクターを読むだけなので影響しないと判断した．
+- **確認**: override の前後で `pnpm build` した CSS（`.next/static/chunks/*.css`）がバイト単位で一致した．`pnpm audit` は「No known vulnerabilities found」になり，vitest（105 件）は通った．typography が 7 系に上がったら override を外す．
 
 ## スクレイパーと同期処理
 

@@ -127,6 +127,7 @@
   `pnpm why recharts` によると，deprecated 警告の出ている `recharts@2.15.4` は `@tremor/react@3.18.7` が引き込んでいる．アプリ本体が使っているのは `recharts@3.10.1` である．
 - **影響**: `pnpm peers check` の警告（Tremor が React `^18` を要求する，以前の S3），`recharts@2` の deprecated 警告，使っていない依存の分の install 時間とイメージサイズ．
 - **直し方**: `pnpm remove @tremor/react` を実行し，README の技術スタックから Tremor を消す．そのあと `pnpm peers check` で警告がなくなったこと，`pnpm build` が通ることを確かめる．
+- **結果（2026-10-06，`87877db`）**: 削除した．`pnpm peers check` は「No peer dependency issues found」になり，`recharts@2.15.4` も lockfile から消えた（残るのは `recharts@3.10.1` だけ）．`pnpm build` と vitest は通り，ビルドした CSS は削除前とバイト単位で一致した．
 
 ### 問題なしと確認した項目（UI）
 
