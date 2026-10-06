@@ -32,6 +32,7 @@ overrides:
   mysql2: "^3.23.1"
   browserslist: "^4.28.7"
   baseline-browser-mapping: "^2.11.0"
+  postcss-selector-parser: "^7.1.6"
 
 strictDepBuilds: true
 minimumReleaseAge: 1440
