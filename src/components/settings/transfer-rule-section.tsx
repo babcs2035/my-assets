@@ -167,7 +167,7 @@ export function TransferRuleSection({
                       <Button
                         variant="ghost"
                         size="icon"
-                        className="text-zinc-500 hover:text-red-400 shrink-0"
+                        className="text-zinc-400 hover:text-red-400 shrink-0"
                         // 全行が同じ名前だと，読み上げでどのルールを消すボタンか区別できない (SET-13)
                         aria-label={`キーワード「${rule.keyword}」の振替ルールを削除`}
                       >
@@ -221,7 +221,7 @@ export function TransferRuleSection({
                           <Button
                             variant="ghost"
                             size="icon"
-                            className="text-zinc-500 hover:text-red-400"
+                            className="text-zinc-400 hover:text-red-400"
                             aria-label={`キーワード「${rule.keyword}」の振替ルールを削除`}
                           >
                             <Trash2 className="h-4 w-4" />

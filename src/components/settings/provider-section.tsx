@@ -502,7 +502,7 @@ export function ProviderSection({
                             <Button
                               variant="ghost"
                               size="sm"
-                              className="h-8 text-zinc-500 hover:text-red-400"
+                              className="h-8 text-zinc-400 hover:text-red-400"
                               disabled={isProviderSyncing(provider)}
                             >
                               <Trash2 className="mr-2 h-3.5 w-3.5" />
