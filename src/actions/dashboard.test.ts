@@ -13,10 +13,6 @@ vi.mock("@/lib/logger", () => ({
 vi.mock("@/lib/prisma", () => ({
   prisma: { pointDetail: { findMany: mocks.findMany } },
 }));
-// unstable_cache は Next.js の request の外では使えないので，元の関数をそのまま呼ぶ
-vi.mock("next/cache", () => ({
-  unstable_cache: <T>(fn: T) => fn,
-}));
 
 import { getExpiringPoints } from "@/actions/dashboard";
 

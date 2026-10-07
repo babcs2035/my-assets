@@ -1,11 +1,9 @@
 "use server";
 
 import type { AssetType } from "@prisma/client";
-import { unstable_cache } from "next/cache";
 import { forwardFillByDate, listDateKeysBetween } from "@/lib/daily-series";
 import logger from "@/lib/logger";
 import { prisma } from "@/lib/prisma";
-import { DASHBOARD_CACHE_TAGS } from "@/lib/revalidate";
 import {
   formatJSTDate,
   nowJST,
@@ -14,9 +12,11 @@ import {
   toUtcDateOnly,
 } from "@/lib/utils";
 
-// ── Internal (uncached) implementations ──
-
-async function getDashboardKPIInternal() {
+/**
+ * ダッシュボードに表示する主要な指標 (KPI) を取得する関数である．
+ * 総資産，純資産，前日比，資産タイプ別の内訳を計算する．
+ */
+export async function getDashboardKPI() {
   logger.info("Calculating dashboard KPIs...");
   const subAccounts = await prisma.subAccount.findMany({
     where: { isHidden: false },
@@ -103,7 +103,7 @@ async function getDashboardKPIInternal() {
 
   // 基準が昨日でないと数日分の変化を「前日比」と読み違えるため，UI で基準日を示せるよう返す．
   // 口座ごとに基準日が異なりうるので，最も古い日を採る（その日以降の変化をすべて含むため）．
-  // unstable_cache を通すので Date ではなく JST の YYYY-MM-DD で返す
+  // 画面は昨日の日付キー (YYYY-MM-DD) と比べるので，Date ではなく同じ形の文字列で返す
   const baselineDateKey = hasCompleteYesterdayHistory
     ? yesterdayHistories
         .map(h => formatJSTDate(h.date))
@@ -129,7 +129,11 @@ async function getDashboardKPIInternal() {
   };
 }
 
-async function getAssetHistoryInternal(days?: number) {
+/**
+ * 指定された日数分の資産推移データを取得する関数である．
+ * balanceHistory テーブルから直接残高履歴を取得する（MoneyForward の履歴ページから取得済み）．
+ */
+export async function getAssetHistory(days?: number) {
   logger.info("Fetching asset history from balanceHistory...");
 
   // 残高履歴は JST 08:00（前日 23:00Z）で保存される．期間の起点は todayJST()（JST 00:00）から
@@ -240,7 +244,11 @@ async function getAssetHistoryInternal(days?: number) {
   }>;
 }
 
-async function getExpiringPointsInternal() {
+/**
+ * 有効期限が 1 ヶ月以内に迫っているポイント情報を取得する関数である．
+ * expirationDate は ISO 8601 形式の文字列で返す（Date ではない）．
+ */
+export async function getExpiringPoints() {
   logger.info("Checking for expiring points...");
   // 期限日は JST 日付の UTC 00:00（JST 09:00）で保存している．現在の瞬間と比べると，
   // 今日が期限のポイントが JST 09:00 以降に消えるため，JST の今日の日付で比べる (DASH-12)．
@@ -273,42 +281,9 @@ async function getExpiringPointsInternal() {
     },
   });
 
-  // unstable_cache は結果を JSON で保存するため，キャッシュから返ると Date は
-  // ISO 文字列になる．キャッシュの有無で値の型が変わらないよう，ここで文字列にそろえる
+  // 画面 (src/app/page.tsx) は ISO 文字列を受け取って JST の日付に直す前提なので，文字列で返す
   return points.map(p => ({
     ...p,
     expirationDate: p.expirationDate?.toISOString() ?? null,
   }));
 }
-
-// ── Cached exports (TTL: 5分) ──
-
-/**
- * ダッシュボードに表示する主要な指標 (KPI) を取得する関数である．
- * 総資産，純資産，前日比，資産タイプ別の内訳を計算する．
- */
-export const getDashboardKPI = unstable_cache(
-  getDashboardKPIInternal,
-  ["dashboard-kpi"],
-  { revalidate: 300, tags: [DASHBOARD_CACHE_TAGS.kpi] },
-);
-
-/**
- * 指定された日数分の資産推移データを取得する関数である．
- * balanceHistory テーブルから直接残高履歴を取得する（MoneyForward の履歴ページから取得済み）．
- */
-export const getAssetHistory = unstable_cache(
-  getAssetHistoryInternal,
-  ["asset-history"],
-  { revalidate: 300, tags: [DASHBOARD_CACHE_TAGS.assetHistory] },
-);
-
-/**
- * 有効期限が 1 ヶ月以内に迫っているポイント情報を取得する関数である．
- * expirationDate は ISO 8601 形式の文字列で返す（Date ではない）．
- */
-export const getExpiringPoints = unstable_cache(
-  getExpiringPointsInternal,
-  ["expiring-points"],
-  { revalidate: 300, tags: [DASHBOARD_CACHE_TAGS.expiringPoints] },
-);

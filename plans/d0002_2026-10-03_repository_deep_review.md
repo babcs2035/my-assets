@@ -252,6 +252,7 @@ A-7 は `8209ec0`，A-6 と A-9 は `f32ae9f`（`getAssetTypeComparison` ごと�
   - `unstable_cache` はエントリに，描画中のページの暗黙タグを `softTags` として付ける（`unstable-cache.js`）．読み出しでは `tags` と `softTags` を合わせて `revalidatedTags` と tags manifest に照らし，期限切れなら `null` を返して作り直す（`incremental-cache/index.js:381-420`）．そのため，画面からの同期と中止（`providers.ts:202`，`227`）の `revalidatePath("/")` で，ダッシュボードのキャッシュも消える．
   - `revalidateTag` と `revalidatePath` は `workAsyncStorage` の store がないと `Invariant: static generation store missing` を投げる（`revalidate.js`）．scheduler（`setTimeout` から呼ぶ）と `mise sync`（別プロセス）からは呼べない．
 - 結論: 不確実だった点は「画面からの同期では起きない」と確かめた．自動同期と `mise sync` のあとは，TTL の 5 分まで古い表示が残る．同期は 1 日 1 回なので許容し，コードは変えていない．縮めるには TTL を短くするか，request の中から再検証する経路（Route Handler を叩くなど）が要る（未対応）．
+- 対応（2026-10-07）: ダッシュボードの `unstable_cache` 3 件を廃止し，ほかのページと同じくアクセスのたびに DB を読むようにした．自動同期と `mise sync` のあとに古い表示が残る問題もなくなった．
 
 - **A-6（Low）**: `getAssetTypeComparison`（`assets.ts:224-241`）が資産タイプごとではなく子口座ごとに `push` し，重複した配列を返す．どこからも呼ばれていない．
 - **A-7（Low）**: `getAccountList`（`accounts.ts`）が口座ごとに請求データを問い合わせる（N+1）．同じ集計が，使われていない `getCreditCardBillingSummary` にもある．
